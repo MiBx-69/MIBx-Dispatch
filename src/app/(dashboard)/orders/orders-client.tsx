@@ -496,7 +496,10 @@ function OrderCard({ order, selected, onSelect, onStatusChange, onArchiveToggle,
         {/* WhatsApp Confirmation */}
         {order.customer_phone && !order.is_archived && !isDispatched && (
           <a
-            href={`https://wa.me/${order.customer_phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+            href={`https://wa.me/${(() => {
+              const d = order.customer_phone.replace(/[^0-9]/g, '');
+              return d.startsWith('880') ? d : d.startsWith('0') ? `88${d}` : `880${d}`;
+            })()}?text=${encodeURIComponent(
               `Hello! Your order ${order.shopify_order_name} is pending.\n\n${lineItems
                 .map((item: any) => `- ${item.title}${item.variant_title ? ` (${item.variant_title})` : ''} x ${item.quantity}`)
                 .join('\n')}\n\nTotal Due: ৳${Number(order.total_price).toLocaleString()}\n\nWould you like to confirm this order?`
