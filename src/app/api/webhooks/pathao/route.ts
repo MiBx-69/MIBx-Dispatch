@@ -20,21 +20,31 @@ export async function POST(request: NextRequest) {
   const { data: settings } = await supabaseAdmin.from("app_settings").select("pathao_webhook_secret").single();
   const storedSecret = settings?.pathao_webhook_secret;
 
+  // The secret we will return in headers
+  const returnSecret = storedSecret || providedSecret || "f3992ecc-59da-4cbe-a049-a13da2018d51";
+
   // 1. Webhook Integration Verification Event
   if (payload.event === "webhook_integration") {
     return new NextResponse(JSON.stringify({ success: true }), {
       status: 202,
       headers: {
         "Content-Type": "application/json",
-        "X-Pathao-Merchant-Webhook-Integration-Secret": storedSecret || providedSecret
+        "X-Pathao-Merchant-Webhook-Integration-Secret": returnSecret
       }
     });
   }
 
-  // Verify Secret for normal events
-  if (!storedSecret || !providedSecret.includes(storedSecret)) {
+  // 2. Secret Verification for normal events
+  if (storedSecret && !providedSecret.includes(storedSecret)) {
     console.error(`[Pathao Webhook] Unauthorized. Expected: ${storedSecret}, Got: ${providedSecret}`);
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Still return the header even on failure so Pathao UI shows what failed
+    return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Pathao-Merchant-Webhook-Integration-Secret": returnSecret
+      }
+    });
   }
 
   // Log incoming webhook
@@ -47,14 +57,14 @@ export async function POST(request: NextRequest) {
   });
 
   // Process async
-  processPathaoWebhook(payload, storedSecret).catch(console.error);
+  processPathaoWebhook(payload, returnSecret).catch(console.error);
 
   // Pathao expects 202 with the header for all valid events
   return new NextResponse(JSON.stringify({ received: true }), {
     status: 202,
     headers: {
       "Content-Type": "application/json",
-      "X-Pathao-Merchant-Webhook-Integration-Secret": storedSecret
+      "X-Pathao-Merchant-Webhook-Integration-Secret": returnSecret
     }
   });
 }
