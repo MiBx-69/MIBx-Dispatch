@@ -30,6 +30,11 @@ export function CustomerDrawer({ customer, onClose }: { customer: any; onClose: 
   const cancelledOrders = orders.filter(o => o.internal_status === "cancelled" || o.internal_status === "returned").length;
   const isHighRisk = cancelledOrders > 0 && cancelledOrders >= orders.length / 2;
 
+  // Derive the best phone and email if the Shopify Customer account is missing them (e.g. guest checkout)
+  const bestPhone = customer.phone || (orders.length > 0 ? orders[0].customer_phone : null);
+  const bestName = customer.name || (orders.length > 0 ? orders[0].customer_name : "Unknown");
+  const bestEmail = customer.email || (orders.length > 0 ? orders[0].customer_email : null);
+
   return (
     <>
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity" onClick={onClose} />
@@ -39,7 +44,7 @@ export function CustomerDrawer({ customer, onClose }: { customer: any; onClose: 
         <div className="p-6 border-b border-zinc-800 flex items-start justify-between">
           <div>
             <div className="flex items-center gap-3 mb-1">
-              <h2 className="text-xl font-bold text-zinc-100">{customer.name}</h2>
+              <h2 className="text-xl font-bold text-zinc-100">{bestName}</h2>
               {customer.total_spent >= 10000 || customer.total_orders >= 5 ? (
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
                   VIP
@@ -51,7 +56,10 @@ export function CustomerDrawer({ customer, onClose }: { customer: any; onClose: 
                 </span>
               )}
             </div>
-            <p className="text-sm text-zinc-400 font-mono">{customer.phone || "No phone"}</p>
+            <p className="text-sm text-zinc-400 font-mono">
+              {bestPhone || (!loading ? "No phone" : "Loading...")} 
+              {bestEmail && ` • ${bestEmail}`}
+            </p>
           </div>
           <button onClick={onClose} className="p-2 bg-zinc-800 rounded-lg hover:bg-zinc-700 text-zinc-400 transition-colors">
             <X size={16} />
@@ -72,9 +80,9 @@ export function CustomerDrawer({ customer, onClose }: { customer: any; onClose: 
 
         {/* Action Buttons */}
         <div className="p-4 border-b border-zinc-800 flex gap-2">
-          {customer.phone && (
+          {bestPhone && (
             <a
-              href={`https://wa.me/${customer.phone.replace(/[^0-9]/g, '')}`}
+              href={`https://wa.me/${bestPhone.replace(/[^0-9]/g, '')}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex-1 bg-green-600/10 hover:bg-green-600/20 text-green-500 border border-green-600/30 font-semibold text-xs py-2 rounded-lg text-center transition-colors"
@@ -82,9 +90,9 @@ export function CustomerDrawer({ customer, onClose }: { customer: any; onClose: 
               WhatsApp Message
             </a>
           )}
-          {customer.email && (
+          {bestEmail && (
             <a
-              href={`mailto:${customer.email}`}
+              href={`mailto:${bestEmail}`}
               className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold text-xs py-2 rounded-lg text-center transition-colors"
             >
               Email Customer
