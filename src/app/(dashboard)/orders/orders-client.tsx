@@ -256,14 +256,35 @@ export function OrdersClient({
         </div>
       )}
 
-      {/* Stats row */}
-      <div className="flex items-center justify-between text-xs text-zinc-500">
-        <span>
+      {/* Stats & Master Checkbox */}
+      <div className="flex items-center justify-between text-xs text-zinc-500 bg-zinc-800/20 p-2 rounded-lg border border-zinc-800/50">
+        <div className="flex items-center gap-3 px-2">
+          <button
+            onClick={selectAll}
+            className={`w-4.5 h-4.5 rounded border flex items-center justify-center shrink-0 transition-colors ${
+              selected.size === ordersList.length && ordersList.length > 0
+                ? "bg-indigo-600 border-indigo-500"
+                : selected.size > 0
+                ? "bg-indigo-600/50 border-indigo-500"
+                : "border-zinc-700 hover:border-zinc-500 bg-zinc-900"
+            }`}
+          >
+            {selected.size === ordersList.length && ordersList.length > 0 && (
+              <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 12 12">
+                <path d="M10 3L5 8.5 2 5.5" stroke="white" strokeWidth="2" strokeLinecap="round" fill="none" />
+              </svg>
+            )}
+            {selected.size > 0 && selected.size < ordersList.length && (
+              <div className="w-2 h-0.5 bg-white rounded-full" />
+            )}
+          </button>
+          <span className="font-medium text-zinc-300 cursor-pointer select-none" onClick={selectAll}>
+            Select All
+          </span>
+        </div>
+        <span className="px-2">
           Showing {ordersList.length} of {total} orders
         </span>
-        <button onClick={selectAll} className="hover:text-zinc-300 transition-colors">
-          {selected.size === ordersList.length && ordersList.length > 0 ? "Deselect all" : "Select all"}
-        </button>
       </div>
 
       {/* Orders list */}
