@@ -46,12 +46,21 @@ export async function proxy(request: NextRequest) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("redirectTo", pathname);
-    return NextResponse.redirect(loginUrl);
+    const redirectRes = NextResponse.redirect(loginUrl);
+    // Copy cookies to preserve session refresh
+    supabaseResponse.cookies.getAll().forEach((c) => {
+      redirectRes.cookies.set(c.name, c.value, c as any);
+    });
+    return redirectRes;
   }
 
   // Redirect authenticated users away from login
   if (user && pathname === "/login") {
-    return NextResponse.redirect(new URL("/", request.url));
+    const redirectRes = NextResponse.redirect(new URL("/", request.url));
+    supabaseResponse.cookies.getAll().forEach((c) => {
+      redirectRes.cookies.set(c.name, c.value, c as any);
+    });
+    return redirectRes;
   }
 
   return supabaseResponse;
