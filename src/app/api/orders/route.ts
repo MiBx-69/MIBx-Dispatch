@@ -35,7 +35,12 @@ export async function GET(request: NextRequest) {
 
     const { data: orders, count, error } = await query;
 
-    if (error) throw error;
+    if (error) {
+      if (error.code === 'PGRST103') {
+        return NextResponse.json({ orders: [], total: count || 0 });
+      }
+      throw error;
+    }
 
     return NextResponse.json({ orders, total: count });
   } catch (error: any) {
