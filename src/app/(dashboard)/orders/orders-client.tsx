@@ -500,9 +500,9 @@ function OrderCard({ order, selected, onSelect, onStatusChange, onArchiveToggle,
               const d = order.customer_phone.replace(/[^0-9]/g, '');
               return d.startsWith('880') ? d : d.startsWith('0') ? `88${d}` : `880${d}`;
             })()}?text=${encodeURIComponent(
-              `Hello! Your order ${order.shopify_order_name} is pending.\n\n${lineItems
+              `আসসালামু আলাইকুম! আপনার ${order.shopify_order_name} অর্ডারটি পেন্ডিং আছে।\n\n${lineItems
                 .map((item: any) => `- ${item.title}${item.variant_title ? ` (${item.variant_title})` : ''} x ${item.quantity}`)
-                .join('\n')}\n\nTotal Due: ৳${Number(order.total_price).toLocaleString()}\n\nWould you like to confirm this order?`
+                .join('\n')}\n\nমোট বিল: ৳${Number(order.total_price).toLocaleString()}\n\nআপনি কি অর্ডারটি কনফার্ম করতে চান?`
             )}`}
             target="_blank"
             rel="noopener noreferrer"
