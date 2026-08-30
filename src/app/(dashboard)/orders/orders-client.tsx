@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { StatusBadge, ShopifyFinancialBadge, ShopifyFulfillmentBadge } from "@/components/ui/status-badge";
 import { DispatchModal } from "@/components/orders/dispatch-modal";
+import { BulkDispatchModal } from "@/components/orders/bulk-dispatch-modal";
 import type { Order, OrderStatus } from "@/types/database";
 
 const STATUS_FILTERS = [
@@ -191,6 +192,33 @@ export function OrdersClient({
     }
   };
 
+  const bulkArchive = async (is_archived: boolean) => {
+    if (selected.size === 0) return;
+    const ids = Array.from(selected);
+    try {
+      await Promise.all(
+        ids.map((id) =>
+          fetch(`/api/orders/${id}/archive`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ is_archived }),
+          })
+        )
+      );
+      toast.success(`${ids.length} orders ${is_archived ? 'removed' : 'restored'}`);
+      setSelected(new Set());
+      router.refresh();
+      // Optimistically remove from list if archiving
+      if (is_archived) {
+        setOrdersList(prev => prev.filter(o => !ids.includes(o.id)));
+      }
+    } catch {
+      toast.error("Bulk archive failed");
+    }
+  };
+
+  const [bulkDispatchModalOpen, setBulkDispatchModalOpen] = useState(false);
+
   return (
     <div className="space-y-4 animate-fade-in">
       {/* Search + Filter */}
@@ -229,11 +257,17 @@ export function OrdersClient({
 
       {/* Bulk actions bar */}
       {selected.size > 0 && (
-        <div className="flex items-center gap-2 p-3 rounded-xl bg-indigo-600/10 border border-indigo-500/30 animate-fade-in">
-          <span className="text-xs text-indigo-300 font-medium">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 rounded-xl bg-indigo-600/10 border border-indigo-500/30 animate-fade-in">
+          <span className="text-xs text-indigo-300 font-medium whitespace-nowrap">
             {selected.size} selected
           </span>
-          <div className="flex gap-2 ml-auto">
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto sm:ml-auto">
+            <button
+              onClick={() => setBulkDispatchModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-500 transition-colors"
+            >
+              <Truck size={14} /> Bulk Dispatch
+            </button>
             <button
               onClick={() => bulkUpdateStatus("preparing")}
               className="px-3 py-1.5 text-xs rounded-lg bg-amber-600/20 text-amber-300 border border-amber-500/30 hover:bg-amber-600/30 transition-colors"
@@ -247,8 +281,20 @@ export function OrdersClient({
               Hold
             </button>
             <button
+              onClick={() => bulkUpdateStatus("cancelled")}
+              className="px-3 py-1.5 text-xs rounded-lg bg-red-600/20 text-red-400 border border-red-500/30 hover:bg-red-600/30 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => bulkArchive(true)}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg bg-zinc-800/80 text-zinc-300 border border-zinc-700 hover:bg-zinc-700 transition-colors"
+            >
+              <Archive size={12} /> Hide
+            </button>
+            <button
               onClick={() => setSelected(new Set())}
-              className="px-2 py-1.5 text-xs text-zinc-500 hover:text-zinc-300"
+              className="px-2 py-1.5 text-xs text-zinc-500 hover:text-zinc-300 ml-auto sm:ml-0"
             >
               <X size={14} />
             </button>
@@ -332,6 +378,20 @@ export function OrdersClient({
           onClose={() => setDispatchOrder(null)}
           onSuccess={() => {
             setDispatchOrder(null);
+            router.refresh();
+          }}
+        />
+      )}
+
+      {/* Bulk Dispatch Modal */}
+      {bulkDispatchModalOpen && (
+        <BulkDispatchModal
+          orderIds={Array.from(selected)}
+          storeId={pathaoStoreId}
+          onClose={() => setBulkDispatchModalOpen(false)}
+          onSuccess={() => {
+            setBulkDispatchModalOpen(false);
+            setSelected(new Set());
             router.refresh();
           }}
         />
