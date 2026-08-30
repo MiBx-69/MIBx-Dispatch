@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useTransition, useCallback } from "react";
+import { useState, useTransition, useCallback, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   Search, Filter, ChevronLeft, ChevronRight,
-  Truck, Package, X, CheckCircle, PauseCircle, AlertCircle,
+  Truck, Package, X, CheckCircle, PauseCircle, AlertCircle, Archive, ArchiveRestore
 } from "lucide-react";
 import { StatusBadge, ShopifyFinancialBadge, ShopifyFulfillmentBadge } from "@/components/ui/status-badge";
 import { DispatchModal } from "@/components/orders/dispatch-modal";
@@ -21,6 +21,7 @@ const STATUS_FILTERS = [
   { value: "cancelled", label: "Cancelled" },
   { value: "delayed", label: "Delayed" },
   { value: "returned", label: "Returned" },
+  { value: "archived", label: "Removed" },
 ];
 
 interface OrdersClientProps {
@@ -36,26 +37,79 @@ interface OrdersClientProps {
 export function OrdersClient({
   orders,
   total,
-  page,
   pageSize,
   currentStatus,
   currentSearch,
   pathaoStoreId,
 }: OrdersClientProps) {
   const router = useRouter();
+  
+  // State for Infinite Scroll
+  const [ordersList, setOrdersList] = useState<Order[]>(orders);
+  const [page, setPage] = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const hasMore = ordersList.length < total;
+  const observerTarget = useRef<HTMLDivElement>(null);
+
   const [search, setSearch] = useState(currentSearch || "");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [dispatchOrder, setDispatchOrder] = useState<Order | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const totalPages = Math.ceil(total / pageSize);
+  // Reset list when server-provided orders change (e.g., search/filter changed)
+  useEffect(() => {
+    setOrdersList(orders);
+    setPage(1);
+  }, [orders]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const next = page + 1;
+      const sp = new URLSearchParams();
+      if (currentStatus && currentStatus !== "all") sp.set("status", currentStatus);
+      if (currentSearch) sp.set("search", currentSearch);
+      sp.set("page", String(next));
+      sp.set("pageSize", String(pageSize));
+
+      const res = await fetch(`/api/orders?${sp.toString()}`);
+      if (!res.ok) throw new Error("Failed to load more");
+      const data = await res.json();
+      
+      setOrdersList(prev => {
+        // filter out potential duplicates due to concurrent edits
+        const existingIds = new Set(prev.map(o => o.id));
+        const newOrders = data.orders.filter((o: Order) => !existingIds.has(o.id));
+        return [...prev, ...newOrders];
+      });
+      setPage(next);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to load more orders");
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [page, hasMore, loadingMore, currentStatus, currentSearch, pageSize]);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting) {
+          loadMore();
+        }
+      },
+      { threshold: 1.0 }
+    );
+    if (observerTarget.current) observer.observe(observerTarget.current);
+    return () => observer.disconnect();
+  }, [loadMore]);
 
   const navigate = useCallback(
     (params: Record<string, string | undefined>) => {
       const sp = new URLSearchParams();
       if (params.status && params.status !== "all") sp.set("status", params.status);
       if (params.search) sp.set("search", params.search);
-      if (params.page && params.page !== "1") sp.set("page", params.page);
       startTransition(() => {
         router.push(`/orders${sp.toString() ? `?${sp.toString()}` : ""}`);
       });
@@ -65,7 +119,7 @@ export function OrdersClient({
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    navigate({ status: currentStatus, search, page: "1" });
+    navigate({ status: currentStatus, search });
   };
 
   const toggleSelect = (id: string) => {
@@ -76,8 +130,8 @@ export function OrdersClient({
   };
 
   const selectAll = () => {
-    if (selected.size === orders.length) setSelected(new Set());
-    else setSelected(new Set(orders.map((o) => o.id)));
+    if (selected.size === ordersList.length) setSelected(new Set());
+    else setSelected(new Set(ordersList.map((o) => o.id)));
   };
 
   const updateStatus = async (orderId: string, status: OrderStatus) => {
@@ -90,8 +144,27 @@ export function OrdersClient({
       if (!res.ok) throw new Error("Failed");
       toast.success(`Status updated to ${status}`);
       router.refresh();
+      // Optimistically update list
+      setOrdersList(prev => prev.map(o => o.id === orderId ? { ...o, internal_status: status } : o));
     } catch {
       toast.error("Failed to update status");
+    }
+  };
+
+  const toggleArchive = async (orderId: string, is_archived: boolean) => {
+    try {
+      const res = await fetch(`/api/orders/${orderId}/archive`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_archived }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      toast.success(is_archived ? "Order removed from dispatch" : "Order restored to dispatch");
+      router.refresh();
+      // Remove from list optimistically
+      setOrdersList(prev => prev.filter(o => o.id !== orderId));
+    } catch {
+      toast.error("Failed to update archive status");
     }
   };
 
@@ -111,6 +184,8 @@ export function OrdersClient({
       toast.success(`${ids.length} orders updated to ${status}`);
       setSelected(new Set());
       router.refresh();
+      // Optimistically update
+      setOrdersList(prev => prev.map(o => ids.includes(o.id) ? { ...o, internal_status: status } : o));
     } catch {
       toast.error("Bulk update failed");
     }
@@ -138,7 +213,7 @@ export function OrdersClient({
             <button
               key={f.value}
               onClick={() =>
-                navigate({ status: f.value, search: currentSearch, page: "1" })
+                navigate({ status: f.value, search: currentSearch })
               }
               className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all border ${
                 (currentStatus || "all") === f.value
@@ -184,16 +259,16 @@ export function OrdersClient({
       {/* Stats row */}
       <div className="flex items-center justify-between text-xs text-zinc-500">
         <span>
-          {total > 0 ? `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total}` : "0"} orders
+          Showing {ordersList.length} of {total} orders
         </span>
         <button onClick={selectAll} className="hover:text-zinc-300 transition-colors">
-          {selected.size === orders.length && orders.length > 0 ? "Deselect all" : "Select all"}
+          {selected.size === ordersList.length && ordersList.length > 0 ? "Deselect all" : "Select all"}
         </button>
       </div>
 
       {/* Orders list */}
       <div className="space-y-2">
-        {orders.length === 0 && (
+        {ordersList.length === 0 && (
           <div className="text-center py-16 text-zinc-600">
             <Package className="w-10 h-10 mx-auto mb-3 opacity-30" />
             <p className="text-sm">No orders found</p>
@@ -208,42 +283,25 @@ export function OrdersClient({
           </div>
         )}
 
-        {orders.map((order: Order) => (
+        {ordersList.map((order: Order) => (
           <OrderCard
             key={order.id}
             order={order}
             selected={selected.has(order.id)}
             onSelect={() => toggleSelect(order.id)}
             onStatusChange={(status) => updateStatus(order.id, status)}
+            onArchiveToggle={() => toggleArchive(order.id, !order.is_archived)}
             onDispatch={() => setDispatchOrder(order)}
           />
         ))}
+        
+        {/* Infinite scroll observer target */}
+        {hasMore && (
+          <div ref={observerTarget} className="py-6 text-center text-zinc-500 text-xs">
+            {loadingMore ? "Loading more orders..." : "Scroll for more"}
+          </div>
+        )}
       </div>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3 pt-2">
-          <button
-            onClick={() => navigate({ status: currentStatus, search: currentSearch, page: String(page - 1) })}
-            disabled={page === 1}
-            className="p-2 rounded-lg border border-zinc-800 text-zinc-400 hover:text-zinc-200
-                      hover:border-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <span className="text-sm text-zinc-400">
-            {page} / {totalPages}
-          </span>
-          <button
-            onClick={() => navigate({ status: currentStatus, search: currentSearch, page: String(page + 1) })}
-            disabled={page === totalPages}
-            className="p-2 rounded-lg border border-zinc-800 text-zinc-400 hover:text-zinc-200
-                      hover:border-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-          >
-            <ChevronRight size={16} />
-          </button>
-        </div>
-      )}
 
       {/* Dispatch Modal */}
       {dispatchOrder && (
@@ -266,10 +324,11 @@ interface OrderCardProps {
   selected: boolean;
   onSelect: () => void;
   onStatusChange: (status: OrderStatus) => void;
+  onArchiveToggle: () => void;
   onDispatch: () => void;
 }
 
-function OrderCard({ order, selected, onSelect, onStatusChange, onDispatch }: OrderCardProps) {
+function OrderCard({ order, selected, onSelect, onStatusChange, onArchiveToggle, onDispatch }: OrderCardProps) {
   const lineItems = (order.line_items as any[]) || [];
   const isDispatched = !!order.pathao_consignment_id;
 
@@ -279,7 +338,7 @@ function OrderCard({ order, selected, onSelect, onStatusChange, onDispatch }: Or
         selected
           ? "border-indigo-500/50 bg-indigo-600/5"
           : "border-zinc-800 bg-zinc-900 hover:border-zinc-700"
-      }`}
+      } ${order.is_archived ? "opacity-75" : ""}`}
     >
       {/* Header row */}
       <div className="flex items-start gap-3 p-3.5">
@@ -352,9 +411,9 @@ function OrderCard({ order, selected, onSelect, onStatusChange, onDispatch }: Or
       </div>
 
       {/* CTA Buttons */}
-      <div className="flex items-center gap-1.5 px-3.5 pb-3 border-t border-zinc-800/50 pt-2">
+      <div className="flex flex-wrap items-center gap-1.5 px-3.5 pb-3 border-t border-zinc-800/50 pt-2">
         {/* Status actions */}
-        {order.internal_status === "pending" && (
+        {order.internal_status === "pending" && !order.is_archived && (
           <button
             onClick={() => onStatusChange("preparing")}
             className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg bg-amber-600/15 text-amber-300
@@ -364,7 +423,7 @@ function OrderCard({ order, selected, onSelect, onStatusChange, onDispatch }: Or
           </button>
         )}
 
-        {order.internal_status !== "hold" && order.internal_status !== "cancelled" && (
+        {order.internal_status !== "hold" && order.internal_status !== "cancelled" && !order.is_archived && (
           <button
             onClick={() => onStatusChange("hold")}
             className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg bg-orange-600/15 text-orange-300
@@ -374,7 +433,7 @@ function OrderCard({ order, selected, onSelect, onStatusChange, onDispatch }: Or
           </button>
         )}
 
-        {order.internal_status === "hold" && (
+        {order.internal_status === "hold" && !order.is_archived && (
           <button
             onClick={() => onStatusChange("preparing")}
             className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg bg-indigo-600/15 text-indigo-300
@@ -384,7 +443,7 @@ function OrderCard({ order, selected, onSelect, onStatusChange, onDispatch }: Or
           </button>
         )}
 
-        {order.internal_status !== "cancelled" && (
+        {order.internal_status !== "cancelled" && !order.is_archived && (
           <button
             onClick={() => onStatusChange("cancelled")}
             className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg bg-red-600/15 text-red-400
@@ -394,8 +453,21 @@ function OrderCard({ order, selected, onSelect, onStatusChange, onDispatch }: Or
           </button>
         )}
 
+        {/* Archive toggle */}
+        <button
+          onClick={onArchiveToggle}
+          className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg bg-zinc-800/50 text-zinc-400
+                    border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200 transition-colors ml-1"
+        >
+          {order.is_archived ? (
+            <><ArchiveRestore size={11} /> Restore</>
+          ) : (
+            <><Archive size={11} /> Hide</>
+          )}
+        </button>
+
         {/* Dispatch button */}
-        {!isDispatched && order.internal_status !== "cancelled" && (
+        {!isDispatched && order.internal_status !== "cancelled" && !order.is_archived && (
           <button
             onClick={onDispatch}
             className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-indigo-600
@@ -405,7 +477,7 @@ function OrderCard({ order, selected, onSelect, onStatusChange, onDispatch }: Or
           </button>
         )}
 
-        {isDispatched && (
+        {isDispatched && !order.is_archived && (
           <span className="ml-auto text-xs text-emerald-400 flex items-center gap-1">
             <CheckCircle size={12} /> Dispatched
           </span>
