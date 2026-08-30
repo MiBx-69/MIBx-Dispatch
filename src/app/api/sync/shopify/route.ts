@@ -24,11 +24,11 @@ export async function POST(request: NextRequest) {
 
   const logId = syncLog?.id;
 
-  // Run sync in background, return immediately
-  runShopifySync(supabase, logId).catch(console.error);
+  // Wait for sync to complete (Vercel kills unawaited promises)
+  await runShopifySync(supabase, logId).catch(console.error);
 
   return NextResponse.json({
-    message: "Sync started",
+    message: "Sync completed",
     sync_log_id: logId,
   });
 }
