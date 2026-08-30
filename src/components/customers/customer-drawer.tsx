@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, ShoppingBag, Truck, Calendar, MapPin, AlertTriangle } from "lucide-react";
+import { X, ShoppingBag, Truck, Calendar, MapPin, AlertTriangle, Copy, Check } from "lucide-react";
+import { toast } from "sonner";
 
 export function CustomerDrawer({ customer, onClose }: { customer: any; onClose: () => void }) {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -35,6 +37,15 @@ export function CustomerDrawer({ customer, onClose }: { customer: any; onClose: 
   const bestName = customer.name || (orders.length > 0 ? orders[0].customer_name : "Unknown");
   const bestEmail = customer.email || (orders.length > 0 ? orders[0].customer_email : null);
 
+  const handleCopyPhone = () => {
+    if (bestPhone) {
+      navigator.clipboard.writeText(bestPhone);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast.success("Phone number copied to clipboard!");
+    }
+  };
+
   return (
     <>
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity" onClick={onClose} />
@@ -56,10 +67,19 @@ export function CustomerDrawer({ customer, onClose }: { customer: any; onClose: 
                 </span>
               )}
             </div>
-            <p className="text-sm text-zinc-400 font-mono">
-              {bestPhone || (!loading ? "No phone" : "Loading...")} 
-              {bestEmail && ` • ${bestEmail}`}
-            </p>
+            <div className="flex items-center gap-2 text-sm text-zinc-400 font-mono">
+              <span>{bestPhone || (!loading ? "No phone" : "Loading...")}</span>
+              {bestPhone && (
+                <button
+                  onClick={handleCopyPhone}
+                  className="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+                  title="Copy Phone Number"
+                >
+                  {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                </button>
+              )}
+              {bestEmail && <span>• {bestEmail}</span>}
+            </div>
           </div>
           <button onClick={onClose} className="p-2 bg-zinc-800 rounded-lg hover:bg-zinc-700 text-zinc-400 transition-colors">
             <X size={16} />

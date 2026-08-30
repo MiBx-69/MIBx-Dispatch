@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   Search, Filter, ChevronLeft, ChevronRight,
-  Truck, Package, X, CheckCircle, PauseCircle, AlertCircle, Archive, ArchiveRestore
+  Truck, Package, X, CheckCircle, PauseCircle, AlertCircle, Archive, ArchiveRestore, Copy, Check
 } from "lucide-react";
 import { StatusBadge, ShopifyFinancialBadge, ShopifyFulfillmentBadge } from "@/components/ui/status-badge";
 import { DispatchModal } from "@/components/orders/dispatch-modal";
@@ -412,6 +412,18 @@ interface OrderCardProps {
 function OrderCard({ order, selected, onSelect, onStatusChange, onArchiveToggle, onDispatch }: OrderCardProps) {
   const lineItems = (order.line_items as any[]) || [];
   const isDispatched = !!order.pathao_consignment_id;
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyPhone = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (order.customer_phone) {
+      navigator.clipboard.writeText(order.customer_phone);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast.success("Phone number copied to clipboard!");
+    }
+  };
 
   return (
     <div
@@ -453,12 +465,21 @@ function OrderCard({ order, selected, onSelect, onStatusChange, onArchiveToggle,
           </div>
 
           {/* Customer info */}
-          <p className="text-xs text-zinc-400 mt-0.5">
+          <p className="text-xs text-zinc-400 mt-0.5 flex items-center gap-2">
             <span className="font-medium">{order.customer_name}</span>
             {order.customer_phone && (
-              <a href={`tel:${order.customer_phone}`} className="ml-2 text-indigo-400 hover:underline">
-                {order.customer_phone}
-              </a>
+              <span className="flex items-center gap-1.5">
+                <a href={`tel:${order.customer_phone}`} className="text-indigo-400 hover:underline">
+                  {order.customer_phone}
+                </a>
+                <button
+                  onClick={handleCopyPhone}
+                  className="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+                  title="Copy Phone Number"
+                >
+                  {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                </button>
+              </span>
             )}
           </p>
 
