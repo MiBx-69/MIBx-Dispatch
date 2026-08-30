@@ -8,6 +8,7 @@ import type { Order } from "@/types/database";
 interface City { city_id: number; city_name: string; }
 interface Zone { zone_id: number; zone_name: string; }
 interface Area { area_id: number; area_name: string; }
+interface Store { store_id: number; store_name: string; store_address: string; }
 
 interface DispatchModalProps {
   order: Order;
@@ -23,10 +24,12 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
   const [cities, setCities] = useState<City[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingLocations, setLoadingLocations] = useState(true);
 
   const [form, setForm] = useState({
+    store_id: String(storeId || ""),
     recipient_name: order.customer_name || shippingAddr?.name || "",
     recipient_phone: order.customer_phone || shippingAddr?.phone || "",
     recipient_address: shippingAddr?.address1 || "",
@@ -42,7 +45,7 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
     special_instruction: order.note || "",
   });
 
-  // Load cities
+  // Load cities and stores
   useEffect(() => {
     fetch("/api/pathao/cities")
       .then((r) => r.json())
@@ -51,6 +54,10 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
         setLoadingLocations(false);
       })
       .catch(() => setLoadingLocations(false));
+
+    fetch("/api/pathao/stores")
+      .then((r) => r.json())
+      .then((d) => setStores(d.stores || []));
   }, []);
 
   // Load zones when city changes
@@ -73,6 +80,7 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
     setForm((f) => ({ ...f, [field]: value }));
 
   const handleDispatch = async () => {
+    if (!form.store_id) { toast.error("Please select a pickup store"); return; }
     if (!form.recipient_phone) { toast.error("Recipient phone is required"); return; }
 
     setLoading(true);
@@ -82,7 +90,7 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           order_id: order.id,
-          store_id: storeId,
+          store_id: parseInt(form.store_id),
           ...form,
           recipient_city: parseInt(form.recipient_city),
           recipient_zone: parseInt(form.recipient_zone),
@@ -150,6 +158,18 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
 
         {/* Form */}
         <div className="overflow-y-auto flex-1 p-4 space-y-4">
+          {/* Pickup Store */}
+          <Section icon={<MapPin size={14} />} title="Pickup Store">
+            <Field label="Store *">
+              <select value={form.store_id} onChange={(e) => set("store_id", e.target.value)} className={selectCls}>
+                <option value="">Select a store</option>
+                {stores.map((s) => (
+                  <option key={s.store_id} value={s.store_id}>{s.store_name} {s.store_address ? `- ${s.store_address}` : ""}</option>
+                ))}
+              </select>
+            </Field>
+          </Section>
+
           {/* Recipient */}
           <Section icon={<Package size={14} />} title="Recipient Details">
             <InputRow>
