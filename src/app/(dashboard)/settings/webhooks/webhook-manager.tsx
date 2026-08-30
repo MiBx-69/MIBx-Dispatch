@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 
-export function WebhookManager({ initialWebhooks = [] }: { initialWebhooks?: any[] }) {
+import { ActionForm, SubmitButton } from "@/components/ui/action-form";
+import { updateWebhookSecret } from "./actions";
+
+export function WebhookManager({ initialWebhooks = [], initialSecret = "" }: { initialWebhooks?: any[], initialSecret?: string }) {
   const [webhooks, setWebhooks] = useState(initialWebhooks);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -30,6 +33,32 @@ export function WebhookManager({ initialWebhooks = [] }: { initialWebhooks?: any
 
   return (
     <div className="space-y-6">
+      <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-xl space-y-4">
+        <div>
+          <h3 className="text-zinc-200 font-medium text-sm">Webhook Secret</h3>
+          <p className="text-zinc-500 text-xs mt-1">
+            Required to verify incoming Shopify webhooks. Find this in your Shopify Admin -&gt; Settings -&gt; Notifications -&gt; Webhooks.
+          </p>
+        </div>
+        
+        <ActionForm action={updateWebhookSecret} successMessage="Webhook secret saved" className="flex gap-4 items-end max-w-xl">
+          <div className="flex-1 space-y-2">
+            <label className="text-xs font-medium text-zinc-400">Secret Key</label>
+            <input 
+              type="password" 
+              name="shopify_webhook_secret" 
+              defaultValue={initialSecret} 
+              placeholder="e.g. whsec_..."
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-indigo-500/50" 
+            />
+          </div>
+          <div>
+            <SubmitButton className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-sm font-medium">
+              Save Secret
+            </SubmitButton>
+          </div>
+        </ActionForm>
+      </div>
       <div className="flex justify-between items-center bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
         <div>
           <h3 className="text-zinc-200 font-medium text-sm">Shopify Webhooks</h3>

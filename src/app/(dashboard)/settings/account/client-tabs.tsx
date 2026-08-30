@@ -39,8 +39,6 @@ export function AccountTabs({ userProfile, teamProfiles }: { userProfile: any, t
           <div className="p-6 animate-fade-in">
             <h3 className="text-sm font-medium text-zinc-200 mb-4">Personal Information</h3>
             <ActionForm action={updateProfile} successMessage="Profile updated" className="space-y-4 max-w-md">
-              {(isPending) => (
-                <>
                   <div className="space-y-2">
                     <label className="text-xs font-medium text-zinc-400">Full Name</label>
                     <input type="text" name="full_name" defaultValue={userProfile?.full_name || ""} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-indigo-500/50" />
@@ -50,12 +48,10 @@ export function AccountTabs({ userProfile, teamProfiles }: { userProfile: any, t
                     <input type="text" disabled defaultValue={userProfile?.role || "staff"} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-500 text-sm cursor-not-allowed uppercase" />
                   </div>
                   <div className="pt-2">
-                    <SubmitButton isPending={isPending} className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-sm font-medium">
+                    <SubmitButton className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-sm font-medium">
                       Save Changes
                     </SubmitButton>
                   </div>
-                </>
-              )}
             </ActionForm>
           </div>
         )}
@@ -66,8 +62,6 @@ export function AccountTabs({ userProfile, teamProfiles }: { userProfile: any, t
             <div>
               <h3 className="text-sm font-medium text-zinc-200 mb-4">Change Password</h3>
               <ActionForm action={updateSecurity} successMessage="Password updated successfully" className="space-y-4 max-w-md">
-                {(isPending) => (
-                  <>
                     <div className="space-y-2">
                       <label className="text-xs font-medium text-zinc-400">New Password</label>
                       <input type="password" name="password" className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-indigo-500/50" />
@@ -77,12 +71,10 @@ export function AccountTabs({ userProfile, teamProfiles }: { userProfile: any, t
                       <input type="password" name="confirm_password" className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-indigo-500/50" />
                     </div>
                     <div className="pt-2">
-                      <SubmitButton isPending={isPending} className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-sm font-medium">
+                      <SubmitButton className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-sm font-medium">
                         Update Password
                       </SubmitButton>
                     </div>
-                  </>
-                )}
               </ActionForm>
             </div>
             
@@ -129,8 +121,6 @@ export function AccountTabs({ userProfile, teamProfiles }: { userProfile: any, t
                 }} 
                 className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end"
               >
-                {(isPending) => (
-                  <>
                     <div className="space-y-2">
                       <label className="text-xs font-medium text-zinc-400">Full Name</label>
                       <input type="text" name="full_name" required className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-indigo-500/50" />
@@ -147,12 +137,10 @@ export function AccountTabs({ userProfile, teamProfiles }: { userProfile: any, t
                       </select>
                     </div>
                     <div className="w-full">
-                      <SubmitButton isPending={isPending} className="w-full py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-sm font-medium">
+                      <SubmitButton className="w-full py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-sm font-medium">
                         Send Invite
                       </SubmitButton>
                     </div>
-                  </>
-                )}
               </ActionForm>
             </div>
             

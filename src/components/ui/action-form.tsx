@@ -1,14 +1,23 @@
 "use client";
 
-import { useTransition, useRef } from "react";
+import { useTransition, useRef, createContext, useContext } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
-interface ActionFormProps extends Omit<React.FormHTMLAttributes<HTMLFormElement>, 'action' | 'children'> {
+interface ActionFormContextType {
+  isPending: boolean;
+}
+
+const ActionFormContext = createContext<ActionFormContextType>({ isPending: false });
+
+export function useActionForm() {
+  return useContext(ActionFormContext);
+}
+
+interface ActionFormProps extends Omit<React.FormHTMLAttributes<HTMLFormElement>, 'action'> {
   action: (formData: FormData) => Promise<{ error?: string } | void | any>;
   successMessage?: string;
   onSuccess?: () => void;
-  children: (isPending: boolean) => React.ReactNode;
 }
 
 export function ActionForm({ action, successMessage = "Success", onSuccess, children, ...props }: ActionFormProps) {
@@ -38,21 +47,23 @@ export function ActionForm({ action, successMessage = "Success", onSuccess, chil
   };
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} {...props}>
-      {children(isPending)}
-    </form>
+    <ActionFormContext.Provider value={{ isPending }}>
+      <form ref={formRef} onSubmit={handleSubmit} {...props}>
+        {children}
+      </form>
+    </ActionFormContext.Provider>
   );
 }
 
 export function SubmitButton({ 
-  isPending, 
   children, 
   className = "" 
 }: { 
-  isPending: boolean; 
   children: React.ReactNode; 
   className?: string 
 }) {
+  const { isPending } = useActionForm();
+  
   return (
     <button
       type="submit"

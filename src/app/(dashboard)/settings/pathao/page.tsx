@@ -17,9 +17,7 @@ export default async function PathaoSettingsPage() {
 
       <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-xl">
         <ActionForm action={updatePathaoSettings} successMessage="Pathao settings saved successfully" className="space-y-4">
-          {(isPending) => (
-            <>
-              <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-zinc-300">Client ID</label>
                   <input type="text" name="client_id" defaultValue={settings?.pathao_client_id || ""} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 focus:outline-none focus:border-red-500/50" />
@@ -44,12 +42,10 @@ export default async function PathaoSettingsPage() {
                 <input type="number" name="store_id" defaultValue={settings?.pathao_store_id || ""} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 focus:outline-none focus:border-red-500/50" />
               </div>
               <div className="pt-4">
-                <SubmitButton isPending={isPending} className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium">
+                <SubmitButton className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium">
                   Save Pathao Credentials
                 </SubmitButton>
               </div>
-            </>
-          )}
         </ActionForm>
       </div>
     </div>
