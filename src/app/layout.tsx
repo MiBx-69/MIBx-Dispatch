@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
+import NextTopLoader from 'nextjs-toploader';
 
 const inter = Inter({
   subsets: ["latin"],
@@ -40,6 +41,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
       </head>
       <body className={`${inter.variable} font-sans antialiased bg-zinc-950 text-zinc-50`}>
+        <NextTopLoader color="#6366f1" showSpinner={false} height={3} />
         {children}
         <Toaster
           theme="dark"
