@@ -75,14 +75,13 @@ export const GET_ORDERS_QUERY = `
         node {
           id
           name
-          orderNumber
           createdAt
           updatedAt
           email
           phone
           note
           tags
-          financialStatus
+          displayFinancialStatus
           displayFulfillmentStatus
           totalPriceSet { shopMoney { amount currencyCode } }
           subtotalPriceSet { shopMoney { amount currencyCode } }
@@ -118,10 +117,16 @@ export const GET_ORDERS_QUERY = `
                 variant {
                   id
                   title
-                  weight
-                  weightUnit
                   sku
                   image { url }
+                  inventoryItem {
+                    measurement {
+                      weight {
+                        value
+                        unit
+                      }
+                    }
+                  }
                 }
               }
             }

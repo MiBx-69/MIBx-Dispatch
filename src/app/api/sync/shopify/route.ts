@@ -121,19 +121,22 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any) {
     price: parseFloat(e.node.originalUnitPriceSet?.shopMoney?.amount || "0"),
     sku: e.node.sku || e.node.variant?.sku,
     variant_title: e.node.variant?.title,
-    weight: e.node.variant?.weight,
-    weight_unit: e.node.variant?.weightUnit,
+    weight: e.node.variant?.inventoryItem?.measurement?.weight?.value,
+    weight_unit: e.node.variant?.inventoryItem?.measurement?.weight?.unit,
     image: e.node.variant?.image?.url,
   }));
 
   const fulfillments = shopifyOrder.fulfillments || [];
   const lastFulfillment = fulfillments[fulfillments.length - 1];
+  
+  // orderName is usually like #1001, so we strip non-digits to get a number if possible
+  const parsedOrderNumber = parseInt(shopifyOrder.name.replace(/\\D/g, ""), 10);
 
   await supabase.from("orders").upsert(
     {
       shopify_order_id: parseInt(shopifyOrder.id.split("/").pop()!),
       shopify_order_name: shopifyOrder.name,
-      shopify_order_number: shopifyOrder.orderNumber,
+      shopify_order_number: isNaN(parsedOrderNumber) ? null : parsedOrderNumber,
       customer_shopify_id: customer ? parseInt(customer.id.split("/").pop()!) : null,
       customer_name: shippingAddr?.name || (customer ? `${customer.firstName} ${customer.lastName}`.trim() : "Unknown"),
       customer_phone: shippingAddr?.phone || customer?.phone || null,
@@ -144,7 +147,7 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any) {
       subtotal_price: parseFloat(shopifyOrder.subtotalPriceSet?.shopMoney?.amount || "0"),
       total_tax: parseFloat(shopifyOrder.totalTaxSet?.shopMoney?.amount || "0"),
       currency: shopifyOrder.totalPriceSet?.shopMoney?.currencyCode || "BDT",
-      financial_status: shopifyOrder.financialStatus?.toLowerCase(),
+      financial_status: shopifyOrder.displayFinancialStatus?.toLowerCase(),
       fulfillment_status: shopifyOrder.displayFulfillmentStatus?.toLowerCase() || null,
       shopify_tags: shopifyOrder.tags || [],
       note: shopifyOrder.note,
