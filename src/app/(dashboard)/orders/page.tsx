@@ -24,11 +24,10 @@ export default async function OrdersPage({
 
   if (params.status === "archived") {
     query = query.eq("is_archived", true);
+  } else if (!params.status || params.status === "all") {
+    query = query.eq("is_archived", false).neq("internal_status", "dispatched");
   } else {
-    query = query.eq("is_archived", false);
-    if (params.status && params.status !== "all") {
-      query = query.eq("internal_status", params.status);
-    }
+    query = query.eq("is_archived", false).eq("internal_status", params.status);
   }
 
   if (params.search) {
