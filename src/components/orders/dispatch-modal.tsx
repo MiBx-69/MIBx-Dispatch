@@ -89,9 +89,9 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          ...form,
           order_id: order.id,
           store_id: parseInt(form.store_id),
-          ...form,
           recipient_city: parseInt(form.recipient_city),
           recipient_zone: parseInt(form.recipient_zone),
           recipient_area: form.recipient_area ? parseInt(form.recipient_area) : undefined,
