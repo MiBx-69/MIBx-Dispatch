@@ -105,6 +105,7 @@ export interface Database {
           shopify_created_at: string | null;
           shopify_updated_at: string | null;
           synced_at: string | null;
+          is_archived: boolean;
           created_at: string;
           updated_at: string;
         };
