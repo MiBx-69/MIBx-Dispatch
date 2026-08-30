@@ -7,7 +7,7 @@ import {
   Search, Filter, ChevronLeft, ChevronRight,
   Truck, Package, X, CheckCircle, PauseCircle, AlertCircle,
 } from "lucide-react";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { StatusBadge, ShopifyFinancialBadge, ShopifyFulfillmentBadge } from "@/components/ui/status-badge";
 import { DispatchModal } from "@/components/orders/dispatch-modal";
 import type { Order, OrderStatus } from "@/types/database";
 
@@ -304,10 +304,11 @@ function OrderCard({ order, selected, onSelect, onStatusChange, onDispatch }: Or
           <div className="flex items-center flex-wrap gap-2">
             <span className="text-sm font-bold text-zinc-100">{order.shopify_order_name}</span>
             <StatusBadge status={order.internal_status} />
-            {order.financial_status === "paid" && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                Paid
-              </span>
+            {order.financial_status && <ShopifyFinancialBadge status={order.financial_status} />}
+            {order.fulfillment_status ? (
+              <ShopifyFulfillmentBadge status={order.fulfillment_status} />
+            ) : (
+              <ShopifyFulfillmentBadge status="unfulfilled" />
             )}
           </div>
 
