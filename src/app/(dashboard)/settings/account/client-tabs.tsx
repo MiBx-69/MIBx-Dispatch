@@ -88,7 +88,29 @@ export function AccountTabs({ userProfile, teamProfiles }: { userProfile: any, t
               </p>
               <button 
                 type="button" 
-                onClick={() => toast.info("Passkey registration requires Supabase MFA setup on your project tier.")}
+                onClick={async () => {
+                  try {
+                    const { createClient } = await import('@/lib/supabase/client');
+                    const supabase = createClient();
+                    
+                    const { data, error } = await supabase.auth.mfa.enroll({
+                      factorType: 'webauthn',
+                    });
+                    
+                    if (error) throw error;
+                    
+                    const challenge = await supabase.auth.mfa.challenge({
+                      factorId: data.id,
+                    });
+                    
+                    if (challenge.error) throw challenge.error;
+                    
+                    toast.success("Passkey registered successfully!");
+                  } catch (err: any) {
+                    console.error("Passkey error:", err);
+                    toast.error(err.message || "Failed to register passkey. Ensure your browser supports WebAuthn and you are on a secure context (HTTPS).");
+                  }
+                }}
                 className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded-lg text-sm font-medium transition-colors"
               >
                 Register new Passkey

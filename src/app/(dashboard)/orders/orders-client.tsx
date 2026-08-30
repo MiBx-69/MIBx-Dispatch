@@ -223,17 +223,26 @@ export function OrdersClient({
     <div className="space-y-4 animate-fade-in">
       {/* Search + Filter */}
       <div className="space-y-3">
-        <form onSubmit={handleSearch} className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search orders, customers, phones..."
-            className="w-full pl-9 pr-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm
-                      text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500
-                      focus:ring-1 focus:ring-indigo-500"
-          />
-        </form>
+        <div className="flex gap-2">
+          <form onSubmit={handleSearch} className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search orders, customers, phones..."
+              className="w-full pl-9 pr-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm
+                        text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500
+                        focus:ring-1 focus:ring-indigo-500"
+            />
+          </form>
+          <a
+            href={`/api/orders/export?status=${currentStatus || "all"}&search=${encodeURIComponent(currentSearch || "")}`}
+            download
+            className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-300 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+          >
+            Export CSV
+          </a>
+        </div>
 
         {/* Status filters */}
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
