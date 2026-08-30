@@ -63,6 +63,30 @@ export default async function SettingsPage() {
         <p className="text-sm text-zinc-500">Configure your dispatch ERP</p>
       </div>
 
+      {!settings?.shopify_shop_domain && (
+        <div className="p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/20 mb-6">
+          <h3 className="text-sm font-semibold text-indigo-400 mb-2">Connect Shopify Store</h3>
+          <p className="text-xs text-zinc-400 mb-3">
+            Enter your Shopify domain to install the app and automatically sync your API token.
+          </p>
+          <form action="/api/auth/shopify" method="GET" className="flex gap-2">
+            <input 
+              type="text" 
+              name="shop" 
+              placeholder="e.g. your-store.myshopify.com" 
+              className="flex-1 bg-zinc-900 border border-zinc-700 rounded-md px-3 py-2 text-sm text-zinc-200 outline-none focus:border-indigo-500"
+              required
+            />
+            <button 
+              type="submit"
+              className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+            >
+              Install App
+            </button>
+          </form>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {sections.map((s) => (
           <Link key={s.title} href={s.href}>

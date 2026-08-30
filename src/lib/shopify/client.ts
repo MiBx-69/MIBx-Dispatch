@@ -3,22 +3,43 @@
  * Uses the 2026-07 API version with offline access token (custom app)
  */
 
+import { createServiceClient } from "@/lib/supabase/server";
+
 const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || "2026-07";
 
-function getShopifyEndpoint() {
-  const domain = process.env.SHOPIFY_SHOP_DOMAIN;
-  if (!domain) throw new Error("SHOPIFY_SHOP_DOMAIN is not configured");
-  return `https://${domain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+async function getShopifyCredentials() {
+  // If not using OAuth, fallback to env variables if provided
+  if (process.env.SHOPIFY_SHOP_DOMAIN && process.env.SHOPIFY_ACCESS_TOKEN) {
+    return {
+      domain: process.env.SHOPIFY_SHOP_DOMAIN,
+      token: process.env.SHOPIFY_ACCESS_TOKEN,
+    };
+  }
+
+  const supabase = createServiceClient();
+  const { data: settings } = await supabase
+    .from("app_settings")
+    .select("shopify_shop_domain, shopify_access_token")
+    .single();
+
+  if (!settings?.shopify_shop_domain || !settings?.shopify_access_token) {
+    throw new Error("Shopify credentials not found in App Settings. Please install the app via OAuth.");
+  }
+
+  return {
+    domain: settings.shopify_shop_domain,
+    token: settings.shopify_access_token,
+  };
 }
 
 async function shopifyFetch<T = any>(
   query: string,
   variables?: Record<string, any>
 ): Promise<{ data: T; errors?: any[] }> {
-  const token = process.env.SHOPIFY_ACCESS_TOKEN;
-  if (!token) throw new Error("SHOPIFY_ACCESS_TOKEN is not configured");
+  const { domain, token } = await getShopifyCredentials();
+  const endpoint = `https://${domain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
 
-  const response = await fetch(getShopifyEndpoint(), {
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
