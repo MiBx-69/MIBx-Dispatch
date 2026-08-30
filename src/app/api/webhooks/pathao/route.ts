@@ -72,65 +72,82 @@ export async function POST(request: NextRequest) {
 async function processPathaoWebhook(payload: any, storedSecret: string) {
   const supabase = createServiceClient();
   const consignmentId = payload.consignment_id;
+  const merchantOrderId = payload.merchant_order_id;
 
   if (!consignmentId) return;
 
   try {
     const newEvent = payload.event;
-
-    // Update dispatch record
-    const { data: dispatch } = await supabase
-      .from("dispatches")
-      .select("*, orders(*)")
-      .eq("consignment_id", consignmentId)
-      .single();
-
-    if (!dispatch) {
-      console.warn(`[Pathao Webhook] No dispatch found for ${consignmentId}`);
-      return;
+    
+    // 1. Try to find the order directly first (more reliable)
+    let order: any = null;
+    if (merchantOrderId) {
+      const { data } = await supabase.from("orders").select("*").eq("shopify_order_name", merchantOrderId).maybeSingle();
+      if (data) order = data;
+    }
+    
+    if (!order) {
+      const { data } = await supabase.from("orders").select("*").eq("pathao_consignment_id", consignmentId).maybeSingle();
+      if (data) order = data;
     }
 
-    // Append to tracking history
-    const history = (dispatch.tracking_history as any[]) || [];
-    history.push({
-      status: newEvent,
-      timestamp: payload.updated_at || new Date().toISOString(),
-      note: payload.reason || null,
-    });
-
-    await supabase
+    // 2. Update dispatch record if it exists
+    const { data: dispatch } = await supabase
       .from("dispatches")
-      .update({
-        pathao_order_status: newEvent,
-        tracking_history: history,
-      })
-      .eq("consignment_id", consignmentId);
+      .select("*")
+      .eq("consignment_id", consignmentId)
+      .maybeSingle();
 
-    // Map Pathao event to internal ERP status
-    const internalStatus = mapPathaoEventToInternal(newEvent);
+    if (dispatch) {
+      const history = (dispatch.tracking_history as any[]) || [];
+      history.push({
+        status: newEvent,
+        timestamp: payload.updated_at || new Date().toISOString(),
+        note: payload.reason || null,
+      });
 
-    // Update order internal status
-    await supabase
-      .from("orders")
-      .update({
-        pathao_delivery_status: newEvent,
-        internal_status: internalStatus,
-      })
-      .eq("id", dispatch.order_id);
+      await supabase
+        .from("dispatches")
+        .update({
+          pathao_order_status: newEvent,
+          tracking_history: history,
+        })
+        .eq("consignment_id", consignmentId);
+        
+      if (!order && dispatch.order_id) {
+         const { data: orderFromDispatch } = await supabase.from("orders").select("*").eq("id", dispatch.order_id).maybeSingle();
+         if (orderFromDispatch) order = orderFromDispatch;
+      }
+    }
 
-    // Update Shopify fulfillment tracking if order has fulfillment
-    const order = dispatch.orders as any;
-    if (order?.shopify_fulfillment_id) {
-      try {
-        await updateShopifyFulfillmentTracking({
-          fulfillmentId: order.shopify_fulfillment_id,
-          trackingNumber: consignmentId,
-          trackingCompany: "Pathao",
-          trackingUrl: `https://merchant.pathao.com/cn-tracking/${consignmentId}`,
-          notifyCustomer: newEvent === "order.delivered" || newEvent === "order.partial-delivery",
-        });
-      } catch (shopifyErr) {
-        console.error("[Pathao Webhook] Shopify tracking update failed:", shopifyErr);
+    if (!order) {
+      console.warn(`[Pathao Webhook] No order found for consignment ${consignmentId} or merchant ID ${merchantOrderId}`);
+    } else {
+      // Map Pathao event to internal ERP status
+      const internalStatus = mapPathaoEventToInternal(newEvent);
+
+      // Update order internal status
+      await supabase
+        .from("orders")
+        .update({
+          pathao_delivery_status: newEvent,
+          internal_status: internalStatus,
+        })
+        .eq("id", order.id);
+
+      // Update Shopify fulfillment tracking if order has fulfillment
+      if (order.shopify_fulfillment_id) {
+        try {
+          await updateShopifyFulfillmentTracking({
+            fulfillmentId: order.shopify_fulfillment_id,
+            trackingNumber: consignmentId,
+            trackingCompany: "Pathao",
+            trackingUrl: `https://merchant.pathao.com/cn-tracking/${consignmentId}`,
+            notifyCustomer: newEvent === "order.delivered" || newEvent === "order.partial-delivery",
+          });
+        } catch (shopifyErr) {
+          console.error("[Pathao Webhook] Shopify tracking update failed:", shopifyErr);
+        }
       }
     }
 
