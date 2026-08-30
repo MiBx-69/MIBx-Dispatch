@@ -20,6 +20,8 @@ export async function GET(request: NextRequest) {
 
     if (status === "archived") {
       query = query.eq("is_archived", true);
+    } else if (status === "all") {
+      query = query.eq("is_archived", false).neq("internal_status", "dispatched");
     } else {
       query = query.eq("is_archived", false);
       if (status !== "all") {

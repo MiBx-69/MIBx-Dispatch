@@ -547,19 +547,22 @@ function OrderCard({ order, selected, onSelect, onStatusChange, onArchiveToggle,
           )}
         </button>
 
-        {/* Dispatch button */}
-        {!isDispatched && order.internal_status !== "cancelled" && !order.is_archived && (
+        {/* Dispatch / Re-dispatch button */}
+        {order.internal_status !== "cancelled" && !order.is_archived && (
           <button
             onClick={onDispatch}
-            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-indigo-600
-                      text-white font-semibold hover:bg-indigo-500 transition-colors"
+            className={`ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg ${
+              isDispatched
+                ? "bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30"
+                : "bg-indigo-600 text-white hover:bg-indigo-500"
+            } font-semibold transition-colors`}
           >
-            <Truck size={12} /> Dispatch
+            <Truck size={12} /> {isDispatched ? "Re-dispatch" : "Dispatch"}
           </button>
         )}
 
-        {isDispatched && !order.is_archived && (
-          <span className="ml-auto text-xs text-emerald-400 flex items-center gap-1">
+        {isDispatched && !order.is_archived && order.internal_status === "dispatched" && (
+          <span className="text-xs text-emerald-400 flex items-center gap-1">
             <CheckCircle size={12} /> Dispatched
           </span>
         )}

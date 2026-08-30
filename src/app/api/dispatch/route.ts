@@ -54,20 +54,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Order not found" }, { status: 404 });
   }
 
-  // Check not already dispatched
-  const { data: existingDispatch } = await supabase
-    .from("dispatches")
-    .select("consignment_id")
-    .eq("order_id", order_id)
-    .eq("is_cancelled", false)
-    .single();
-
-  if (existingDispatch) {
-    return NextResponse.json(
-      { error: `Already dispatched: ${existingDispatch.consignment_id}` },
-      { status: 409 }
-    );
-  }
+  // Removed already dispatched check to allow re-dispatching of orders
 
   // Get settings for store_id
   const { data: settings } = await supabase
