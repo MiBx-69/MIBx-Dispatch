@@ -123,7 +123,8 @@ export async function POST(request: NextRequest) {
     });
 
     // 3. Update order in DB with consignment ID and status
-    const trackingUrl = `https://merchant.pathao.com/cn-tracking/${consignment_id}`;
+    const recipientPhoneStr = recipient_phone || order.customer_phone || "";
+    const trackingUrl = `https://merchant.pathao.com/tracking?consignment_id=${consignment_id}&phone=${encodeURIComponent(recipientPhoneStr)}`;
     await supabase
       .from("orders")
       .update({
