@@ -13,7 +13,7 @@ export default async function WebhooksSettingsPage() {
 
   const { createServiceClient } = await import("@/lib/supabase/server");
   const supabaseAdmin = createServiceClient();
-  const { data: settings } = await supabaseAdmin.from("app_settings").select("shopify_webhook_secret").single();
+  const { data: settings } = await supabaseAdmin.from("app_settings").select("shopify_webhook_secret, pathao_webhook_secret").single();
 
   return (
     <div className="space-y-6 max-w-4xl animate-fade-in">
@@ -22,7 +22,11 @@ export default async function WebhooksSettingsPage() {
         <p className="text-sm text-zinc-500">Manage incoming webhook events from Shopify and Pathao.</p>
       </div>
 
-      <WebhookManager initialWebhooks={webhooks} initialSecret={settings?.shopify_webhook_secret || ""} />
+      <WebhookManager 
+        initialWebhooks={webhooks} 
+        initialSecret={settings?.shopify_webhook_secret || ""} 
+        initialPathaoSecret={settings?.pathao_webhook_secret || ""} 
+      />
     </div>
   );
 }
