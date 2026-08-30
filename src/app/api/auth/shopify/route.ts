@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   const cookieStore = await cookies();
   cookieStore.set("shopify_oauth_nonce", nonce, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "Production",
+    secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     maxAge: 10 * 60, // 10 minutes
   });

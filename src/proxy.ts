@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
@@ -38,7 +38,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Public routes that don't need auth
-  const publicPaths = ["/login", "/api/webhooks/shopify", "/api/webhooks/pathao"];
+  const publicPaths = ["/login", "/api/auth", "/api/webhooks/shopify", "/api/webhooks/pathao"];
   const isPublic = publicPaths.some((p) => pathname.startsWith(p));
 
   // Redirect unauthenticated users to login
