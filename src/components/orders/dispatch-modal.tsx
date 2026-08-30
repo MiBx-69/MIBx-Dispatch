@@ -74,8 +74,6 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
 
   const handleDispatch = async () => {
     if (!form.recipient_phone) { toast.error("Recipient phone is required"); return; }
-    if (!form.recipient_city) { toast.error("Please select a city"); return; }
-    if (!form.recipient_zone) { toast.error("Please select a zone"); return; }
 
     setLoading(true);
     try {
@@ -176,24 +174,24 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
               <p className="text-xs text-zinc-500">Loading locations...</p>
             ) : (
               <div className="grid grid-cols-3 gap-2">
-                <Field label="City *">
+                <Field label="City">
                   <select value={form.recipient_city} onChange={(e) => { set("recipient_city", e.target.value); set("recipient_zone", ""); set("recipient_area", ""); }}
                     className={selectCls}>
-                    <option value="">City</option>
+                    <option value="">Auto-assign</option>
                     {cities.map((c) => <option key={c.city_id} value={c.city_id}>{c.city_name}</option>)}
                   </select>
                 </Field>
-                <Field label="Zone *">
+                <Field label="Zone">
                   <select value={form.recipient_zone} onChange={(e) => { set("recipient_zone", e.target.value); set("recipient_area", ""); }}
                     className={selectCls} disabled={!form.recipient_city}>
-                    <option value="">Zone</option>
+                    <option value="">Auto-assign</option>
                     {zones.map((z) => <option key={z.zone_id} value={z.zone_id}>{z.zone_name}</option>)}
                   </select>
                 </Field>
                 <Field label="Area">
                   <select value={form.recipient_area} onChange={(e) => set("recipient_area", e.target.value)}
                     className={selectCls} disabled={!form.recipient_zone}>
-                    <option value="">Area</option>
+                    <option value="">Auto-assign</option>
                     {areas.map((a) => <option key={a.area_id} value={a.area_id}>{a.area_name}</option>)}
                   </select>
                 </Field>

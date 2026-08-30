@@ -94,9 +94,9 @@ export async function POST(request: NextRequest) {
         recipient_address ||
         (order.shipping_address as any)?.address1 ||
         "",
-      recipient_city,
-      recipient_zone,
-      recipient_area,
+      ...(recipient_city && { recipient_city: parseInt(recipient_city) }),
+      ...(recipient_zone && { recipient_zone: parseInt(recipient_zone) }),
+      ...(recipient_area && { recipient_area: parseInt(recipient_area) }),
       delivery_type,
       item_type,
       item_quantity,
