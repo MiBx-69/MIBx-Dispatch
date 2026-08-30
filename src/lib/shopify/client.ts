@@ -114,20 +114,6 @@ export const GET_ORDERS_QUERY = `
                 quantity
                 sku
                 originalUnitPriceSet { shopMoney { amount currencyCode } }
-                variant {
-                  id
-                  title
-                  sku
-                  image { url }
-                  inventoryItem {
-                    measurement {
-                      weight {
-                        value
-                        unit
-                      }
-                    }
-                  }
-                }
               }
             }
           }
