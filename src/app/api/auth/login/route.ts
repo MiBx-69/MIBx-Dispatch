@@ -16,9 +16,10 @@ export async function POST(request: NextRequest) {
 
   if (error) {
     return NextResponse.redirect(
-      new URL(`/login?error=invalid_credentials&redirectTo=${encodeURIComponent(redirectTo)}`, request.url)
+      new URL(`/login?error=invalid_credentials&redirectTo=${encodeURIComponent(redirectTo)}`, request.url),
+      303
     );
   }
 
-  return NextResponse.redirect(new URL(redirectTo, request.url));
+  return NextResponse.redirect(new URL(redirectTo, request.url), 303);
 }
