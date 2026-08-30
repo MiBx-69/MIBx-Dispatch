@@ -22,8 +22,13 @@ export default async function OrdersPage({
     .order("shopify_created_at", { ascending: false })
     .range(offset, offset + pageSize - 1);
 
-  if (params.status && params.status !== "all") {
-    query = query.eq("internal_status", params.status);
+  if (params.status === "archived") {
+    query = query.eq("is_archived", true);
+  } else {
+    query = query.eq("is_archived", false);
+    if (params.status && params.status !== "all") {
+      query = query.eq("internal_status", params.status);
+    }
   }
 
   if (params.search) {
