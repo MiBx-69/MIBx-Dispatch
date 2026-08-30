@@ -2,6 +2,10 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { Package, Truck, CheckCircle, Clock, AlertCircle, TrendingUp, Zap } from "lucide-react";
 import Link from "next/link";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { subDays, format, parseISO } from "date-fns";
+import { RevenueChart } from "@/components/dashboard/revenue-chart";
+import { TopProducts } from "@/components/dashboard/top-products";
+import { FulfillmentStats } from "@/components/dashboard/fulfillment-stats";
 import type { Order, DashboardStats } from "@/types/database";
 
 export const metadata = { title: "Dashboard" };
@@ -28,6 +32,77 @@ export default async function DashboardPage() {
     .select("*")
     .order("dispatched_at", { ascending: false })
     .limit(5);
+
+  // Fetch orders from the last 30 days for metrics
+  const thirtyDaysAgo = subDays(new Date(), 30).toISOString();
+  const { data: recentMonthOrders } = await supabase
+    .from("orders")
+    .select("total_price, shopify_created_at, line_items, financial_status, fulfillment_status")
+    .gte("shopify_created_at", thirtyDaysAgo)
+    .order("shopify_created_at", { ascending: false });
+
+  // --- Data Processing for Dashboards ---
+  const orders = recentMonthOrders || [];
+  
+  // 1. Revenue Chart (Last 7 Days)
+  const revenueMap = new Map<string, number>();
+  for (let i = 6; i >= 0; i--) {
+    revenueMap.set(format(subDays(new Date(), i), 'yyyy-MM-dd'), 0);
+  }
+  
+  orders.forEach((o: any) => {
+    if (!o.shopify_created_at) return;
+    const dateStr = format(parseISO(o.shopify_created_at), 'yyyy-MM-dd');
+    if (revenueMap.has(dateStr)) {
+      revenueMap.set(dateStr, revenueMap.get(dateStr)! + Number(o.total_price));
+    }
+  });
+  const revenueData = Array.from(revenueMap.entries()).map(([date, revenue]) => ({ date, revenue }));
+
+  // 2. Top Products (Last 30 Days)
+  const productMap = new Map<string, { id: string, title: string, variant: string, qty: number, revenue: number }>();
+  orders.forEach((o: any) => {
+    const items = o.line_items as any[];
+    if (Array.isArray(items)) {
+      items.forEach((item: any) => {
+        const key = `${item.product_id || item.title}-${item.variant_id || item.variant_title}`;
+        if (!productMap.has(key)) {
+          productMap.set(key, { 
+            id: key, 
+            title: item.title || item.name || 'Unknown', 
+            variant: item.variant_title || '', 
+            qty: 0, 
+            revenue: 0 
+          });
+        }
+        const p = productMap.get(key)!;
+        p.qty += item.quantity || 1;
+        p.revenue += (Number(item.price) || 0) * (item.quantity || 1);
+      });
+    }
+  });
+  const topProducts = Array.from(productMap.values())
+    .sort((a, b) => b.qty - a.qty)
+    .slice(0, 5);
+
+  // 3. Fulfillment Stats (Last 30 Days)
+  const fStats = {
+    unfulfilled: 0,
+    partial: 0,
+    fulfilled: 0,
+    paid: 0,
+    pending_payment: 0,
+    total: orders.length
+  };
+  
+  orders.forEach((o: any) => {
+    if (o.fulfillment_status === 'fulfilled') fStats.fulfilled++;
+    else if (o.fulfillment_status === 'partial') fStats.partial++;
+    else fStats.unfulfilled++;
+    
+    if (o.financial_status === 'paid') fStats.paid++;
+    else fStats.pending_payment++;
+  });
 
   const s = stats as DashboardStats | null;
 
@@ -102,24 +177,47 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {statCards.map((card) => (
-          <div
-            key={card.label}
-            className={`rounded-xl p-4 ${card.bg} border border-zinc-800/50 ${
-              card.href ? "hover:border-zinc-700 transition-colors" : ""
-            }`}
-          >
-            {card.href ? (
-              <Link href={card.href} className="block">
+      {/* Advanced Metrics */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Revenue Chart */}
+        <div className="lg:col-span-2 rounded-2xl p-5 border border-zinc-800/50 bg-zinc-900">
+          <h2 className="text-sm font-semibold text-zinc-300 mb-4">Revenue (Last 7 Days)</h2>
+          <RevenueChart data={revenueData} />
+        </div>
+
+        {/* Fulfillment & Finances */}
+        <div className="rounded-2xl p-5 border border-zinc-800/50 bg-zinc-900 flex flex-col justify-center">
+          <FulfillmentStats stats={fStats} />
+        </div>
+      </div>
+
+      {/* Top Products & Stat Cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Top Products */}
+        <div className="lg:col-span-2 rounded-2xl p-5 border border-zinc-800/50 bg-zinc-900">
+          <h2 className="text-sm font-semibold text-zinc-300 mb-4">Top Selling Products (Last 30 Days)</h2>
+          <TopProducts products={topProducts} />
+        </div>
+
+        {/* Quick Stats Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
+          {statCards.map((card) => (
+            <div
+              key={card.label}
+              className={`rounded-xl p-4 ${card.bg} border border-zinc-800/50 flex-1 ${
+                card.href ? "hover:border-zinc-700 transition-colors" : ""
+              }`}
+            >
+              {card.href ? (
+                <Link href={card.href} className="block">
+                  <StatCardContent {...card} />
+                </Link>
+              ) : (
                 <StatCardContent {...card} />
-              </Link>
-            ) : (
-              <StatCardContent {...card} />
-            )}
-          </div>
-        ))}
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Recent Orders */}
