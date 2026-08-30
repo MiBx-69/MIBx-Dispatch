@@ -137,15 +137,6 @@ export const GET_ORDERS_QUERY = `
             trackingInfo { number url company }
             createdAt
           }
-          fulfillmentOrders(first: 5) {
-            edges {
-              node {
-                id
-                status
-                assignedLocation { name }
-              }
-            }
-          }
           cancelledAt
           cancelReason
         }
