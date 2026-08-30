@@ -390,7 +390,8 @@ export function verifyShopifyWebhook(
   hmacHeader: string,
   secret?: string
 ): boolean {
-  const webhookSecret = secret || process.env.SHOPIFY_WEBHOOK_SECRET;
+  // Use explicit secret, OR webhook secret, OR client secret
+  const webhookSecret = secret || process.env.SHOPIFY_WEBHOOK_SECRET || process.env.SHOPIFY_CLIENT_SECRET;
   if (!webhookSecret) return false;
 
   const hash = createHmac("sha256", webhookSecret)
