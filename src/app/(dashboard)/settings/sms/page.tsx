@@ -72,7 +72,7 @@ export default async function SMSSettingsPage() {
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-indigo-500/50"
                   placeholder="Template for order confirmation..."
                 />
-                <p className="text-[10px] text-zinc-500 mt-1">Variables available: `{"{{order_id}}"}`, `{"{{customer_name}}"}`</p>
+                <p className="text-[10px] text-zinc-500 mt-1">Variables available: `&#123;&#123;order_id&#125;&#125;`, `&#123;&#123;customer_name&#125;&#125;`</p>
               </div>
             </div>
 
@@ -96,7 +96,7 @@ export default async function SMSSettingsPage() {
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-indigo-500/50"
                   placeholder="Template for dispatch..."
                 />
-                <p className="text-[10px] text-zinc-500 mt-1">Variables available: `{"{{order_id}}"}`, `{"{{customer_name}}"}`, `{"{{tracking_url}}"}`, `{"{{total_price}}"}`</p>
+                <p className="text-[10px] text-zinc-500 mt-1">Variables available: `&#123;&#123;order_id&#125;&#125;`, `&#123;&#123;customer_name&#125;&#125;`, `&#123;&#123;tracking_url&#125;&#125;`, `&#123;&#123;total_price&#125;&#125;`</p>
               </div>
             </div>
 
@@ -120,7 +120,7 @@ export default async function SMSSettingsPage() {
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-indigo-500/50"
                   placeholder="Template for delivered..."
                 />
-                <p className="text-[10px] text-zinc-500 mt-1">Variables available: `{"{{order_id}}"}`, `{"{{customer_name}}"}`</p>
+                <p className="text-[10px] text-zinc-500 mt-1">Variables available: `&#123;&#123;order_id&#125;&#125;`, `&#123;&#123;customer_name&#125;&#125;`</p>
               </div>
             </div>
 

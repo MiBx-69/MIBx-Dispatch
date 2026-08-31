@@ -81,7 +81,10 @@ export function OrdersClient({
 
       const { data } = await res.json();
       if (data && data.length > 0) {
-        setOrdersList((prev) => [...prev, ...data]);
+        setOrdersList((prev) => {
+          const newOrders = data.filter((o: Order) => !prev.some((p) => p.id === o.id));
+          return [...prev, ...newOrders];
+        });
         setPage((p) => p + 1);
       }
     } catch (err) {

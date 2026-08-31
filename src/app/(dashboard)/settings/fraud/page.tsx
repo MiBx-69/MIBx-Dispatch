@@ -3,6 +3,7 @@ import { Loader2, ShieldCheck, ShieldAlert } from "lucide-react";
 import { updateFraudSettings } from "./actions";
 
 export const metadata = { title: "Fraud & Risk Settings" };
+// Trigger Turbopack rebuild
 
 export default async function FraudSettingsPage() {
   const supabase = createServiceClient();

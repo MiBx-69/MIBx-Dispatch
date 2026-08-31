@@ -31,7 +31,12 @@ export function CustomersClient({
       const data = await res.json();
       
       if (append) {
-        setCustomers((prev) => [...prev, ...(data.customers || [])]);
+        setCustomers((prev) => {
+          const newCustomers = (data.customers || []).filter(
+            (c: any) => !prev.some((p: any) => p.id === c.id)
+          );
+          return [...prev, ...newCustomers];
+        });
       } else {
         setCustomers(data.customers || []);
       }
