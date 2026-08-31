@@ -54,7 +54,7 @@ async function processShopifyWebhook(
       case "orders/create": {
         const isNew = await upsertOrder(supabase, payload);
         if (isNew) {
-          await logOrderEvent(payload.id, "SYNCED", "Order imported from Shopify via webhook");
+          await logOrderEvent(payload.id.toString(), "SYNCED", "Order imported from Shopify via webhook");
           // Fire and forget SMS
           sendOrderConfirmationSMS(supabase, payload).catch(e => console.error("Order SMS Error:", e));
         }

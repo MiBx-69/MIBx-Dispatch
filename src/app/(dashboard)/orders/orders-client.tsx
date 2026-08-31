@@ -464,7 +464,7 @@ export function OrdersClient({
               {/* CTA Buttons */}
               <div className="flex flex-wrap items-center gap-1.5 px-3.5 pb-3 border-t border-zinc-800/50 pt-2">
                 {/* WhatsApp Confirmation */}
-                {order.customer_phone && !order.is_archived && !isDispatched && (
+                {order.customer_phone && !order.is_archived && !isDispatchedOrCancelled && (
                   <button
                     onClick={() => {
                       const d = order.customer_phone!.replace(/[^0-9]/g, '');
