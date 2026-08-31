@@ -43,6 +43,8 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ received: true }, { status: 200 });
 }
 
+import { performFraudCheck } from "@/lib/fraud-checker";
+
 async function processShopifyWebhook(
   topic: string,
   payload: ShopifyOrderWebhookPayload
@@ -55,6 +57,12 @@ async function processShopifyWebhook(
         const isNew = await upsertOrder(supabase, payload);
         if (isNew) {
           await logOrderEvent(payload.id.toString(), "SYNCED", "Order imported from Shopify via webhook");
+          
+          // Automatically run fraud check in background
+          performFraudCheck(payload.id.toString(), supabase)
+            .then(res => console.log(`Auto fraud check for ${payload.id}: ${res.fraud_status}`))
+            .catch(e => console.error(`Auto fraud check failed for ${payload.id}:`, e));
+
           // Fire and forget SMS
           sendOrderConfirmationSMS(supabase, payload).catch(e => console.error("Order SMS Error:", e));
         }
