@@ -56,8 +56,12 @@ export async function POST(request: NextRequest) {
     processed: false,
   });
 
-  // Process async
-  processPathaoWebhook(payload, returnSecret).catch(console.error);
+  // Await the processing to ensure it completes before the serverless function terminates
+  try {
+    await processPathaoWebhook(payload, returnSecret);
+  } catch (err) {
+    console.error("Pathao Webhook processing error:", err);
+  }
 
   // Pathao expects 202 with the header for all valid events
   return new NextResponse(JSON.stringify({ received: true }), {
