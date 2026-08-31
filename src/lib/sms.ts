@@ -1,0 +1,55 @@
+import { createServiceClient } from "./supabase/server";
+
+export async function sendSMS(to: string, msg: string, useWhatsapp?: boolean): Promise<{ success: boolean; message?: string; requestId?: number }> {
+  const supabase = createServiceClient();
+  const { data: settings } = await supabase.from("app_settings").select("sms_api_key, sms_sender_id").single();
+
+  if (!settings?.sms_api_key) {
+    console.warn("SMS API Key not configured.");
+    return { success: false, message: "SMS API Key not configured" };
+  }
+
+  // Format phone number to start with 880
+  let formattedPhone = to.replace(/[^0-9]/g, "");
+  if (formattedPhone.startsWith("01")) {
+    formattedPhone = "88" + formattedPhone;
+  }
+  if (!formattedPhone.startsWith("880") && formattedPhone.startsWith("1")) {
+    formattedPhone = "880" + formattedPhone;
+  }
+  
+  if (formattedPhone.length < 13) {
+    return { success: false, message: "Invalid phone number format" };
+  }
+
+  const formData = new URLSearchParams();
+  formData.append("api_key", settings.sms_api_key);
+  formData.append("msg", msg);
+  formData.append("to", formattedPhone);
+
+  if (settings.sms_sender_id) {
+    formData.append("sender_id", settings.sms_sender_id);
+  }
+
+  try {
+    const response = await fetch("https://api.sms.net.bd/sendsms", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: formData.toString(),
+    });
+
+    const result = await response.json();
+
+    if (result.error === 0) {
+      return { success: true, requestId: result.data?.request_id };
+    } else {
+      console.error("[SMS Provider Error]", result);
+      return { success: false, message: result.msg || "Unknown SMS error" };
+    }
+  } catch (err: any) {
+    console.error("[SMS Error]", err);
+    return { success: false, message: err.message || "Failed to send SMS" };
+  }
+}

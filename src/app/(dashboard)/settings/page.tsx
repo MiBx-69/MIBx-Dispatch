@@ -1,6 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import Link from "next/link";
-import { Store, Truck, Webhook, Shield, User } from "lucide-react";
+import { Store, Truck, Webhook, Shield, User, MessageSquare } from "lucide-react";
 
 export const metadata = { title: "Settings" };
 
@@ -44,6 +44,15 @@ export default async function SettingsPage() {
       color: "text-amber-400",
       bg: "bg-amber-500/10",
       isConfigured: !!settings?.fraudspy_api_key,
+    },
+    {
+      title: "SMS Notifications",
+      description: "Configure sms.net.bd and automation triggers.",
+      icon: MessageSquare,
+      href: "/settings/sms",
+      color: "text-orange-400",
+      bg: "bg-orange-500/10",
+      isConfigured: !!settings?.sms_api_key,
     },
     {
       title: "Account & Team",

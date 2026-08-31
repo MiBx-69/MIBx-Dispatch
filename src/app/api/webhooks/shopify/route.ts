@@ -46,7 +46,15 @@ async function processShopifyWebhook(
 
   try {
     switch (topic) {
-      case "orders/create":
+      case "orders/create": {
+        const isNew = await upsertOrder(supabase, payload);
+        if (isNew) {
+          // Fire and forget SMS
+          sendOrderConfirmationSMS(supabase, payload).catch(e => console.error("Order SMS Error:", e));
+        }
+        break;
+      }
+
       case "orders/updated":
       case "orders/paid":
         await upsertOrder(supabase, payload);
@@ -87,7 +95,16 @@ async function processShopifyWebhook(
   }
 }
 
-async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload) {
+async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload): Promise<boolean> {
+  // Check if it already exists to detect new orders
+  const { data: existingOrder } = await supabase
+    .from("orders")
+    .select("id")
+    .eq("shopify_order_id", payload.id)
+    .maybeSingle();
+
+  const isNew = !existingOrder;
+
   // Upsert customer first
   let customerId: string | null = null;
   if (payload.customer) {
@@ -154,4 +171,24 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload) {
     },
     { onConflict: "shopify_order_id" }
   );
+
+  return isNew;
 }
+
+async function sendOrderConfirmationSMS(supabase: any, payload: ShopifyOrderWebhookPayload) {
+  const { data: settings } = await supabase.from("app_settings").select("*").single();
+  if (settings?.sms_api_key && settings.sms_auto_order_enabled && settings.sms_auto_order_template) {
+    const shippingAddr = payload.shipping_address;
+    const phone = shippingAddr?.phone || payload.customer?.phone || payload.phone;
+    
+    if (phone) {
+      const { sendSMS } = await import("@/lib/sms");
+      let msg = settings.sms_auto_order_template
+        .replace("{{order_id}}", payload.name || payload.id.toString())
+        .replace("{{customer_name}}", shippingAddr?.name || payload.customer?.first_name || "Customer");
+        
+      await sendSMS(phone, msg);
+    }
+  }
+}
+

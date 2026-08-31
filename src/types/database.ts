@@ -41,11 +41,19 @@ export interface Database {
           pathao_base_url: string | null;
           fraudspy_api_key: string | null;
           fraud_check_enabled: boolean;
+          sms_api_key: string | null;
+          sms_sender_id: string | null;
+          sms_auto_dispatch_enabled: boolean;
+          sms_auto_dispatch_template: string | null;
+          sms_auto_delivered_enabled: boolean;
+          sms_auto_delivered_template: string | null;
+          sms_auto_order_enabled: boolean;
+          sms_auto_order_template: string | null;
           notification_email: string | null;
           created_at: string;
           updated_at: string;
         };
-        Insert: Partial<Database["public"]["Tables"]["app_settings"]["Row"]>;
+        Insert: Partial<Pick<Database["public"]["Tables"]["app_settings"]["Row"], "id" | "system_name" | "shopify_shop_domain" | "shopify_access_token" | "shopify_webhook_secret" | "shopify_api_version" | "pathao_client_id" | "pathao_client_secret" | "pathao_username" | "pathao_password" | "pathao_store_id" | "pathao_base_url" | "fraudspy_api_key" | "fraud_check_enabled" | "sms_api_key" | "sms_sender_id" | "sms_auto_dispatch_enabled" | "sms_auto_dispatch_template" | "sms_auto_delivered_enabled" | "sms_auto_delivered_template" | "sms_auto_order_enabled" | "sms_auto_order_template" | "notification_email">> & Partial<Pick<Database["public"]["Tables"]["app_settings"]["Row"], "created_at" | "updated_at">>;
         Update: Partial<Database["public"]["Tables"]["app_settings"]["Row"]>;
       };
       customers: {

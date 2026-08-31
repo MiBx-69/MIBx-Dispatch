@@ -82,12 +82,12 @@ async function processPathaoWebhook(payload: any, storedSecret: string) {
     // 1. Try to find the order directly first (more reliable)
     let order: any = null;
     if (merchantOrderId) {
-      const { data } = await supabase.from("orders").select("*").eq("shopify_order_name", merchantOrderId).maybeSingle();
+      const { data } = await supabase.from("orders").select("*, customers(name, phone)").eq("shopify_order_name", merchantOrderId).maybeSingle();
       if (data) order = data;
     }
     
     if (!order) {
-      const { data } = await supabase.from("orders").select("*").eq("pathao_consignment_id", consignmentId).maybeSingle();
+      const { data } = await supabase.from("orders").select("*, customers(name, phone)").eq("pathao_consignment_id", consignmentId).maybeSingle();
       if (data) order = data;
     }
 
@@ -115,7 +115,7 @@ async function processPathaoWebhook(payload: any, storedSecret: string) {
         .eq("consignment_id", consignmentId);
         
       if (!order && dispatch.order_id) {
-         const { data: orderFromDispatch } = await supabase.from("orders").select("*").eq("id", dispatch.order_id).maybeSingle();
+         const { data: orderFromDispatch } = await supabase.from("orders").select("*, customers(name, phone)").eq("id", dispatch.order_id).maybeSingle();
          if (orderFromDispatch) order = orderFromDispatch;
       }
     }
@@ -148,6 +148,38 @@ async function processPathaoWebhook(payload: any, storedSecret: string) {
         } catch (shopifyErr) {
           console.error("[Pathao Webhook] Shopify tracking update failed:", shopifyErr);
         }
+      }
+
+      // Handle automated SMS
+      try {
+        if (internalStatus === "dispatched" || internalStatus === "delivered") {
+          const { data: settings } = await supabase.from("app_settings").select("*").single();
+          if (settings?.sms_api_key) {
+            const phone = order?.customer_phone || order?.customers?.phone;
+            if (phone) {
+              const { sendSMS } = await import("@/lib/sms");
+              let template = null;
+              
+              if (internalStatus === "dispatched" && settings.sms_auto_dispatch_enabled) {
+                template = settings.sms_auto_dispatch_template;
+              } else if (internalStatus === "delivered" && settings.sms_auto_delivered_enabled) {
+                template = settings.sms_auto_delivered_template;
+              }
+
+              if (template) {
+                let msg = template
+                  .replace("{{order_id}}", order.shopify_order_name || order.id)
+                  .replace("{{customer_name}}", order.customers?.name || "Customer")
+                  .replace("{{tracking_url}}", `https://merchant.pathao.com/cn-tracking/${consignmentId}`)
+                  .replace("{{total_price}}", order.total_price !== undefined && order.total_price !== null ? order.total_price.toString() : "0");
+
+                await sendSMS(phone, msg);
+              }
+            }
+          }
+        }
+      } catch (smsError) {
+        console.error("[SMS Automation Error]", smsError);
       }
     }
 
