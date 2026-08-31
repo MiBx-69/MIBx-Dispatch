@@ -180,14 +180,32 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload): 
     
     if (settings?.fraud_check_enabled) {
       let riskScore = 0;
-      let riskLevel = 'low';
+      let riskLevel = 'safe';
+      let fraudData = null;
 
-      if (settings.fraudspy_api_key) {
-        // Pseudo code for actual API - since we don't have the external endpoint right now
-        // const res = await fetch('https://api.fraudspy.io/v1/score', { ... })
-        // const data = await res.json();
-        // riskScore = data.score;
-        // riskLevel = data.level;
+      if (settings.fraudspy_api_key && customerPhone) {
+        // Use FraudSpy API
+        const { searchFraud } = await import("@/lib/fraudspy");
+        const cleanPhone = customerPhone.replace(/\D/g, "");
+        const fraudRes = await searchFraud(cleanPhone, settings.fraudspy_api_key);
+        
+        if (fraudRes && fraudRes.ok) {
+          fraudData = fraudRes;
+          
+          if (fraudRes.fraud_reports?.count > 0) {
+            riskLevel = "fraud";
+            riskScore = 100;
+          } else if (fraudRes.overall?.success_ratio < 60 && fraudRes.overall?.total > 3) {
+            riskLevel = "risky";
+            riskScore = 80;
+          } else if (fraudRes.overall?.success_ratio < 80 && fraudRes.overall?.total > 5) {
+            riskLevel = "risky";
+            riskScore = 50;
+          } else {
+            riskLevel = "safe";
+            riskScore = 0;
+          }
+        }
       } else {
         // Internal heuristic if no API key provided
         // 1. Phone number validation (BD numbers)
@@ -224,6 +242,9 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload): 
 
       orderPayload.fraud_score = riskScore;
       orderPayload.fraud_status = riskLevel;
+      if (fraudData) {
+        orderPayload.fraud_data = fraudData;
+      }
     }
   }
 

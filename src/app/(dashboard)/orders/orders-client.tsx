@@ -11,6 +11,7 @@ import { StatusBadge, ShopifyFinancialBadge, ShopifyFulfillmentBadge } from "@/c
 import { DispatchModal } from "@/components/orders/dispatch-modal";
 import { BulkDispatchModal } from "@/components/orders/bulk-dispatch-modal";
 import { SendSMSModal } from "@/components/orders/send-sms-modal";
+import { ReportFraudModal } from "@/components/modals/report-fraud-modal";
 import type { Order, OrderStatus } from "@/types/database";
 
 const STATUS_FILTERS = [
@@ -57,6 +58,7 @@ export function OrdersClient({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [dispatchOrder, setDispatchOrder] = useState<Order | null>(null);
   const [smsOrder, setSmsOrder] = useState<any>(null);
+  const [fraudOrder, setFraudOrder] = useState<any>(null);
   const [isPending, startTransition] = useTransition();
 
   // Reset list when server-provided orders change (e.g., search/filter changed)
@@ -468,6 +470,18 @@ export function OrdersClient({
                     Send SMS
                   </button>
                 )}
+
+                {/* Report Fraud */}
+                {order.customer_phone && !order.is_archived && (
+                  <button
+                    onClick={() => setFraudOrder(order)}
+                    className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg bg-red-600/15 text-red-400
+                              border border-red-600/20 hover:bg-red-600/25 transition-colors mr-1"
+                  >
+                    <AlertCircle size={11} />
+                    Report Fraud
+                  </button>
+                )}
                 
                 {/* Status actions */}
                 {order.internal_status === "pending" && !order.is_archived && (
@@ -588,10 +602,16 @@ export function OrdersClient({
         />
       )}
 
-      <SendSMSModal
-        isOpen={!!smsOrder}
-        onClose={() => setSmsOrder(null)}
-        order={smsOrder}
+      <SendSMSModal 
+        isOpen={!!smsOrder} 
+        onClose={() => setSmsOrder(null)} 
+        order={smsOrder} 
+      />
+
+      <ReportFraudModal
+        isOpen={!!fraudOrder}
+        onClose={() => setFraudOrder(null)}
+        order={fraudOrder}
       />
     </div>
   );

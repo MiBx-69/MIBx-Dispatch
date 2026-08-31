@@ -132,32 +132,66 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any) {
   // orderName is usually like #1001, so we strip non-digits to get a number if possible
   const parsedOrderNumber = parseInt(shopifyOrder.name.replace(/\\D/g, ""), 10);
 
+  const orderPayload: any = {
+    shopify_order_id: parseInt(shopifyOrder.id.split("/").pop()!),
+    shopify_order_name: shopifyOrder.name,
+    shopify_order_number: isNaN(parsedOrderNumber) ? null : parsedOrderNumber,
+    customer_shopify_id: customer ? parseInt(customer.id.split("/").pop()!) : null,
+    customer_name: shippingAddr?.name || (customer ? `${customer.firstName} ${customer.lastName}`.trim() : "Unknown"),
+    customer_phone: shippingAddr?.phone || customer?.phone || null,
+    customer_email: customer?.email || shopifyOrder.email,
+    shipping_address: shippingAddr,
+    line_items: lineItems,
+    total_price: parseFloat(shopifyOrder.totalPriceSet?.shopMoney?.amount || "0"),
+    subtotal_price: parseFloat(shopifyOrder.subtotalPriceSet?.shopMoney?.amount || "0"),
+    total_tax: parseFloat(shopifyOrder.totalTaxSet?.shopMoney?.amount || "0"),
+    currency: shopifyOrder.totalPriceSet?.shopMoney?.currencyCode || "BDT",
+    financial_status: shopifyOrder.displayFinancialStatus?.toLowerCase(),
+    fulfillment_status: shopifyOrder.displayFulfillmentStatus?.toLowerCase() || null,
+    shopify_tags: shopifyOrder.tags || [],
+    note: shopifyOrder.note,
+    shopify_created_at: shopifyOrder.createdAt,
+    shopify_updated_at: shopifyOrder.updatedAt,
+    shopify_fulfillment_id: lastFulfillment?.id
+      ? parseInt(lastFulfillment.id.split("/").pop()!).toString()
+      : null,
+    synced_at: new Date().toISOString(),
+  };
+
+  const { data: existingOrder } = await supabase
+    .from("orders")
+    .select("id")
+    .eq("shopify_order_id", orderPayload.shopify_order_id)
+    .maybeSingle();
+
+  if (!existingOrder) {
+    const { data: settings } = await supabase.from("app_settings").select("fraud_check_enabled, fraudspy_api_key").single();
+    if (settings?.fraud_check_enabled && settings.fraudspy_api_key && orderPayload.customer_phone) {
+      const { searchFraud } = await import("@/lib/fraudspy");
+      const cleanPhone = orderPayload.customer_phone.replace(/\D/g, "");
+      const fraudRes = await searchFraud(cleanPhone, settings.fraudspy_api_key);
+      
+      if (fraudRes && fraudRes.ok) {
+        orderPayload.fraud_data = fraudRes;
+        if (fraudRes.fraud_reports?.count > 0) {
+          orderPayload.fraud_status = "fraud";
+          orderPayload.fraud_score = 100;
+        } else if (fraudRes.overall?.success_ratio < 60 && fraudRes.overall?.total > 3) {
+          orderPayload.fraud_status = "risky";
+          orderPayload.fraud_score = 80;
+        } else if (fraudRes.overall?.success_ratio < 80 && fraudRes.overall?.total > 5) {
+          orderPayload.fraud_status = "risky";
+          orderPayload.fraud_score = 50;
+        } else {
+          orderPayload.fraud_status = "safe";
+          orderPayload.fraud_score = 0;
+        }
+      }
+    }
+  }
+
   await supabase.from("orders").upsert(
-    {
-      shopify_order_id: parseInt(shopifyOrder.id.split("/").pop()!),
-      shopify_order_name: shopifyOrder.name,
-      shopify_order_number: isNaN(parsedOrderNumber) ? null : parsedOrderNumber,
-      customer_shopify_id: customer ? parseInt(customer.id.split("/").pop()!) : null,
-      customer_name: shippingAddr?.name || (customer ? `${customer.firstName} ${customer.lastName}`.trim() : "Unknown"),
-      customer_phone: shippingAddr?.phone || customer?.phone || null,
-      customer_email: customer?.email || shopifyOrder.email,
-      shipping_address: shippingAddr,
-      line_items: lineItems,
-      total_price: parseFloat(shopifyOrder.totalPriceSet?.shopMoney?.amount || "0"),
-      subtotal_price: parseFloat(shopifyOrder.subtotalPriceSet?.shopMoney?.amount || "0"),
-      total_tax: parseFloat(shopifyOrder.totalTaxSet?.shopMoney?.amount || "0"),
-      currency: shopifyOrder.totalPriceSet?.shopMoney?.currencyCode || "BDT",
-      financial_status: shopifyOrder.displayFinancialStatus?.toLowerCase(),
-      fulfillment_status: shopifyOrder.displayFulfillmentStatus?.toLowerCase() || null,
-      shopify_tags: shopifyOrder.tags || [],
-      note: shopifyOrder.note,
-      shopify_created_at: shopifyOrder.createdAt,
-      shopify_updated_at: shopifyOrder.updatedAt,
-      shopify_fulfillment_id: lastFulfillment?.id
-        ? parseInt(lastFulfillment.id.split("/").pop()!).toString()
-        : null,
-      synced_at: new Date().toISOString(),
-    },
+    orderPayload,
     { onConflict: "shopify_order_id" }
   );
 }

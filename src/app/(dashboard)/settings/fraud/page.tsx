@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { Loader2, ShieldCheck, ShieldAlert } from "lucide-react";
 import { updateFraudSettings } from "./actions";
+import { SteadfastConnectForm } from "./steadfast-form";
 
 export const metadata = { title: "Fraud & Risk Settings" };
 // Trigger Turbopack rebuild
@@ -68,6 +69,8 @@ export default async function FraudSettingsPage() {
           </div>
         </form>
       </div>
+      
+      <SteadfastConnectForm />
     </div>
   );
 }
