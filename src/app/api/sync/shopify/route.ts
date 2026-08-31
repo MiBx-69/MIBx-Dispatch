@@ -145,16 +145,18 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
   const shippingAddr = shopifyOrder.shippingAddress;
   const customer = shopifyOrder.customer;
 
-  const lineItems = shopifyOrder.lineItems.edges.map((e: any) => ({
-    title: e.node.title,
-    quantity: e.node.quantity,
-    price: parseFloat(e.node.originalUnitPriceSet?.shopMoney?.amount || "0"),
-    sku: e.node.sku || e.node.variant?.sku,
-    variant_title: e.node.variant?.title,
-    weight: e.node.variant?.inventoryItem?.measurement?.weight?.value,
-    weight_unit: e.node.variant?.inventoryItem?.measurement?.weight?.unit,
-    image: e.node.variant?.image?.url,
-  }));
+  const lineItems = shopifyOrder.lineItems.edges
+    .map((e: any) => ({
+      title: e.node.title,
+      quantity: typeof e.node.currentQuantity === "number" ? e.node.currentQuantity : e.node.quantity,
+      price: parseFloat(e.node.originalUnitPriceSet?.shopMoney?.amount || "0"),
+      sku: e.node.sku,
+      variant_title: e.node.variantTitle,
+      weight: null, // Removed as we no longer fetch variant scope
+      weight_unit: null,
+      image: e.node.image?.url,
+    }))
+    .filter((item: any) => item.quantity > 0);
 
   const fulfillments = shopifyOrder.fulfillments || [];
   const lastFulfillment = fulfillments[fulfillments.length - 1];
@@ -172,8 +174,8 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
     customer_email: customer?.email || shopifyOrder.email,
     shipping_address: shippingAddr,
     line_items: lineItems,
-    total_price: parseFloat(shopifyOrder.totalPriceSet?.shopMoney?.amount || "0"),
-    subtotal_price: parseFloat(shopifyOrder.subtotalPriceSet?.shopMoney?.amount || "0"),
+    total_price: parseFloat(shopifyOrder.currentTotalPriceSet?.shopMoney?.amount || shopifyOrder.totalPriceSet?.shopMoney?.amount || "0"),
+    subtotal_price: parseFloat(shopifyOrder.currentSubtotalPriceSet?.shopMoney?.amount || shopifyOrder.subtotalPriceSet?.shopMoney?.amount || "0"),
     total_tax: parseFloat(shopifyOrder.totalTaxSet?.shopMoney?.amount || "0"),
     currency: shopifyOrder.totalPriceSet?.shopMoney?.currencyCode || "BDT",
     financial_status: shopifyOrder.displayFinancialStatus?.toLowerCase(),

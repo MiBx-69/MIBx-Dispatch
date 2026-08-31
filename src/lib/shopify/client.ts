@@ -66,7 +66,7 @@ async function shopifyFetch<T = any>(
 
 export const GET_ORDERS_QUERY = `
   query GetOrders($first: Int!, $after: String, $query: String) {
-    orders(first: $first, after: $after, query: $query, sortKey: CREATED_AT, reverse: true) {
+    orders(first: $first, after: $after, query: $query, sortKey: UPDATED_AT, reverse: true) {
       pageInfo {
         hasNextPage
         endCursor
@@ -84,7 +84,9 @@ export const GET_ORDERS_QUERY = `
           displayFinancialStatus
           displayFulfillmentStatus
           totalPriceSet { shopMoney { amount currencyCode } }
+          currentTotalPriceSet { shopMoney { amount currencyCode } }
           subtotalPriceSet { shopMoney { amount currencyCode } }
+          currentSubtotalPriceSet { shopMoney { amount currencyCode } }
           totalTaxSet { shopMoney { amount currencyCode } }
           customer {
             id
@@ -112,7 +114,10 @@ export const GET_ORDERS_QUERY = `
                 id
                 title
                 quantity
+                currentQuantity
                 sku
+                variantTitle
+                image { url }
                 originalUnitPriceSet { shopMoney { amount currencyCode } }
               }
             }
