@@ -67,6 +67,11 @@ async function runShopifySync(supabase: any, logId?: string, fullSync = false) {
   }
 
   try {
+    const { data: settings } = await supabase
+      .from("app_settings")
+      .select("fraud_check_enabled, fraudspy_api_key, sms_auto_order_enabled, sms_auto_order_template")
+      .single();
+
     // Paginate through Shopify orders
     do {
       const result = await getShopifyOrders({
@@ -77,19 +82,26 @@ async function runShopifySync(supabase: any, logId?: string, fullSync = false) {
 
       const orders = result.edges.map((e: any) => e.node);
 
-      for (const shopifyOrder of orders) {
-        try {
-          await upsertShopifyOrder(supabase, shopifyOrder, fullSync);
-          ordersCount++;
+      // Process in chunks of 10 to avoid rate limits while being fast
+      const chunkSize = 10;
+      for (let i = 0; i < orders.length; i += chunkSize) {
+        const chunk = orders.slice(i, i + chunkSize);
+        await Promise.all(
+          chunk.map(async (shopifyOrder: any) => {
+            try {
+              await upsertShopifyOrder(supabase, shopifyOrder, fullSync, settings);
+              ordersCount++;
 
-          if (shopifyOrder.customer) {
-            await upsertShopifyCustomer(supabase, shopifyOrder.customer);
-            customersCount++;
-          }
-        } catch (err) {
-          console.error(`[Sync] Error for order ${shopifyOrder.name}:`, err);
-          errors++;
-        }
+              if (shopifyOrder.customer) {
+                await upsertShopifyCustomer(supabase, shopifyOrder.customer);
+                customersCount++;
+              }
+            } catch (err) {
+              console.error(`[Sync] Error for order ${shopifyOrder.name}:`, err);
+              errors++;
+            }
+          })
+        );
       }
 
       cursor = result.pageInfo.hasNextPage ? result.pageInfo.endCursor : undefined;
@@ -129,7 +141,7 @@ async function runShopifySync(supabase: any, logId?: string, fullSync = false) {
   }
 }
 
-async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: boolean = false) {
+async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: boolean = false, settings: any = null) {
   const shippingAddr = shopifyOrder.shippingAddress;
   const customer = shopifyOrder.customer;
 
@@ -188,10 +200,15 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
     .maybeSingle();
 
   if (!existingOrder) {
-    const { data: settings } = await supabase.from("app_settings").select("fraud_check_enabled, fraudspy_api_key, sms_auto_order_enabled, sms_auto_order_template").single();
+    if (!settings) {
+      const { data } = await supabase.from("app_settings").select("fraud_check_enabled, fraudspy_api_key, sms_auto_order_enabled, sms_auto_order_template").single();
+      settings = data;
+    }
+    
+    let fraudRes: any = null;
     if (settings?.fraud_check_enabled && settings.fraudspy_api_key && orderPayload.customer_phone) {
       const { searchFraud } = await import("@/lib/fraudspy");
-      const fraudRes = await searchFraud(orderPayload.customer_phone, settings.fraudspy_api_key);
+      fraudRes = await searchFraud(orderPayload.customer_phone, settings.fraudspy_api_key);
       
       if (fraudRes && fraudRes.ok) {
         orderPayload.fraud_data = fraudRes;
@@ -208,41 +225,48 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
           orderPayload.fraud_status = "safe";
           orderPayload.fraud_score = 0;
         }
+      }
+    }
 
-        // Update Shopify Customer and Order notes
-        const noteAppend = `[FraudSpy Report]\nStatus: ${orderPayload.fraud_status.toUpperCase()}\nScore: ${orderPayload.fraud_score}\nDelivered: ${fraudRes.overall?.delivered || 0}\nReturned: ${fraudRes.overall?.returned || 0}\nSuccess Ratio: ${fraudRes.overall?.success_ratio || 0}%\nLast Checked: ${new Date().toISOString()}`;
-        const tag = `FraudSpy: ${orderPayload.fraud_status === 'fraud' ? 'High Risk' : orderPayload.fraud_status === 'risky' ? 'Medium Risk' : 'Safe'}`;
+    const { data: upsertedOrder } = await supabase.from("orders").upsert(
+      orderPayload,
+      { onConflict: "shopify_order_id" }
+    ).select().single();
 
-        const { updateShopifyCustomer, updateShopifyOrder } = await import("@/lib/shopify/client");
-        
-        if (orderPayload.customer_shopify_id) {
-          try {
-            const { data: customerData } = await supabase.from("customers").select("shopify_tags").eq("shopify_customer_id", orderPayload.customer_shopify_id).single();
-            const existingTags = customerData?.shopify_tags || [];
-            const mergedTags = Array.from(new Set([...existingTags, tag, 'FraudSpy Verified']));
+    // Fire off async side effects concurrently after saving to DB to avoid blocking
+    const sideEffects = [];
+    
+    if (fraudRes && fraudRes.ok) {
+      const noteAppend = `[FraudSpy Report]\nStatus: ${orderPayload.fraud_status.toUpperCase()}\nScore: ${orderPayload.fraud_score}\nDelivered: ${fraudRes.overall?.delivered || 0}\nReturned: ${fraudRes.overall?.returned || 0}\nSuccess Ratio: ${fraudRes.overall?.success_ratio || 0}%\nLast Checked: ${new Date().toISOString()}`;
+      const tag = `FraudSpy: ${orderPayload.fraud_status === 'fraud' ? 'High Risk' : orderPayload.fraud_status === 'risky' ? 'Medium Risk' : 'Safe'}`;
 
-            await updateShopifyCustomer({
-              id: `gid://shopify/Customer/${orderPayload.customer_shopify_id}`,
-              note: noteAppend,
-              tags: mergedTags
-            });
-          } catch (e) {
-            console.error("Failed to update Shopify customer during sync:", e);
-          }
-        }
+      const { updateShopifyCustomer, updateShopifyOrder } = await import("@/lib/shopify/client");
+      
+      if (orderPayload.customer_shopify_id) {
+        sideEffects.push(
+          supabase.from("customers").select("shopify_tags").eq("shopify_customer_id", orderPayload.customer_shopify_id).single()
+            .then(async ({ data: customerData }: any) => {
+              const existingTags = customerData?.shopify_tags || [];
+              const mergedTags = Array.from(new Set([...existingTags, tag, 'FraudSpy Verified']));
+              await updateShopifyCustomer({
+                id: `gid://shopify/Customer/${orderPayload.customer_shopify_id}`,
+                note: noteAppend,
+                tags: mergedTags
+              });
+            })
+            .catch((e: any) => console.error("Failed to update Shopify customer during sync:", e))
+        );
+      }
 
-        if (orderPayload.shopify_order_id) {
-          try {
-            const finalOrderNote = orderPayload.note ? `${orderPayload.note}\n\n${noteAppend}` : noteAppend;
-            await updateShopifyOrder({
-              id: `gid://shopify/Order/${orderPayload.shopify_order_id}`,
-              note: finalOrderNote,
-              tags: [tag, 'FraudSpy Verified']
-            });
-          } catch (e) {
-            console.error("Failed to update Shopify order during sync:", e);
-          }
-        }
+      if (orderPayload.shopify_order_id) {
+        const finalOrderNote = orderPayload.note ? `${orderPayload.note}\n\n${noteAppend}` : noteAppend;
+        sideEffects.push(
+          updateShopifyOrder({
+            id: `gid://shopify/Order/${orderPayload.shopify_order_id}`,
+            note: finalOrderNote,
+            tags: [tag, 'FraudSpy Verified']
+          }).catch(e => console.error("Failed to update Shopify order during sync:", e))
+        );
       }
     }
 
@@ -252,8 +276,13 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
       const msg = settings.sms_auto_order_template
         .replace("{{order_id}}", orderPayload.shopify_order_name || orderPayload.shopify_order_id.toString())
         .replace("{{customer_name}}", orderPayload.customer_name || "Customer");
-      await sendSMS(orderPayload.customer_phone, msg).catch(e => console.error("Sync SMS Error:", e));
+      sideEffects.push(
+        sendSMS(orderPayload.customer_phone, msg).catch(e => console.error("Sync SMS Error:", e))
+      );
     }
+
+    await Promise.all(sideEffects);
+    return;
   }
 
   const { data: upsertedOrder } = await supabase.from("orders").upsert(
