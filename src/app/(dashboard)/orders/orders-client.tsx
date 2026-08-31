@@ -5,13 +5,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   Search, Filter, ChevronLeft, ChevronRight,
-  Truck, Package, X, CheckCircle, PauseCircle, AlertCircle, Archive, ArchiveRestore, Copy, Check, MessageSquare
+  Truck, Package, X, CheckCircle, PauseCircle, AlertCircle, Archive, ArchiveRestore, Copy, Check, MessageSquare, ShieldCheck
 } from "lucide-react";
 import { StatusBadge, ShopifyFinancialBadge, ShopifyFulfillmentBadge } from "@/components/ui/status-badge";
 import { DispatchModal } from "@/components/orders/dispatch-modal";
 import { BulkDispatchModal } from "@/components/orders/bulk-dispatch-modal";
 import { SendSMSModal } from "@/components/orders/send-sms-modal";
 import { ReportFraudModal } from "@/components/modals/report-fraud-modal";
+import { FraudDetailsModal } from "@/components/modals/fraud-details-modal";
 import type { Order, OrderStatus } from "@/types/database";
 
 const STATUS_FILTERS = [
@@ -57,8 +58,10 @@ export function OrdersClient({
   const [search, setSearch] = useState(currentSearch || "");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [dispatchOrder, setDispatchOrder] = useState<Order | null>(null);
-  const [smsOrder, setSmsOrder] = useState<any>(null);
-  const [fraudOrder, setFraudOrder] = useState<any>(null);
+  const [smsOrder, setSmsOrder] = useState<Order | null>(null);
+  const [fraudOrder, setFraudOrder] = useState<Order | null>(null);
+  const [viewFraudOrder, setViewFraudOrder] = useState<Order | null>(null);
+  const [isCheckingFraud, setIsCheckingFraud] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   // Reset list when server-provided orders change (e.g., search/filter changed)
@@ -212,6 +215,38 @@ export function OrdersClient({
       }
     } catch {
       toast.error("Bulk archive failed");
+    }
+  };
+
+  const manualFraudCheck = async (orderId: string) => {
+    setIsCheckingFraud(true);
+    const toastId = toast.loading("Checking FraudSpy...");
+    try {
+      const res = await fetch(`/api/orders/${orderId}/fraud-check`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      
+      if (!res.ok) throw new Error(data.error || "Failed to check fraud status");
+      
+      toast.success("Fraud check completed!", { id: toastId });
+      
+      const updatedOrder = {
+        fraud_status: data.fraud_status, 
+        fraud_score: data.fraud_score,
+        fraud_data: data.data 
+      };
+
+      // Update local state with the new status/score
+      setOrdersList(prev => prev.map(o => o.id === orderId ? { ...o, ...updatedOrder } : o));
+      
+      // Update the modal if it's currently open
+      setViewFraudOrder(prev => prev?.id === orderId ? { ...prev, ...updatedOrder } as Order : prev);
+      
+    } catch (err: any) {
+      toast.error(err.message, { id: toastId });
+    } finally {
+      setIsCheckingFraud(false);
     }
   };
 
@@ -482,6 +517,19 @@ export function OrdersClient({
                     Report Fraud
                   </button>
                 )}
+
+                {/* Manual Fraud Check */}
+                {order.customer_phone && !order.is_archived && (
+                  <button
+                    onClick={() => setViewFraudOrder(order)}
+                    className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg bg-zinc-800 text-zinc-300
+                              border border-zinc-700 hover:bg-zinc-700 transition-colors mr-1"
+                  >
+                    <ShieldCheck size={11} />
+                    Check Fraud Status
+                  </button>
+                )}
+
                 
                 {/* Status actions */}
                 {order.internal_status === "pending" && !order.is_archived && (
@@ -612,6 +660,13 @@ export function OrdersClient({
         isOpen={!!fraudOrder}
         onClose={() => setFraudOrder(null)}
         order={fraudOrder}
+      />
+      
+      <FraudDetailsModal
+        order={viewFraudOrder}
+        onClose={() => setViewFraudOrder(null)}
+        onCheckAgain={manualFraudCheck}
+        isChecking={isCheckingFraud}
       />
     </div>
   );

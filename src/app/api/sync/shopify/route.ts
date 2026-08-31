@@ -186,6 +186,41 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any) {
           orderPayload.fraud_status = "safe";
           orderPayload.fraud_score = 0;
         }
+
+        // Update Shopify Customer and Order notes
+        const noteAppend = `[FraudSpy Report]\nStatus: ${orderPayload.fraud_status.toUpperCase()}\nScore: ${orderPayload.fraud_score}\nDelivered: ${fraudRes.overall?.delivered || 0}\nReturned: ${fraudRes.overall?.returned || 0}\nSuccess Ratio: ${fraudRes.overall?.success_ratio || 0}%\nLast Checked: ${new Date().toISOString()}`;
+        const tag = `FraudSpy: ${orderPayload.fraud_status === 'fraud' ? 'High Risk' : orderPayload.fraud_status === 'risky' ? 'Medium Risk' : 'Safe'}`;
+
+        const { updateShopifyCustomer, updateShopifyOrder } = await import("@/lib/shopify/client");
+        
+        if (orderPayload.customer_shopify_id) {
+          try {
+            const { data: customerData } = await supabase.from("customers").select("shopify_tags").eq("shopify_id", orderPayload.customer_shopify_id).single();
+            const existingTags = customerData?.shopify_tags || [];
+            const mergedTags = Array.from(new Set([...existingTags, tag, 'FraudSpy Verified']));
+
+            await updateShopifyCustomer({
+              id: `gid://shopify/Customer/${orderPayload.customer_shopify_id}`,
+              note: noteAppend,
+              tags: mergedTags
+            });
+          } catch (e) {
+            console.error("Failed to update Shopify customer during sync:", e);
+          }
+        }
+
+        if (orderPayload.shopify_order_id) {
+          try {
+            const finalOrderNote = orderPayload.note ? `${orderPayload.note}\n\n${noteAppend}` : noteAppend;
+            await updateShopifyOrder({
+              id: `gid://shopify/Order/${orderPayload.shopify_order_id}`,
+              note: finalOrderNote,
+              tags: [tag, 'FraudSpy Verified']
+            });
+          } catch (e) {
+            console.error("Failed to update Shopify order during sync:", e);
+          }
+        }
       }
     }
   }

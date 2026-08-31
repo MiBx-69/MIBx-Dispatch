@@ -59,3 +59,25 @@ export async function updateSMSSettings(formData: FormData) {
   revalidatePath("/settings");
   revalidatePath("/settings/sms");
 }
+
+export async function sendTestSMS(formData: FormData) {
+  const phone = formData.get("test_phone") as string;
+  
+  if (!phone) {
+    throw new Error("Phone number is required");
+  }
+
+  try {
+    const { sendSMS } = await import("@/lib/sms");
+    const res = await sendSMS(phone, "This is a test message from MiBx Dispatch. Your SMS settings are working correctly!");
+    
+    if (res.success) {
+      return { success: true, message: "Test SMS sent successfully!" };
+    } else {
+      return { success: false, error: res.message || "Failed to send SMS" };
+    }
+  } catch (error: any) {
+    console.error("Test SMS Error:", error);
+    return { success: false, error: error.message || "Failed to send test SMS" };
+  }
+}

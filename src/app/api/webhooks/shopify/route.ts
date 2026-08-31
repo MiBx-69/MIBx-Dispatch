@@ -244,6 +244,41 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload): 
       orderPayload.fraud_status = riskLevel;
       if (fraudData) {
         orderPayload.fraud_data = fraudData;
+
+        // Update Shopify Customer and Order notes
+        const noteAppend = `[FraudSpy Report]\nStatus: ${riskLevel.toUpperCase()}\nScore: ${riskScore}\nDelivered: ${fraudData.overall?.delivered || 0}\nReturned: ${fraudData.overall?.returned || 0}\nSuccess Ratio: ${fraudData.overall?.success_ratio || 0}%\nLast Checked: ${new Date().toISOString()}`;
+        const tag = `FraudSpy: ${riskLevel === 'fraud' ? 'High Risk' : riskLevel === 'risky' ? 'Medium Risk' : 'Safe'}`;
+
+        const { updateShopifyCustomer, updateShopifyOrder } = await import("@/lib/shopify/client");
+        
+        if (orderPayload.customer_shopify_id) {
+          try {
+            const { data: customerData } = await supabase.from("customers").select("shopify_tags").eq("shopify_id", orderPayload.customer_shopify_id).single();
+            const existingTags = customerData?.shopify_tags || [];
+            const mergedTags = Array.from(new Set([...existingTags, tag, 'FraudSpy Verified']));
+
+            await updateShopifyCustomer({
+              id: `gid://shopify/Customer/${orderPayload.customer_shopify_id}`,
+              note: noteAppend,
+              tags: mergedTags
+            });
+          } catch (e) {
+            console.error("Failed to update Shopify customer during webhook:", e);
+          }
+        }
+
+        if (orderPayload.shopify_order_id) {
+          try {
+            const finalOrderNote = orderPayload.note ? `${orderPayload.note}\n\n${noteAppend}` : noteAppend;
+            await updateShopifyOrder({
+              id: `gid://shopify/Order/${orderPayload.shopify_order_id}`,
+              note: finalOrderNote,
+              tags: [tag, 'FraudSpy Verified']
+            });
+          } catch (e) {
+            console.error("Failed to update Shopify order during webhook:", e);
+          }
+        }
       }
     }
   }

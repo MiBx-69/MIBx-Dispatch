@@ -117,6 +117,14 @@ export function Sidebar({ profile }: SidebarProps) {
             <LogOut size={15} />
           </a>
         </div>
+        
+        {/* Copyright */}
+        <div className="px-2 pt-3 pb-1 text-center">
+          <p className="text-[10px] text-zinc-600">
+            &copy; {new Date().getFullYear()} MiBx Dispatch.<br />
+            Developed by Moinul Islam.
+          </p>
+        </div>
       </div>
     </aside>
   );

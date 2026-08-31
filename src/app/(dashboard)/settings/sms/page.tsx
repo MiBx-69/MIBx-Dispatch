@@ -3,6 +3,7 @@ import { ActionForm, SubmitButton } from "@/components/ui/action-form";
 import { updateSMSSettings } from "./actions";
 import { MessageSquare, ShieldAlert } from "lucide-react";
 import Link from "next/link";
+import { TestSMSForm } from "./test-form";
 
 export const metadata = { title: "SMS Settings" };
 
@@ -115,7 +116,7 @@ export default async function SMSSettingsPage() {
               <div>
                 <textarea
                   name="sms_auto_delivered_template"
-                  defaultValue={settings?.sms_auto_delivered_template || "প্রিয় {{customer_name}}, আপনার অর্ডার {{order_id}} সফলভাবে ডেলিভারি করা হয়েছে। Universes এর সাথে থাকার জন্য ধন্যবাদ! আমাদের সার্ভিস সম্পর্কে আপনার মতামত জানাতে ভুলবেন না।"}
+                  defaultValue={settings?.sms_auto_delivered_template || "প্রিয় {{customer_name}}, আপনার অর্ডার {{order_id}} সফলভাবে ডেলিভারি করা হয়েছে। Universes এর সাথে থাকার জন্য ধন্যবাদ! আমাদের সার্ভিস সম্পর্কে আপনার মতামত জানাতে ভুলবেন মস্তি করবেন না।"}
                   rows={3}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-indigo-500/50"
                   placeholder="Template for delivered..."
@@ -157,6 +158,8 @@ export default async function SMSSettingsPage() {
           </div>
         </ActionForm>
       </div>
+      
+      <TestSMSForm />
     </div>
   );
 }

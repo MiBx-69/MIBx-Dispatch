@@ -289,6 +289,36 @@ export async function updateShopifyOrder(params: {
   return order;
 }
 
+// ─── Update Customer ──────────────────────────────────────────────────────────
+const UPDATE_CUSTOMER_MUTATION = `
+  mutation UpdateCustomer($input: CustomerInput!) {
+    customerUpdate(input: $input) {
+      customer { id note tags }
+      userErrors { field message }
+    }
+  }
+`;
+
+export async function updateShopifyCustomer(params: {
+  id: string;
+  note?: string;
+  tags?: string[];
+}) {
+  const result = await shopifyFetch(UPDATE_CUSTOMER_MUTATION, {
+    input: {
+      id: params.id,
+      ...(params.note !== undefined ? { note: params.note } : {}),
+      ...(params.tags ? { tags: params.tags } : {}),
+    },
+  });
+  const { customer, userErrors } = result.data.customerUpdate;
+  if (userErrors?.length) {
+    throw new Error(userErrors.map((e: any) => e.message).join(", "));
+  }
+  return customer;
+}
+
+
 // ─── Register Webhook ─────────────────────────────────────────────────────────
 const CREATE_WEBHOOK_MUTATION = `
   mutation CreateWebhook($topic: WebhookSubscriptionTopic!, $callbackUrl: URL!) {

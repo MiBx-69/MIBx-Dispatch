@@ -3,8 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Truck, ExternalLink, RotateCw } from "lucide-react";
+import { Truck, ExternalLink, RotateCw, ShieldCheck } from "lucide-react";
+import { toast } from "sonner";
 import { DispatchModal } from "@/components/orders/dispatch-modal";
+import { FraudDetailsModal } from "@/components/modals/fraud-details-modal";
 
 const PATHAO_STATUS_COLORS: Record<string, string> = {
   "Pending": "bg-zinc-800 text-zinc-400 border-zinc-700",
@@ -36,6 +38,38 @@ export function DispatchesClient({
 }) {
   const router = useRouter();
   const [dispatchOrder, setDispatchOrder] = useState<any | null>(null);
+  const [viewFraudOrder, setViewFraudOrder] = useState<any | null>(null);
+  const [isCheckingFraud, setIsCheckingFraud] = useState(false);
+
+  const manualFraudCheck = async (orderId: string) => {
+    setIsCheckingFraud(true);
+    const toastId = toast.loading("Checking FraudSpy...");
+    try {
+      const res = await fetch(`/api/orders/${orderId}/fraud-check`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      
+      if (!res.ok) throw new Error(data.error || "Failed to check fraud status");
+      
+      toast.success("Fraud check completed!", { id: toastId });
+      
+      const updatedOrder = {
+        fraud_status: data.fraud_status, 
+        fraud_score: data.fraud_score,
+        fraud_data: data.data 
+      };
+
+      setViewFraudOrder((prev: any) => prev?.id === orderId ? { ...prev, ...updatedOrder } : prev);
+      
+      router.refresh();
+      
+    } catch (err: any) {
+      toast.error(err.message, { id: toastId });
+    } finally {
+      setIsCheckingFraud(false);
+    }
+  };
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -122,6 +156,14 @@ export function DispatchesClient({
                         <RotateCw size={10} /> Re-dispatch
                       </button>
                     )}
+                    {order && (
+                      <button
+                        onClick={() => setViewFraudOrder(order)}
+                        className="inline-flex items-center gap-1 text-xs text-zinc-300 hover:text-zinc-100 transition-colors px-2 py-1 bg-zinc-800 rounded-md border border-zinc-700"
+                      >
+                        <ShieldCheck size={10} /> Fraud Check
+                      </button>
+                    )}
                     <a
                       href={trackingUrl}
                       target="_blank"
@@ -157,6 +199,13 @@ export function DispatchesClient({
           }}
         />
       )}
+
+      <FraudDetailsModal
+        order={viewFraudOrder}
+        onClose={() => setViewFraudOrder(null)}
+        onCheckAgain={manualFraudCheck}
+        isChecking={isCheckingFraud}
+      />
     </div>
   );
 }
