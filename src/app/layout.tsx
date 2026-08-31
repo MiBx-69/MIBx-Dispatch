@@ -17,9 +17,6 @@ export const metadata: Metadata = {
   },
   description: "Shopify × Pathao Dispatch ERP — manage orders and dispatch parcels",
   robots: "noindex, nofollow", // Internal tool — don't index
-  icons: {
-    icon: "/favicon.ico",
-  },
 };
 
 export const viewport: Viewport = {
@@ -39,6 +36,12 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        <link rel="shortcut icon" href="/favicon.ico" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+        <meta name="apple-mobile-web-app-title" content="MiBx Dispatch" />
+        <link rel="manifest" href="/site.webmanifest" />
       </head>
       <body className={`${inter.variable} font-sans antialiased bg-zinc-950 text-zinc-50`}>
         <NextTopLoader color="#6366f1" showSpinner={false} height={3} />
