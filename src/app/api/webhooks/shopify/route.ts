@@ -214,13 +214,13 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload): 
         }
 
         riskScore = Math.min(riskScore, 100);
-        if (riskScore >= 70) riskLevel = "high";
-        else if (riskScore >= 30) riskLevel = "medium";
-        else riskLevel = "low";
+        if (riskScore >= 70) riskLevel = "fraud";
+        else if (riskScore >= 30) riskLevel = "risky";
+        else riskLevel = "safe";
       }
 
-      orderPayload.fraud_risk_score = riskScore;
-      orderPayload.fraud_risk_level = riskLevel;
+      orderPayload.fraud_score = riskScore;
+      orderPayload.fraud_status = riskLevel;
     }
   }
 

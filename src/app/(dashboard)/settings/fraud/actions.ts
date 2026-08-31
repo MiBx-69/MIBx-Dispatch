@@ -34,7 +34,6 @@ export async function updateFraudSettings(formData: FormData) {
 
     revalidatePath("/settings");
     revalidatePath("/settings/fraud");
-    return { success: true };
   } catch (error: any) {
     console.error("Failed to update fraud settings:", error);
     throw new Error(error.message || "Failed to update fraud settings");
