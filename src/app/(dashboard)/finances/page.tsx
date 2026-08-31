@@ -1,4 +1,4 @@
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import { FinancesClient } from "./finances-client";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
@@ -6,7 +6,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = { title: "Finances & Expenses" };
 
 export default async function FinancesPage() {
-  const supabase = createServiceClient();
+  const supabase = await createClient();
   
   // Ensure user is an admin
   const { data: { user } } = await supabase.auth.getUser();
@@ -19,7 +19,12 @@ export default async function FinancesPage() {
     .single();
 
   if (profile?.role !== "admin") {
-    redirect("/"); // Or show unauthorized message
+    return (
+      <div className="flex flex-col items-center justify-center h-96">
+        <h2 className="text-2xl font-bold text-white mb-2">Access Denied</h2>
+        <p className="text-zinc-400">You need administrator privileges to view this page. Current role: {profile?.role || "none"}</p>
+      </div>
+    );
   }
 
   // Fetch all transactions ordered by most recent

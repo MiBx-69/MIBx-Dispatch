@@ -1,6 +1,6 @@
 "use server";
 
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
 export async function addTransaction(formData: FormData) {
@@ -9,7 +9,7 @@ export async function addTransaction(formData: FormData) {
   const description = formData.get("description") as string;
   const category = formData.get("category") as string;
   
-  const supabase = createServiceClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
@@ -34,7 +34,7 @@ export async function addTransaction(formData: FormData) {
 }
 
 export async function deleteTransaction(id: string) {
-  const supabase = createServiceClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
