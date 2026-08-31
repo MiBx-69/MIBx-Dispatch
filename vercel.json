@@ -1,9 +1,0 @@
-{
-  "firewall": [
-    {
-      "action": "bypass",
-      "source": ".*",
-      "actionCondition": "req.url ~ '^/api/webhooks/shopify$'"
-    }
-  ]
-}
