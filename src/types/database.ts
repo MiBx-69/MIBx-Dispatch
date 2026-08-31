@@ -533,6 +533,50 @@ export type Database = {
           },
         ]
       }
+      transactions: {
+        Row: {
+          amount: number
+          category: string | null
+          created_at: string
+          created_by: string | null
+          date: string
+          description: string
+          id: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          description: string
+          id?: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          description?: string
+          id?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       webhook_logs: {
         Row: {
           error: string | null
@@ -783,6 +827,7 @@ export type AppSettings = Database["public"]["Tables"]["app_settings"]["Row"];
 export type Customer = Database["public"]["Tables"]["customers"]["Row"];
 export type Order = Database["public"]["Tables"]["orders"]["Row"];
 export type Dispatch = Database["public"]["Tables"]["dispatches"]["Row"];
+export type Transaction = Database["public"]["Tables"]["transactions"]["Row"];
 export type DashboardStats = Database["public"]["Views"]["dashboard_stats"]["Row"];
 
 export type OrderStatus =
