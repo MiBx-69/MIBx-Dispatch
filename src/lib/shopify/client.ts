@@ -289,25 +289,6 @@ export async function updateShopifyOrder(params: {
   return order;
 }
 
-const ADD_ORDER_TAGS_MUTATION = `
-  mutation tagsAdd($id: ID!, $tags: [String!]!) {
-    tagsAdd(id: $id, tags: $tags) {
-      node { id }
-      userErrors { field message }
-    }
-  }
-`;
-
-export async function addShopifyOrderTags(id: string, tags: string[]) {
-  const result = await shopifyFetch(ADD_ORDER_TAGS_MUTATION, { id, tags });
-  const { userErrors } = result.data.tagsAdd || {};
-  if (userErrors?.length) {
-    throw new Error(userErrors.map((e: any) => e.message).join(", "));
-  }
-  return true;
-}
-
-
 // ─── Update Customer ──────────────────────────────────────────────────────────
 const UPDATE_CUSTOMER_MUTATION = `
   mutation UpdateCustomer($input: CustomerInput!) {
