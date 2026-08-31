@@ -13,12 +13,6 @@ export const metadata = { title: "Dashboard" };
 export default async function DashboardPage() {
   const supabase = createServiceClient();
 
-  // Fetch stats
-  const { data: stats } = await supabase
-    .from("dashboard_stats")
-    .select("*")
-    .single();
-
   // Fetch 10 most recent orders
   const { data: recentOrders } = await supabase
     .from("orders")
@@ -37,7 +31,7 @@ export default async function DashboardPage() {
   const thirtyDaysAgo = subDays(new Date(), 30).toISOString();
   const { data: recentMonthOrders } = await supabase
     .from("orders")
-    .select("total_price, shopify_created_at, line_items, financial_status, fulfillment_status")
+    .select("total_price, shopify_created_at, created_at, line_items, financial_status, fulfillment_status, internal_status")
     .gte("shopify_created_at", thirtyDaysAgo)
     .order("shopify_created_at", { ascending: false });
 
