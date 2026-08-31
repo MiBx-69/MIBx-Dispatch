@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import { X, ShoppingBag, Truck, Calendar, MapPin, AlertTriangle, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
+import { SendSMSModal } from "@/components/orders/send-sms-modal";
 
 export function CustomerDrawer({ customer, onClose }: { customer: any; onClose: () => void }) {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [smsOpen, setSmsOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -101,34 +103,42 @@ export function CustomerDrawer({ customer, onClose }: { customer: any; onClose: 
         {/* Action Buttons */}
         <div className="p-4 border-b border-zinc-800 flex gap-2">
           {bestPhone && (
-            <button
-              onClick={() => {
-                const d = bestPhone!.replace(/[^0-9]/g, '');
-                const formattedPhone = d.startsWith('880') ? d : d.startsWith('0') ? `88${d}` : `880${d}`;
-                
-                const ua = navigator.userAgent.toLowerCase();
-                const isAndroid = ua.includes('android');
-                const isIOS = /ipad|iphone|ipod/.test(ua) && !(window as any).MSStream;
-                
-                if (isAndroid) {
-                  window.location.href = `intent://send/?phone=${formattedPhone}#Intent;scheme=whatsapp;package=com.whatsapp.w4b;end`;
-                } else if (isIOS) {
-                  window.location.href = `whatsapp://send?phone=${formattedPhone}`;
-                } else {
-                  window.open(`https://web.whatsapp.com/send?phone=${formattedPhone}`, '_blank');
-                }
-              }}
-              className="flex-1 bg-green-600/10 hover:bg-green-600/20 text-green-500 border border-green-600/30 font-semibold text-xs py-2 rounded-lg text-center transition-colors"
-            >
-              WhatsApp Message
-            </button>
+            <>
+              <button
+                onClick={() => setSmsOpen(true)}
+                className="flex-1 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 border border-indigo-600/30 font-semibold text-xs py-2 rounded-lg text-center transition-colors"
+              >
+                Send Message
+              </button>
+              <button
+                onClick={() => {
+                  const d = bestPhone!.replace(/[^0-9]/g, '');
+                  const formattedPhone = d.startsWith('880') ? d : d.startsWith('0') ? `88${d}` : `880${d}`;
+                  
+                  const ua = navigator.userAgent.toLowerCase();
+                  const isAndroid = ua.includes('android');
+                  const isIOS = /ipad|iphone|ipod/.test(ua) && !(window as any).MSStream;
+                  
+                  if (isAndroid) {
+                    window.location.href = `intent://send/?phone=${formattedPhone}#Intent;scheme=whatsapp;package=com.whatsapp.w4b;end`;
+                  } else if (isIOS) {
+                    window.location.href = `whatsapp://send?phone=${formattedPhone}`;
+                  } else {
+                    window.open(`https://web.whatsapp.com/send?phone=${formattedPhone}`, '_blank');
+                  }
+                }}
+                className="flex-1 bg-green-600/10 hover:bg-green-600/20 text-green-500 border border-green-600/30 font-semibold text-xs py-2 rounded-lg text-center transition-colors"
+              >
+                WhatsApp Message
+              </button>
+            </>
           )}
           {bestEmail && (
             <a
               href={`mailto:${bestEmail}`}
               className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold text-xs py-2 rounded-lg text-center transition-colors"
             >
-              Email Customer
+              Email
             </a>
           )}
         </div>
@@ -182,6 +192,14 @@ export function CustomerDrawer({ customer, onClose }: { customer: any; onClose: 
           )}
         </div>
       </div>
+      
+      {smsOpen && (
+        <SendSMSModal
+          isOpen={smsOpen}
+          onClose={() => setSmsOpen(false)}
+          order={{ customers: { name: bestName, phone: bestPhone } }}
+        />
+      )}
     </>
   );
 }
