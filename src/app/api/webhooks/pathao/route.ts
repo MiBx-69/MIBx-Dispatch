@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { updateShopifyFulfillmentTracking } from "@/lib/shopify/client";
+import { updateShopifyFulfillmentTracking, addShopifyOrderTags } from "@/lib/shopify/client";
 
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();
@@ -129,6 +129,12 @@ async function processPathaoWebhook(payload: any, storedSecret: string) {
     } else {
       // Map Pathao event to internal ERP status
       const internalStatus = mapPathaoEventToInternal(newEvent);
+      
+      // Determine if Shopify tags should be added
+      const tagsToAdd: string[] = [];
+      if (internalStatus === "returned") tagsToAdd.push("Pathao: Returned");
+      else if (internalStatus === "hold") tagsToAdd.push("Pathao: Hold");
+      else if (internalStatus === "partial") tagsToAdd.push("Pathao: Partial Delivery");
 
       // Update order internal status
       await supabase
@@ -138,6 +144,17 @@ async function processPathaoWebhook(payload: any, storedSecret: string) {
           internal_status: internalStatus,
         })
         .eq("id", order.id);
+
+      // Add Shopify Tags if needed
+      if (tagsToAdd.length > 0 && order.shopify_order_id) {
+        try {
+          // Convert shopify_order_id to gid
+          const gid = `gid://shopify/Order/${order.shopify_order_id}`;
+          await addShopifyOrderTags(gid, tagsToAdd);
+        } catch (tagErr) {
+          console.error("[Pathao Webhook] Shopify tag update failed:", tagErr);
+        }
+      }
 
       // Update Shopify fulfillment tracking if order has fulfillment
       if (order.shopify_fulfillment_id) {
@@ -204,7 +221,10 @@ async function processPathaoWebhook(payload: any, storedSecret: string) {
 }
 
 function mapPathaoEventToInternal(event: string): string {
-  if (event.includes("delivered") || event.includes("partial-delivery")) {
+  if (event.includes("partial-delivery")) {
+    return "partial";
+  }
+  if (event.includes("delivered")) {
     return "delivered";
   }
   if (event.includes("return")) {

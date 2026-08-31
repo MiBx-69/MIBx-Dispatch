@@ -20,7 +20,7 @@ const NAV_ITEMS = [
   { href: "/orders", label: "Orders", icon: ShoppingCart },
   { href: "/dispatches", label: "Dispatches", icon: Truck },
   { href: "/customers", label: "Customers", icon: Users },
-  { href: "/finances", label: "Finances", icon: Wallet },
+  { href: "/finances/sales-report", label: "Reports", icon: Wallet },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
