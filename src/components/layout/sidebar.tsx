@@ -120,7 +120,7 @@ export function Sidebar({ profile }: SidebarProps) {
         
         {/* Copyright */}
         <div className="px-2 pt-3 pb-1 text-center">
-          <p className="text-[10px] text-zinc-600">
+          <p className="text-[10px] text-zinc-600" suppressHydrationWarning>
             &copy; {new Date().getFullYear()} MiBx Dispatch.<br />
             Developed by Moinul Islam.
           </p>
