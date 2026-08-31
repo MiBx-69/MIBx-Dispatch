@@ -77,8 +77,9 @@ export function OrdersClient({
     import("@/lib/supabase/client").then(({ createClient }) => {
       const supabase = createClient();
       
+      const channelName = `orders-realtime-${Date.now()}-${Math.random()}`;
       const channel = supabase
-        .channel('orders-realtime')
+        .channel(channelName)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
           const newOrder = payload.new as Order;
           setOrdersList((prev) => {

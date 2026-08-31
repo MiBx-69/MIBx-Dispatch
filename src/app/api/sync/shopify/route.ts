@@ -79,7 +79,7 @@ async function runShopifySync(supabase: any, logId?: string, fullSync = false) {
 
       for (const shopifyOrder of orders) {
         try {
-          await upsertShopifyOrder(supabase, shopifyOrder);
+          await upsertShopifyOrder(supabase, shopifyOrder, fullSync);
           ordersCount++;
 
           if (shopifyOrder.customer) {
@@ -129,7 +129,7 @@ async function runShopifySync(supabase: any, logId?: string, fullSync = false) {
   }
 }
 
-async function upsertShopifyOrder(supabase: any, shopifyOrder: any) {
+async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: boolean = false) {
   const shippingAddr = shopifyOrder.shippingAddress;
   const customer = shopifyOrder.customer;
 
@@ -188,7 +188,7 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any) {
     .maybeSingle();
 
   if (!existingOrder) {
-    const { data: settings } = await supabase.from("app_settings").select("fraud_check_enabled, fraudspy_api_key").single();
+    const { data: settings } = await supabase.from("app_settings").select("fraud_check_enabled, fraudspy_api_key, sms_auto_order_enabled, sms_auto_order_template").single();
     if (settings?.fraud_check_enabled && settings.fraudspy_api_key && orderPayload.customer_phone) {
       const { searchFraud } = await import("@/lib/fraudspy");
       const fraudRes = await searchFraud(orderPayload.customer_phone, settings.fraudspy_api_key);
@@ -244,6 +244,15 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any) {
           }
         }
       }
+    }
+
+    // Send auto SMS if not a full sync
+    if (!isFullSync && settings?.sms_auto_order_enabled && settings?.sms_auto_order_template && orderPayload.customer_phone) {
+      const { sendSMS } = await import("@/lib/sms");
+      const msg = settings.sms_auto_order_template
+        .replace("{{order_id}}", orderPayload.shopify_order_name || orderPayload.shopify_order_id.toString())
+        .replace("{{customer_name}}", orderPayload.customer_name || "Customer");
+      await sendSMS(orderPayload.customer_phone, msg).catch(e => console.error("Sync SMS Error:", e));
     }
   }
 
