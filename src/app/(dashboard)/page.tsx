@@ -6,6 +6,8 @@ import { subDays, format, parseISO } from "date-fns";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
 import { TopProducts } from "@/components/dashboard/top-products";
 import { FulfillmentStats } from "@/components/dashboard/fulfillment-stats";
+import { FinancialsWidget } from "@/components/dashboard/financials-widget";
+import { CourierPerformanceChart } from "@/components/dashboard/courier-performance-chart";
 import type { Order } from "@/types/database";
 
 export const metadata = { title: "Dashboard" };
@@ -51,7 +53,11 @@ export default async function DashboardPage() {
       revenueMap.set(dateStr, revenueMap.get(dateStr)! + Number(o.total_price));
     }
   });
-  const revenueData = Array.from(revenueMap.entries()).map(([date, revenue]) => ({ date, revenue }));
+  const revenueData = Array.from(revenueMap.entries()).map(([date, revenue]) => ({ 
+    date, 
+    displayDate: format(parseISO(date), "MMM d"),
+    revenue 
+  }));
 
   // 2. Top Products (Last 30 Days)
   const productMap = new Map<string, { id: string, title: string, variant: string, qty: number, revenue: number }>();
@@ -141,6 +147,29 @@ export default async function DashboardPage() {
 
   liveStats.dispatched_today = dispatchedTodayCount || 0;
 
+  // 5. Courier & Financial Stats
+  let pendingCOD = 0;
+  let deliveredCOD = 0;
+  let returnedCOD = 0;
+  const statusCountMap = new Map<string, number>();
+
+  orders.forEach((o: any) => {
+    const st = o.internal_status;
+    if (st === "dispatched") {
+       statusCountMap.set("In Transit", (statusCountMap.get("In Transit") || 0) + 1);
+       pendingCOD += Number(o.total_price);
+    } else if (st === "delivered") {
+       statusCountMap.set("Delivered", (statusCountMap.get("Delivered") || 0) + 1);
+       deliveredCOD += Number(o.total_price);
+    } else if (st === "returned") {
+       statusCountMap.set("Returned", (statusCountMap.get("Returned") || 0) + 1);
+       returnedCOD += Number(o.total_price);
+    } else if (st !== "cancelled" && st !== "archived") {
+       statusCountMap.set("Pending", (statusCountMap.get("Pending") || 0) + 1);
+    }
+  });
+  const courierStats = Array.from(statusCountMap.entries()).map(([status, count]) => ({ status, count }));
+
   const statCards = [
     {
       label: "Pending Orders",
@@ -223,6 +252,16 @@ export default async function DashboardPage() {
         {/* Fulfillment & Finances */}
         <div className="rounded-2xl p-5 border border-zinc-800/50 bg-zinc-900 flex flex-col justify-center">
           <FulfillmentStats stats={fStats} />
+        </div>
+      </div>
+
+      {/* Courier & Financial Stats */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-3">
+          <FinancialsWidget pendingCOD={pendingCOD} deliveredCOD={deliveredCOD} returnedCOD={returnedCOD} />
+        </div>
+        <div className="lg:col-span-3 h-80">
+          <CourierPerformanceChart data={courierStats} />
         </div>
       </div>
 

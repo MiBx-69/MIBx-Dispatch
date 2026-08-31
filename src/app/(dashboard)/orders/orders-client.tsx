@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   Search, Filter, ChevronLeft, ChevronRight,
-  Truck, Package, X, CheckCircle, PauseCircle, AlertCircle, Archive, ArchiveRestore, Copy, Check, MessageSquare, ShieldCheck
+  Truck, Package, X, CheckCircle, PauseCircle, AlertCircle, Archive, ArchiveRestore, Copy, Check, MessageSquare, ShieldCheck, List
 } from "lucide-react";
 import { StatusBadge, ShopifyFinancialBadge, ShopifyFulfillmentBadge } from "@/components/ui/status-badge";
 import { DispatchModal } from "@/components/orders/dispatch-modal";
@@ -13,6 +13,7 @@ import { BulkDispatchModal } from "@/components/orders/bulk-dispatch-modal";
 import { SendSMSModal } from "@/components/orders/send-sms-modal";
 import { ReportFraudModal } from "@/components/modals/report-fraud-modal";
 import { FraudDetailsModal } from "@/components/modals/fraud-details-modal";
+import { OrderTimelineModal } from "@/components/orders/order-timeline-modal";
 import type { Order, OrderStatus } from "@/types/database";
 
 const STATUS_FILTERS = [
@@ -61,6 +62,7 @@ export function OrdersClient({
   const [smsOrder, setSmsOrder] = useState<Order | null>(null);
   const [fraudOrder, setFraudOrder] = useState<Order | null>(null);
   const [viewFraudOrder, setViewFraudOrder] = useState<Order | null>(null);
+  const [timelineOrderId, setTimelineOrderId] = useState<string | null>(null);
   const [isCheckingFraud, setIsCheckingFraud] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -351,7 +353,7 @@ export function OrdersClient({
         {ordersList.map((order) => {
           const isSelected = selected.has(order.id);
           const lineItems = (order.line_items as any[]) || [];
-          const isDispatched = order.internal_status === "dispatched" || order.internal_status === "delivered" || order.internal_status === "returned";
+          const isDispatchedOrCancelled = order.internal_status === "dispatched" || order.internal_status === "delivered" || order.internal_status === "returned" || order.internal_status === "cancelled";
 
           return (
             <div
@@ -380,7 +382,7 @@ export function OrdersClient({
                 </div>
                 
                 {/* Dispatch Button for individual order */}
-                {!isDispatched && !order.is_archived && (
+                {!isDispatchedOrCancelled && !order.is_archived && (
                   <button
                     onClick={() => setDispatchOrder(order)}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-colors"
@@ -526,9 +528,18 @@ export function OrdersClient({
                               border border-zinc-700 hover:bg-zinc-700 transition-colors mr-1"
                   >
                     <ShieldCheck size={11} />
-                    Check Fraud Status
+                    Check Fraud
                   </button>
                 )}
+
+                {/* Timeline */}
+                <button
+                  onClick={() => setTimelineOrderId(order.id)}
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg bg-indigo-600/15 text-indigo-300
+                            border border-indigo-600/20 hover:bg-indigo-600/25 transition-colors mr-1"
+                >
+                  <List size={11} /> Timeline
+                </button>
 
                 
                 {/* Status actions */}
@@ -667,6 +678,12 @@ export function OrdersClient({
         onClose={() => setViewFraudOrder(null)}
         onCheckAgain={manualFraudCheck}
         isChecking={isCheckingFraud}
+      />
+
+      <OrderTimelineModal
+        orderId={timelineOrderId}
+        open={!!timelineOrderId}
+        onOpenChange={(open) => !open && setTimelineOrderId(null)}
       />
     </div>
   );

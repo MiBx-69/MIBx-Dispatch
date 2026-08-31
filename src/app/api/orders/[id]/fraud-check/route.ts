@@ -101,6 +101,9 @@ export async function POST(
       }
     }
 
+    const { logOrderEvent } = await import("@/lib/audit");
+    await logOrderEvent(id, "FRAUD_CHECK", `Fraud Check completed with status: ${fraud_status.toUpperCase()} (Score: ${fraud_score})`, fraudData);
+
     return NextResponse.json({ 
       success: true, 
       fraud_status,

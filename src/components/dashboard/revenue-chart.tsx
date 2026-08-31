@@ -3,14 +3,8 @@
 import { useMemo } from "react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-export function RevenueChart({ data }: { data: { date: string; revenue: number }[] }) {
-  // We want to format the date for the XAxis, e.g., "Aug 24"
-  const formattedData = useMemo(() => {
-    return data.map(d => ({
-      ...d,
-      displayDate: new Date(d.date).toLocaleDateString("en-BD", { month: "short", day: "numeric" })
-    }));
-  }, [data]);
+export function RevenueChart({ data }: { data: { date: string; displayDate?: string; revenue: number }[] }) {
+  const formattedData = data;
 
   if (!data || data.length === 0) {
     return (

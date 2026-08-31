@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { verifyShopifyWebhook } from "@/lib/shopify/client";
 import { createServiceClient } from "@/lib/supabase/server";
+import { logOrderEvent } from "@/lib/audit";
 import type { ShopifyOrderWebhookPayload } from "@/types/database";
 
 export async function POST(request: NextRequest) {
@@ -53,6 +54,7 @@ async function processShopifyWebhook(
       case "orders/create": {
         const isNew = await upsertOrder(supabase, payload);
         if (isNew) {
+          await logOrderEvent(payload.id, "SYNCED", "Order imported from Shopify via webhook");
           // Fire and forget SMS
           sendOrderConfirmationSMS(supabase, payload).catch(e => console.error("Order SMS Error:", e));
         }

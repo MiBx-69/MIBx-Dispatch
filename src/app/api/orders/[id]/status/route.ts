@@ -29,6 +29,9 @@ export async function PATCH(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  const { logOrderEvent } = await import("@/lib/audit");
+  await logOrderEvent(id, "STATUS_CHANGE", `Internal status updated to: ${status}`);
+
   // Handle automated SMS
   try {
     if (status === "dispatched" || status === "delivered") {
@@ -64,6 +67,7 @@ export async function PATCH(
             }
 
             await sendSMS(phone, msg);
+            await logOrderEvent(id, "SMS_SENT", `Automated SMS sent: ${msg}`);
           }
         }
       }

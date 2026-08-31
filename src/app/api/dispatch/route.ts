@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient, createClient } from "@/lib/supabase/server";
 import { createPathaoOrder } from "@/lib/pathao/client";
 import { createShopifyFulfillment, updateShopifyOrder } from "@/lib/shopify/client";
+import { logOrderEvent } from "@/lib/audit";
 
 export async function POST(request: NextRequest) {
   const supabase = createServiceClient();
@@ -134,6 +135,8 @@ export async function POST(request: NextRequest) {
         pathao_delivery_status: "Pending",
       })
       .eq("id", order.id);
+
+    await logOrderEvent(order.id, "DISPATCHED", `Order dispatched via Pathao (Consignment: ${consignment_id})`, { consignment_id });
 
     // 4. Create Shopify fulfillment with tracking
     let shopifyFulfillmentId: string | null = null;

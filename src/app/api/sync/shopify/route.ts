@@ -229,10 +229,15 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any) {
     }
   }
 
-  await supabase.from("orders").upsert(
+  const { data: upsertedOrder } = await supabase.from("orders").upsert(
     orderPayload,
     { onConflict: "shopify_order_id" }
-  );
+  ).select("id").single();
+
+  if (upsertedOrder && !existingOrder) {
+    const { logOrderEvent } = await import("@/lib/audit");
+    await logOrderEvent(upsertedOrder.id, "SYNCED", "Order synced manually from Shopify");
+  }
 }
 
 async function upsertShopifyCustomer(supabase: any, customer: any) {
