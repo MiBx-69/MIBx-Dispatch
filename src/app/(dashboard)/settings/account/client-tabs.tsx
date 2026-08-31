@@ -108,7 +108,11 @@ export function AccountTabs({ userProfile, teamProfiles }: { userProfile: any, t
                     toast.success("Passkey registered successfully!");
                   } catch (err: any) {
                     console.error("Passkey error:", err);
-                    toast.error(err.message || "Failed to register passkey. Ensure your browser supports WebAuthn and you are on a secure context (HTTPS).");
+                    if (err.message && err.message.includes('MFA enroll is disabled for WebAuthn')) {
+                      toast.error("WebAuthn is disabled in your Supabase project. Please enable it in Supabase Dashboard -> Authentication -> Providers -> Multi-Factor Authentication.", { duration: 10000 });
+                    } else {
+                      toast.error(err.message || "Failed to register passkey. Ensure your browser supports WebAuthn and you are on a secure context (HTTPS).");
+                    }
                   }
                 }}
                 className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded-lg text-sm font-medium transition-colors"
