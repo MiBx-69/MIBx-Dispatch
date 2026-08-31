@@ -32,8 +32,12 @@ export async function POST(request: NextRequest) {
     processed: false,
   });
 
-  // Process asynchronously (return 200 fast, process in background)
-  processShopifyWebhook(topic, payload).catch(console.error);
+  // Await the processing to ensure it completes before the serverless function terminates
+  try {
+    await processShopifyWebhook(topic, payload);
+  } catch (err) {
+    console.error("Webhook processing error:", err);
+  }
 
   return NextResponse.json({ received: true }, { status: 200 });
 }
