@@ -124,6 +124,30 @@ export default async function SMSSettingsPage() {
               </div>
             </div>
 
+            {/* Cancelled SMS */}
+            <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950/50 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-medium text-zinc-200">Order Cancelled</h4>
+                  <p className="text-xs text-zinc-500">Sent when an order is cancelled on Shopify.</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" name="sms_auto_cancelled_enabled" value="true" defaultChecked={settings?.sms_auto_cancelled_enabled} className="sr-only peer" />
+                  <div className="w-9 h-5 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-500"></div>
+                </label>
+              </div>
+              <div>
+                <textarea
+                  name="sms_auto_cancelled_template"
+                  defaultValue={settings?.sms_auto_cancelled_template || "প্রিয় {{customer_name}}, আপনার অর্ডার {{order_id}} বাতিল করা হয়েছে। যেকোনো প্রয়োজনে অনুগ্রহ করে আমাদের কল করুন 09643655867 নাম্বারে। ধন্যবাদ!"}
+                  rows={3}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-indigo-500/50"
+                  placeholder="Template for cancelled order..."
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">Variables available: `&#123;&#123;order_id&#125;&#125;`, `&#123;&#123;customer_name&#125;&#125;`</p>
+              </div>
+            </div>
+
           </div>
 
           <div className="flex justify-end pt-4">

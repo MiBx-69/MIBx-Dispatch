@@ -775,3 +775,96 @@ export const Constants = {
     Enums: {},
   },
 } as const
+
+// ─── Convenient Type Aliases ──────────────────────────────────────────────────
+
+export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
+export type AppSettings = Database["public"]["Tables"]["app_settings"]["Row"];
+export type Customer = Database["public"]["Tables"]["customers"]["Row"];
+export type Order = Database["public"]["Tables"]["orders"]["Row"];
+export type Dispatch = Database["public"]["Tables"]["dispatches"]["Row"];
+export type DashboardStats = Database["public"]["Views"]["dashboard_stats"]["Row"];
+
+export type OrderStatus =
+  | "pending"
+  | "preparing"
+  | "hold"
+  | "cancelled"
+  | "dispatched"
+  | "delivered"
+  | "delayed"
+  | "returned";
+
+export type PathaoDeliveryStatus =
+  | "Pending"
+  | "Picked Up"
+  | "In Transit"
+  | "Out for Delivery"
+  | "Delivered"
+  | "Return"
+  | "Return In Transit"
+  | "Return Arrived"
+  | "Return Completed"
+  | "Partial Delivered";
+
+// ─── Shopify Webhook Payload Types ────────────────────────────────────────────
+
+export interface ShopifyLineItem {
+  id: number;
+  title: string;
+  quantity: number;
+  price: string;
+  sku: string | null;
+  grams: number;
+  variant_title: string | null;
+}
+
+export interface ShopifyAddress {
+  name: string;
+  phone: string;
+  address1: string;
+  address2?: string;
+  city: string;
+  province?: string;
+  zip?: string;
+  country: string;
+}
+
+export interface ShopifyOrderWebhookPayload {
+  id: number;
+  name: string;
+  order_number: number;
+  email: string;
+  phone?: string;
+  note?: string;
+  tags?: string;
+  financial_status: string;
+  fulfillment_status: string | null;
+  total_price: string;
+  subtotal_price: string;
+  total_tax: string;
+  currency: string;
+  created_at: string;
+  updated_at: string;
+  cancelled_at?: string;
+  cancel_reason?: string;
+  customer?: {
+    id: number;
+    first_name: string;
+    last_name: string;
+    email: string;
+    phone?: string;
+    orders_count: number;
+    total_spent: string;
+  };
+  shipping_address?: ShopifyAddress;
+  billing_address?: ShopifyAddress;
+  line_items: ShopifyLineItem[];
+  fulfillments?: Array<{
+    id: number;
+    status: string;
+    tracking_number?: string;
+    tracking_url?: string;
+    tracking_company?: string;
+  }>;
+}

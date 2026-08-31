@@ -69,6 +69,9 @@ async function processShopifyWebhook(
             cancel_reason: payload.cancel_reason || "Cancelled via Shopify",
           })
           .eq("shopify_order_id", payload.id);
+        
+        // Fire and forget cancelled SMS
+        sendOrderCancelledSMS(supabase, payload).catch(e => console.error("Order Cancelled SMS Error:", e));
         break;
 
       case "orders/fulfilled":
@@ -249,3 +252,19 @@ async function sendOrderConfirmationSMS(supabase: any, payload: ShopifyOrderWebh
   }
 }
 
+async function sendOrderCancelledSMS(supabase: any, payload: ShopifyOrderWebhookPayload) {
+  const { data: settings } = await supabase.from("app_settings").select("*").single();
+  if (settings?.sms_api_key && settings.sms_auto_cancelled_enabled && settings.sms_auto_cancelled_template) {
+    const shippingAddr = payload.shipping_address;
+    const phone = shippingAddr?.phone || payload.customer?.phone || payload.phone;
+    
+    if (phone) {
+      const { sendSMS } = await import("@/lib/sms");
+      let msg = settings.sms_auto_cancelled_template
+        .replace("{{order_id}}", payload.name || payload.id.toString())
+        .replace("{{customer_name}}", shippingAddr?.name || payload.customer?.first_name || "Customer");
+        
+      await sendSMS(phone, msg);
+    }
+  }
+}

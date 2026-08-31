@@ -12,6 +12,8 @@ export async function updateSMSSettings(formData: FormData) {
   const sms_auto_delivered_template = formData.get("sms_auto_delivered_template") as string;
   const sms_auto_order_enabled = formData.get("sms_auto_order_enabled") === "true";
   const sms_auto_order_template = formData.get("sms_auto_order_template") as string;
+  const sms_auto_cancelled_enabled = formData.get("sms_auto_cancelled_enabled") === "true";
+  const sms_auto_cancelled_template = formData.get("sms_auto_cancelled_template") as string;
 
   const supabase = createServiceClient();
   const { data: currentSettings } = await supabase.from("app_settings").select("id").single();
@@ -27,7 +29,9 @@ export async function updateSMSSettings(formData: FormData) {
         sms_auto_delivered_enabled,
         sms_auto_delivered_template,
         sms_auto_order_enabled,
-        sms_auto_order_template
+        sms_auto_order_template,
+        sms_auto_cancelled_enabled,
+        sms_auto_cancelled_template
       })
       .eq("id", currentSettings.id);
     
@@ -44,7 +48,9 @@ export async function updateSMSSettings(formData: FormData) {
         sms_auto_delivered_enabled,
         sms_auto_delivered_template,
         sms_auto_order_enabled,
-        sms_auto_order_template
+        sms_auto_order_template,
+        sms_auto_cancelled_enabled,
+        sms_auto_cancelled_template
       });
       
     if (error) throw error;

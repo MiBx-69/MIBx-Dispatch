@@ -262,9 +262,9 @@ export function OrdersClient({
 
       {/* Bulk Actions Floating Bar */}
       {selected.size > 0 && (
-        <div className="fixed bottom-24 lg:bottom-10 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-4xl 
+        <div className="sticky top-2 z-50 w-full 
                         bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-2xl shadow-2xl p-3
-                        flex flex-col sm:flex-row items-center justify-between gap-3 animate-in slide-in-from-bottom-5">
+                        flex flex-col sm:flex-row items-center justify-between gap-3 animate-in slide-in-from-top-2">
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <span className="text-sm font-semibold text-zinc-100 bg-indigo-500/20 text-indigo-400 px-3 py-1.5 rounded-lg border border-indigo-500/20">
               {selected.size} selected
