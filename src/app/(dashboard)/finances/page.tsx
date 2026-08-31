@@ -33,7 +33,7 @@ export default async function FinancesPage() {
   let totalExpense = 0;
 
   if (transactions) {
-    transactions.forEach(t => {
+    transactions.forEach((t: any) => {
       if (t.type === "income") totalIncome += Number(t.amount);
       if (t.type === "expense") totalExpense += Number(t.amount);
     });
