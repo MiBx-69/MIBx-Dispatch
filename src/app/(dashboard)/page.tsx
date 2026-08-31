@@ -6,7 +6,7 @@ import { subDays, format, parseISO } from "date-fns";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
 import { TopProducts } from "@/components/dashboard/top-products";
 import { FulfillmentStats } from "@/components/dashboard/fulfillment-stats";
-import type { Order, DashboardStats } from "@/types/database";
+import type { Order } from "@/types/database";
 
 export const metadata = { title: "Dashboard" };
 
@@ -98,12 +98,53 @@ export default async function DashboardPage() {
     else fStats.pending_payment++;
   });
 
-  const s = stats as DashboardStats | null;
+  // 4. Live Dashboard Quick Stats
+  const liveStats = {
+    pending_orders: 0,
+    preparing_orders: 0,
+    dispatched_orders: 0,
+    delivered_orders: 0,
+    hold_orders: 0,
+    orders_today: 0,
+    dispatched_today: 0,
+    revenue_today: 0
+  };
+
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+
+  orders.forEach((o: any) => {
+    // Status counts
+    if (o.internal_status === 'pending') liveStats.pending_orders++;
+    else if (o.internal_status === 'preparing') liveStats.preparing_orders++;
+    else if (o.internal_status === 'dispatched') liveStats.dispatched_orders++;
+    else if (o.internal_status === 'delivered') liveStats.delivered_orders++;
+    else if (o.internal_status === 'hold') liveStats.hold_orders++;
+
+    // Today counts
+    const createdDate = o.shopify_created_at ? format(parseISO(o.shopify_created_at), 'yyyy-MM-dd') : null;
+    const sysCreatedDate = o.created_at ? format(parseISO(o.created_at), 'yyyy-MM-dd') : null;
+
+    if (createdDate === todayStr || sysCreatedDate === todayStr) {
+      liveStats.orders_today++;
+      liveStats.revenue_today += Number(o.total_price) || 0;
+    }
+  });
+
+  // Calculate dispatched_today by querying dispatches if needed, or from recentDispatches
+  // But wait, we can just use recentDispatches if we fetch them for today, or do a separate query.
+  // Actually, let's just make a fast query for dispatched_today.
+  const todayISO = format(new Date(), 'yyyy-MM-dd') + 'T00:00:00Z';
+  const { count: dispatchedTodayCount } = await supabase
+    .from("dispatches")
+    .select("id", { count: 'exact' })
+    .gte("dispatched_at", todayISO);
+
+  liveStats.dispatched_today = dispatchedTodayCount || 0;
 
   const statCards = [
     {
       label: "Pending Orders",
-      value: s?.pending_orders || 0,
+      value: liveStats.pending_orders || 0,
       icon: Clock,
       color: "text-zinc-400",
       bg: "bg-zinc-800/50",
@@ -111,7 +152,7 @@ export default async function DashboardPage() {
     },
     {
       label: "Preparing",
-      value: s?.preparing_orders || 0,
+      value: liveStats.preparing_orders || 0,
       icon: Package,
       color: "text-amber-400",
       bg: "bg-amber-500/10",
@@ -119,7 +160,7 @@ export default async function DashboardPage() {
     },
     {
       label: "Dispatched",
-      value: s?.dispatched_orders || 0,
+      value: liveStats.dispatched_orders || 0,
       icon: Truck,
       color: "text-indigo-400",
       bg: "bg-indigo-500/10",
@@ -127,7 +168,7 @@ export default async function DashboardPage() {
     },
     {
       label: "Delivered",
-      value: s?.delivered_orders || 0,
+      value: liveStats.delivered_orders || 0,
       icon: CheckCircle,
       color: "text-emerald-400",
       bg: "bg-emerald-500/10",
@@ -135,7 +176,7 @@ export default async function DashboardPage() {
     },
     {
       label: "On Hold",
-      value: s?.hold_orders || 0,
+      value: liveStats.hold_orders || 0,
       icon: AlertCircle,
       color: "text-orange-400",
       bg: "bg-orange-500/10",
@@ -143,7 +184,7 @@ export default async function DashboardPage() {
     },
     {
       label: "Today's Revenue",
-      value: `৳${Number(s?.revenue_today || 0).toLocaleString()}`,
+      value: `৳${Number(liveStats.revenue_today || 0).toLocaleString()}`,
       icon: TrendingUp,
       color: "text-violet-400",
       bg: "bg-violet-500/10",
@@ -157,14 +198,14 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-2 gap-3 sm:gap-4">
         <div className="col-span-2 sm:col-span-1 rounded-2xl p-5 glass">
           <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider">Orders Today</p>
-          <p className="text-4xl font-bold text-white mt-2">{s?.orders_today || 0}</p>
+          <p className="text-4xl font-bold text-white mt-2">{liveStats.orders_today || 0}</p>
           <p className="text-xs text-zinc-500 mt-2">
-            {s?.dispatched_today || 0} dispatched today
+            {liveStats.dispatched_today || 0} dispatched today
           </p>
         </div>
         <div className="col-span-2 sm:col-span-1 rounded-2xl p-5 bg-indigo-600/10 border border-indigo-500/20">
           <p className="text-xs text-indigo-400 font-medium uppercase tracking-wider">Dispatched Today</p>
-          <p className="text-4xl font-bold text-indigo-300 mt-2">{s?.dispatched_today || 0}</p>
+          <p className="text-4xl font-bold text-indigo-300 mt-2">{liveStats.dispatched_today || 0}</p>
           <Link href="/dispatches" className="text-xs text-indigo-500 mt-2 inline-block hover:text-indigo-400 transition-colors">
             View all dispatches →
           </Link>

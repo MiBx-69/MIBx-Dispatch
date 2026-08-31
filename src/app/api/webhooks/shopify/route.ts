@@ -140,35 +140,92 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload): 
     grams: item.grams,
   }));
 
+  const customerPhone = shippingAddr?.phone || payload.customer?.phone || payload.phone || null;
+  const customerEmail = payload.email;
+  const customerName = shippingAddr?.name ||
+    (payload.customer
+      ? `${payload.customer.first_name} ${payload.customer.last_name}`.trim()
+      : "Unknown");
+
+  const orderPayload: any = {
+    shopify_order_id: payload.id,
+    shopify_order_name: payload.name,
+    shopify_order_number: payload.order_number,
+    customer_id: customerId,
+    customer_shopify_id: payload.customer?.id || null,
+    customer_name: customerName,
+    customer_phone: customerPhone,
+    customer_email: customerEmail,
+    shipping_address: shippingAddr || null,
+    line_items: lineItems,
+    total_price: parseFloat(payload.total_price || "0"),
+    subtotal_price: parseFloat(payload.subtotal_price || "0"),
+    total_tax: parseFloat(payload.total_tax || "0"),
+    currency: payload.currency || "BDT",
+    financial_status: payload.financial_status,
+    fulfillment_status: payload.fulfillment_status || null,
+    shopify_tags: payload.tags ? payload.tags.split(",").map((t) => t.trim()) : [],
+    note: payload.note || null,
+    shopify_created_at: payload.created_at,
+    shopify_updated_at: payload.updated_at,
+    synced_at: new Date().toISOString(),
+  };
+
+  // Perform fraud check if this is a new order
+  if (isNew) {
+    const { data: settings } = await supabase.from("app_settings").select("fraud_check_enabled, fraudspy_api_key").single();
+    
+    if (settings?.fraud_check_enabled) {
+      let riskScore = 0;
+      let riskLevel = 'low';
+
+      if (settings.fraudspy_api_key) {
+        // Pseudo code for actual API - since we don't have the external endpoint right now
+        // const res = await fetch('https://api.fraudspy.io/v1/score', { ... })
+        // const data = await res.json();
+        // riskScore = data.score;
+        // riskLevel = data.level;
+      } else {
+        // Internal heuristic if no API key provided
+        // 1. Phone number validation (BD numbers)
+        const cleanPhone = customerPhone?.replace(/\D/g, '') || "";
+        if (!cleanPhone.startsWith("880") && !cleanPhone.startsWith("01")) {
+          riskScore += 30; // Suspicious phone number format
+        } else if (cleanPhone.length < 11) {
+          riskScore += 40; // Too short
+        }
+        
+        // 2. High order value COD
+        if (orderPayload.total_price > 10000 && orderPayload.financial_status === "pending") {
+          riskScore += 20; // High value COD
+        }
+
+        // 3. Serial Returner Check
+        if (customerPhone) {
+          const { count: returnedCount } = await supabase
+            .from("orders")
+            .select("id", { count: "exact" })
+            .eq("customer_phone", customerPhone)
+            .eq("internal_status", "returned");
+          
+          if (returnedCount && returnedCount > 0) {
+            riskScore += (returnedCount * 30); // 30 points per returned order
+          }
+        }
+
+        riskScore = Math.min(riskScore, 100);
+        if (riskScore >= 70) riskLevel = "high";
+        else if (riskScore >= 30) riskLevel = "medium";
+        else riskLevel = "low";
+      }
+
+      orderPayload.fraud_risk_score = riskScore;
+      orderPayload.fraud_risk_level = riskLevel;
+    }
+  }
+
   await supabase.from("orders").upsert(
-    {
-      shopify_order_id: payload.id,
-      shopify_order_name: payload.name,
-      shopify_order_number: payload.order_number,
-      customer_id: customerId,
-      customer_shopify_id: payload.customer?.id || null,
-      customer_name:
-        shippingAddr?.name ||
-        (payload.customer
-          ? `${payload.customer.first_name} ${payload.customer.last_name}`.trim()
-          : "Unknown"),
-      customer_phone:
-        shippingAddr?.phone || payload.customer?.phone || payload.phone || null,
-      customer_email: payload.email,
-      shipping_address: shippingAddr || null,
-      line_items: lineItems,
-      total_price: parseFloat(payload.total_price || "0"),
-      subtotal_price: parseFloat(payload.subtotal_price || "0"),
-      total_tax: parseFloat(payload.total_tax || "0"),
-      currency: payload.currency || "BDT",
-      financial_status: payload.financial_status,
-      fulfillment_status: payload.fulfillment_status || null,
-      shopify_tags: payload.tags ? payload.tags.split(",").map((t) => t.trim()) : [],
-      note: payload.note || null,
-      shopify_created_at: payload.created_at,
-      shopify_updated_at: payload.updated_at,
-      synced_at: new Date().toISOString(),
-    },
+    orderPayload,
     { onConflict: "shopify_order_id" }
   );
 

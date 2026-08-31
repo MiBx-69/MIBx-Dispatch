@@ -354,7 +354,19 @@ export function OrdersClient({
               <div className="p-3.5 flex gap-4">
                 {/* Customer Info */}
                 <div className="flex-1 min-w-0 space-y-1">
-                  <p className="text-sm font-medium text-zinc-200 truncate">{order.customer_name || "Unknown Customer"}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-zinc-200 truncate">{order.customer_name || "Unknown Customer"}</p>
+                    {order.fraud_risk_level && order.fraud_risk_level !== 'low' && (
+                      <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded-full border ${
+                        order.fraud_risk_level === 'high' 
+                          ? 'bg-red-500/10 text-red-400 border-red-500/20' 
+                          : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                      }`}>
+                        {order.fraud_risk_level === 'high' ? 'High Risk' : 'Medium Risk'}
+                        {order.fraud_risk_score ? ` (${order.fraud_risk_score})` : ''}
+                      </span>
+                    )}
+                  </div>
                   
                   {order.customer_phone ? (
                     <div className="flex items-center gap-2">
