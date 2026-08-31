@@ -5,7 +5,7 @@
 
 import { createServiceClient } from "@/lib/supabase/server";
 
-const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || "2026-07";
+const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || "2024-07";
 
 async function getShopifyCredentials() {
   // If not using OAuth, fallback to env variables if provided
