@@ -178,6 +178,11 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload): 
     synced_at: new Date().toISOString(),
   };
 
+  if (payload.cancelled_at) {
+    orderPayload.internal_status = "cancelled";
+    orderPayload.cancel_reason = payload.cancel_reason || "Cancelled via Shopify";
+  }
+
   // Perform fraud check if this is a new order
   if (isNew) {
     const { data: settings } = await supabase.from("app_settings").select("fraud_check_enabled, fraudspy_api_key").single();

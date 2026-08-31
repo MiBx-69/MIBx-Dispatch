@@ -16,7 +16,8 @@ export default async function DispatchesPage({
 
   let query = supabase
     .from("dispatches")
-    .select("*, orders(*)", { count: "exact" })
+    .select("*, orders!inner(*)", { count: "exact" })
+    .neq("orders.internal_status", "cancelled")
     .order("dispatched_at", { ascending: false })
     .range(offset, offset + pageSize - 1);
 

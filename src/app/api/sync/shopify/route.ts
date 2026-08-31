@@ -158,6 +158,11 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any) {
     synced_at: new Date().toISOString(),
   };
 
+  if (shopifyOrder.cancelledAt) {
+    orderPayload.internal_status = "cancelled";
+    orderPayload.cancel_reason = shopifyOrder.cancelReason || "Cancelled via Shopify";
+  }
+
   const { data: existingOrder } = await supabase
     .from("orders")
     .select("id")
