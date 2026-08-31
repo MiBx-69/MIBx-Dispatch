@@ -72,6 +72,42 @@ export function OrdersClient({
     setPage(1);
   }, [orders]);
 
+  // Supabase Realtime Listener for instant updates
+  useEffect(() => {
+    import("@/lib/supabase/client").then(({ createClient }) => {
+      const supabase = createClient();
+      
+      const channel = supabase
+        .channel('orders-realtime')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
+          const newOrder = payload.new as Order;
+          setOrdersList((prev) => {
+            // Prevent duplicates
+            if (prev.some((o) => o.id === newOrder.id)) return prev;
+            
+            // Optionally filter by currentStatus
+            if (currentStatus && currentStatus !== "all" && newOrder.internal_status !== currentStatus) {
+              return prev;
+            }
+            
+            toast.success(`New order synced instantly: ${newOrder.shopify_order_name || 'Unknown'}`);
+            return [newOrder, ...prev];
+          });
+        })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, (payload) => {
+          const updatedOrder = payload.new as Order;
+          setOrdersList((prev) => {
+            return prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o));
+          });
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    });
+  }, [currentStatus]);
+
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
