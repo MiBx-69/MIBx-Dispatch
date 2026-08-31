@@ -28,6 +28,13 @@ export async function searchFraud(phone: string, apiKey: string): Promise<FraudS
   if (!apiKey || !phone) return null;
 
   try {
+    let formattedPhone = phone.replace(/\D/g, "");
+    if (formattedPhone.startsWith("880")) {
+      formattedPhone = formattedPhone.substring(2);
+    } else if (formattedPhone.startsWith("1")) {
+      formattedPhone = "0" + formattedPhone;
+    }
+
     const res = await fetch(`${FRAUDSPY_BASE_URL}/search`, {
       method: "POST",
       headers: {
@@ -35,7 +42,7 @@ export async function searchFraud(phone: string, apiKey: string): Promise<FraudS
         "Content-Type": "application/json",
         "Authorization": `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({ phone }),
+      body: JSON.stringify({ phone: formattedPhone }),
     });
 
     const data = await res.json();

@@ -168,8 +168,7 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any) {
     const { data: settings } = await supabase.from("app_settings").select("fraud_check_enabled, fraudspy_api_key").single();
     if (settings?.fraud_check_enabled && settings.fraudspy_api_key && orderPayload.customer_phone) {
       const { searchFraud } = await import("@/lib/fraudspy");
-      const cleanPhone = orderPayload.customer_phone.replace(/\D/g, "");
-      const fraudRes = await searchFraud(cleanPhone, settings.fraudspy_api_key);
+      const fraudRes = await searchFraud(orderPayload.customer_phone, settings.fraudspy_api_key);
       
       if (fraudRes && fraudRes.ok) {
         orderPayload.fraud_data = fraudRes;
@@ -195,7 +194,7 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any) {
         
         if (orderPayload.customer_shopify_id) {
           try {
-            const { data: customerData } = await supabase.from("customers").select("shopify_tags").eq("shopify_id", orderPayload.customer_shopify_id).single();
+            const { data: customerData } = await supabase.from("customers").select("shopify_tags").eq("shopify_customer_id", orderPayload.customer_shopify_id).single();
             const existingTags = customerData?.shopify_tags || [];
             const mergedTags = Array.from(new Set([...existingTags, tag, 'FraudSpy Verified']));
 
