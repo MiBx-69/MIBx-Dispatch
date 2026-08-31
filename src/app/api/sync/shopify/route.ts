@@ -5,6 +5,8 @@ import { deleteCachePattern } from "@/lib/redis";
 
 export async function POST(request: NextRequest) {
   const supabase = createServiceClient();
+  const url = new URL(request.url);
+  const fullSync = url.searchParams.get("fullSync") === "true";
 
   // Only admins can trigger sync
   const { data: { user } } = await (await import("@/lib/supabase/server")).createClient().then(c => c.auth.getUser()).catch(() => ({ data: { user: null } }));
@@ -13,7 +15,7 @@ export async function POST(request: NextRequest) {
   const { data: syncLog } = await supabase
     .from("sync_logs")
     .insert({
-      sync_type: "full_shopify",
+      sync_type: fullSync ? "full_shopify" : "delta_shopify",
       status: "running",
       orders_synced: 0,
       customers_synced: 0,
@@ -25,7 +27,7 @@ export async function POST(request: NextRequest) {
   const logId = syncLog?.id;
 
   // Wait for sync to complete (Vercel kills unawaited promises)
-  await runShopifySync(supabase, logId).catch(console.error);
+  await runShopifySync(supabase, logId, fullSync).catch(console.error);
 
   return NextResponse.json({
     message: "Sync completed",
@@ -43,18 +45,34 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ logs });
 }
 
-async function runShopifySync(supabase: any, logId?: string) {
+async function runShopifySync(supabase: any, logId?: string, fullSync = false) {
   let ordersCount = 0;
   let customersCount = 0;
   let errors = 0;
   let cursor: string | undefined;
 
+  let query: string | undefined = undefined;
+
+  if (!fullSync) {
+    const { data: latestOrder } = await supabase
+      .from('orders')
+      .select('shopify_updated_at')
+      .order('shopify_updated_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (latestOrder?.shopify_updated_at) {
+      query = `updated_at:>'${latestOrder.shopify_updated_at}'`;
+    }
+  }
+
   try {
-    // Paginate through all Shopify orders
+    // Paginate through Shopify orders
     do {
       const result = await getShopifyOrders({
         first: 250,
         after: cursor,
+        query
       });
 
       const orders = result.edges.map((e: any) => e.node);
