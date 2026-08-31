@@ -35,11 +35,11 @@ export function Sidebar({ profile }: SidebarProps) {
     <aside className="hidden lg:flex flex-col w-60 h-full bg-zinc-900 border-r border-zinc-800 shrink-0">
       {/* Logo */}
       <div className="flex items-center gap-3 px-5 py-5 border-b border-zinc-800">
-        <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-indigo-600/20 border border-indigo-500/30">
-          <Package className="w-5 h-5 text-indigo-400" />
+        <div className="flex items-center justify-center w-9 h-9 rounded-xl overflow-hidden bg-white shrink-0">
+          <img src="/logo.png" alt="MiBx Logo" className="w-full h-full object-cover" />
         </div>
         <div>
-          <p className="text-sm font-bold text-white leading-none">MiBx Dispatch</p>
+          <p className="text-sm font-bold text-white leading-none">MiBx Dispatch v3</p>
           <p className="text-xs text-zinc-500 mt-0.5">ERP System</p>
         </div>
       </div>

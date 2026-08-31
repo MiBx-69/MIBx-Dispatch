@@ -12,8 +12,8 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "MiBx Dispatch",
-    template: "%s | MiBx Dispatch",
+    default: "MiBx Dispatch v3",
+    template: "%s | MiBx Dispatch v3",
   },
   description: "Shopify × Pathao Dispatch ERP — manage orders and dispatch parcels",
   robots: "noindex, nofollow", // Internal tool — don't index
