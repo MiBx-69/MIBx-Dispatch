@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Plus, Wallet, TrendingUp, TrendingDown, ArrowDownRight, ArrowUpRight, Search, FileText, Trash2, Calendar } from "lucide-react";
 import { Transaction } from "@/types/database";
 import { addTransaction, deleteTransaction } from "./actions";
-import { toast } from "react-hot-toast";
+import { toast } from "sonner";
 
 interface FinancesClientProps {
   transactions: Transaction[];
