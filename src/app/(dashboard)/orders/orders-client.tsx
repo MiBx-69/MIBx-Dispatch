@@ -538,17 +538,27 @@ export function OrdersClient({
                   {/* Line Items */}
                   {lineItems.length > 0 && (
                     <div className="mt-2 space-y-0.5 bg-zinc-950/30 p-1.5 px-2 rounded-md border border-zinc-800/40">
-                      {lineItems.map((item: any, idx: number) => (
-                        <div key={idx} className="flex justify-between items-start text-[11px] leading-tight">
-                          <span className="text-zinc-300 pr-2 flex-1 min-w-0 break-words">
-                            {item.title}
-                            {item.variant_title && item.variant_title !== 'Default Title' && (
-                              <span className="text-zinc-500 ml-1">({item.variant_title})</span>
-                            )}
-                          </span>
-                          <span className="text-zinc-400 font-medium whitespace-nowrap">x {item.quantity}</span>
-                        </div>
-                      ))}
+                      {lineItems.map((item: any, idx: number) => {
+                        const isRemoved = item.quantity === 0;
+                        return (
+                          <div key={idx} className={`flex justify-between items-start text-[11px] leading-tight ${isRemoved ? 'opacity-60' : ''}`}>
+                            <span className={`text-zinc-300 pr-2 flex-1 min-w-0 break-words ${isRemoved ? 'line-through' : ''}`}>
+                              {item.title}
+                              {item.variant_title && item.variant_title !== 'Default Title' && (
+                                <span className="text-zinc-500 ml-1">({item.variant_title})</span>
+                              )}
+                              {isRemoved && (
+                                <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-zinc-800 text-zinc-400 no-underline">
+                                  Removed
+                                </span>
+                              )}
+                            </span>
+                            <span className="text-zinc-400 font-medium whitespace-nowrap">
+                              x {isRemoved ? (item.original_quantity || 0) : item.quantity}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 

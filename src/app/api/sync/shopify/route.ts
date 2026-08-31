@@ -149,14 +149,14 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
     .map((e: any) => ({
       title: e.node.title,
       quantity: typeof e.node.currentQuantity === "number" ? e.node.currentQuantity : e.node.quantity,
+      original_quantity: e.node.quantity,
       price: parseFloat(e.node.originalUnitPriceSet?.shopMoney?.amount || "0"),
       sku: e.node.sku,
       variant_title: e.node.variantTitle,
-      weight: null, // Removed as we no longer fetch variant scope
+      weight: null,
       weight_unit: null,
       image: e.node.image?.url,
-    }))
-    .filter((item: any) => item.quantity > 0);
+    }));
 
   const fulfillments = shopifyOrder.fulfillments || [];
   const lastFulfillment = fulfillments[fulfillments.length - 1];
