@@ -79,14 +79,20 @@ export async function performFraudCheck(orderIdentifier: string, supabase: any) 
     }
   }
 
-  // 6. Update Shopify Order Profile (Note & Tags)
+  // 6. Update Shopify Order Profile (Custom Attributes & Tags)
   if (order.shopify_order_id) {
     try {
-      const finalOrderNote = order.note ? `${order.note}\n\n${noteAppend}` : noteAppend;
       await updateShopifyOrder({
         id: `gid://shopify/Order/${order.shopify_order_id}`,
-        note: finalOrderNote,
-        tags: [tag, 'FraudSpy Verified']
+        tags: [tag, 'FraudSpy Verified'],
+        customAttributes: [
+          { key: "FraudSpy Status", value: fraud_status.toUpperCase() },
+          { key: "FraudSpy Score", value: fraud_score.toString() },
+          { key: "FraudSpy Delivered", value: (fraudData.overall?.delivered || 0).toString() },
+          { key: "FraudSpy Returned", value: (fraudData.overall?.returned || 0).toString() },
+          { key: "FraudSpy Success Ratio", value: `${fraudData.overall?.success_ratio || 0}%` },
+          { key: "FraudSpy Last Checked", value: new Date().toLocaleString() }
+        ]
       });
     } catch (shopifyError) {
       console.error("Failed to update Shopify order:", shopifyError);

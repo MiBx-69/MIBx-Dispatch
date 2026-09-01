@@ -264,11 +264,11 @@ export async function cancelShopifyOrder(orderId: string, reason = "OTHER") {
   return result.data.orderCancel;
 }
 
-// ─── Add Order Note / Tags ────────────────────────────────────────────────────
+// ─── Add Order Note / Tags / Custom Attributes ──────────────────────────────────
 const UPDATE_ORDER_MUTATION = `
   mutation UpdateOrder($input: OrderInput!) {
     orderUpdate(input: $input) {
-      order { id name note tags }
+      order { id name note tags customAttributes { key value } }
       userErrors { field message }
     }
   }
@@ -278,6 +278,7 @@ export async function updateShopifyOrder(params: {
   id: string;
   note?: string;
   tags?: string[];
+  customAttributes?: Array<{ key: string; value: string }>;
   metafields?: Array<{ namespace: string; key: string; value: string; type: string }>;
 }) {
   const result = await shopifyFetch(UPDATE_ORDER_MUTATION, {
@@ -285,6 +286,8 @@ export async function updateShopifyOrder(params: {
       id: params.id,
       ...(params.note !== undefined ? { note: params.note } : {}),
       ...(params.tags ? { tags: params.tags } : {}),
+      ...(params.customAttributes ? { customAttributes: params.customAttributes } : {}),
+      ...(params.metafields ? { metafields: params.metafields } : {}),
     },
   });
   const { order, userErrors } = result.data.orderUpdate;
