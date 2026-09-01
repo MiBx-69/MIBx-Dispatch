@@ -34,7 +34,6 @@ export default async function ReportsPage({
     .select("total_price, subtotal_price, shopify_created_at, created_at, line_items, financial_status, fulfillment_status, internal_status, fraud_status")
     .gte("shopify_created_at", startDateStr)
     .lte("shopify_created_at", endDateStr)
-    .neq("internal_status", "cancelled")
     .order("shopify_created_at", { ascending: false });
 
   const orders = ordersData || [];

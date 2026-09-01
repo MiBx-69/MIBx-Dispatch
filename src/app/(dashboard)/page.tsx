@@ -68,7 +68,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     .order("shopify_created_at", { ascending: false });
 
   // --- Data Processing for Dashboards ---
-  const orders = (recentMonthOrders || []).filter((o: any) => o.internal_status !== 'cancelled');
+  const orders = recentMonthOrders || [];
   
   // 1. Revenue Chart
   const revenueMap = new Map<string, { total: number, subtotal: number }>();
