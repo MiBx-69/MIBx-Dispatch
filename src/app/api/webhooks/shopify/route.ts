@@ -303,7 +303,6 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload): 
         orderPayload.fraud_data = fraudData;
 
         // Update Shopify Customer and Order notes
-        const noteAppend = `[FraudSpy Report]\nStatus: ${riskLevel.toUpperCase()}\nScore: ${riskScore}\nDelivered: ${fraudData.overall?.delivered || 0}\nReturned: ${fraudData.overall?.returned || 0}\nSuccess Ratio: ${fraudData.overall?.success_ratio || 0}%\nLast Checked: ${new Date().toISOString()}`;
         const tag = `FraudSpy: ${riskLevel === 'fraud' ? 'High Risk' : riskLevel === 'risky' ? 'Medium Risk' : 'Safe'}`;
 
         const { updateShopifyCustomer, updateShopifyOrder } = await import("@/lib/shopify/client");
@@ -316,7 +315,6 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload): 
 
             await updateShopifyCustomer({
               id: `gid://shopify/Customer/${orderPayload.customer_shopify_id}`,
-              note: noteAppend,
               tags: mergedTags
             });
           } catch (e) {
@@ -326,11 +324,17 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload): 
 
         if (orderPayload.shopify_order_id) {
           try {
-            const finalOrderNote = orderPayload.note ? `${orderPayload.note}\n\n${noteAppend}` : noteAppend;
             await updateShopifyOrder({
               id: `gid://shopify/Order/${orderPayload.shopify_order_id}`,
-              note: finalOrderNote,
-              tags: [tag, 'FraudSpy Verified']
+              tags: [tag, 'FraudSpy Verified'],
+              customAttributes: [
+                { key: "FraudSpy Status", value: riskLevel.toUpperCase() },
+                { key: "FraudSpy Score", value: riskScore.toString() },
+                { key: "FraudSpy Delivered", value: (fraudData.overall?.delivered || 0).toString() },
+                { key: "FraudSpy Returned", value: (fraudData.overall?.returned || 0).toString() },
+                { key: "FraudSpy Success Ratio", value: `${fraudData.overall?.success_ratio || 0}%` },
+                { key: "FraudSpy Last Checked", value: new Date().toLocaleString() }
+              ]
             });
           } catch (e) {
             console.error("Failed to update Shopify order during webhook:", e);

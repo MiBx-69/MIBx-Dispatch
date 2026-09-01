@@ -30,11 +30,21 @@ export function DispatchesClient({
   count,
   currentStatus,
   pathaoStoreId,
+  dateFilter = "all",
+  startDate,
+  endDate,
+  totalAmount = 0,
+  totalQuantity = 0,
 }: {
   dispatches: any[];
   count: number;
   currentStatus?: string;
   pathaoStoreId?: number;
+  dateFilter?: string;
+  startDate?: string;
+  endDate?: string;
+  totalAmount?: number;
+  totalQuantity?: number;
 }) {
   const router = useRouter();
   const [dispatchOrder, setDispatchOrder] = useState<any | null>(null);
@@ -71,12 +81,46 @@ export function DispatchesClient({
     }
   };
 
+  const handleDateFilterChange = (newFilter: string) => {
+    const params = new URLSearchParams(window.location.search);
+    params.set("dateFilter", newFilter);
+    params.delete("page"); // Reset pagination
+    router.push(`/dispatches?${params.toString()}`);
+  };
+
   return (
-    <div className="space-y-4 animate-fade-in">
-      {/* Header */}
-      <div>
-        <h2 className="text-lg font-bold text-zinc-100">All Dispatches</h2>
-        <p className="text-sm text-zinc-500">{count || 0} total dispatches</p>
+    <div className="space-y-6 animate-fade-in">
+      {/* Header & Stats */}
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-zinc-100">Dispatches</h2>
+          <p className="text-sm text-zinc-500 mt-1">{count || 0} total records found</p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4">
+          <select 
+            value={dateFilter}
+            onChange={(e) => handleDateFilterChange(e.target.value)}
+            className="bg-zinc-900 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 outline-none focus:border-indigo-500 transition-colors"
+          >
+            <option value="all">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="this_month">This Month</option>
+          </select>
+          
+          <div className="flex gap-4 bg-zinc-900 border border-zinc-800 rounded-xl p-3 px-5 shadow-sm">
+            <div>
+              <p className="text-[10px] text-zinc-500 uppercase font-semibold tracking-wider">Total Value</p>
+              <p className="text-lg font-bold text-emerald-400">৳{totalAmount.toLocaleString()}</p>
+            </div>
+            <div className="w-px bg-zinc-800"></div>
+            <div>
+              <p className="text-[10px] text-zinc-500 uppercase font-semibold tracking-wider">Total Qty</p>
+              <p className="text-lg font-bold text-indigo-400">{totalQuantity.toLocaleString()}</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Status filters */}

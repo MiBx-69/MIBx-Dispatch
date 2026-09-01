@@ -239,7 +239,6 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
     const sideEffects = [];
     
     if (fraudRes && fraudRes.ok) {
-      const noteAppend = `[FraudSpy Report]\nStatus: ${orderPayload.fraud_status.toUpperCase()}\nScore: ${orderPayload.fraud_score}\nDelivered: ${fraudRes.overall?.delivered || 0}\nReturned: ${fraudRes.overall?.returned || 0}\nSuccess Ratio: ${fraudRes.overall?.success_ratio || 0}%\nLast Checked: ${new Date().toISOString()}`;
       const tag = `FraudSpy: ${orderPayload.fraud_status === 'fraud' ? 'High Risk' : orderPayload.fraud_status === 'risky' ? 'Medium Risk' : 'Safe'}`;
 
       const { updateShopifyCustomer, updateShopifyOrder } = await import("@/lib/shopify/client");
@@ -252,7 +251,6 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
               const mergedTags = Array.from(new Set([...existingTags, tag, 'FraudSpy Verified']));
               await updateShopifyCustomer({
                 id: `gid://shopify/Customer/${orderPayload.customer_shopify_id}`,
-                note: noteAppend,
                 tags: mergedTags
               });
             })
@@ -261,13 +259,19 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
       }
 
       if (orderPayload.shopify_order_id) {
-        const finalOrderNote = orderPayload.note ? `${orderPayload.note}\n\n${noteAppend}` : noteAppend;
         sideEffects.push(
           updateShopifyOrder({
             id: `gid://shopify/Order/${orderPayload.shopify_order_id}`,
-            note: finalOrderNote,
-            tags: [tag, 'FraudSpy Verified']
-          }).catch(e => console.error("Failed to update Shopify order during sync:", e))
+            tags: [tag, 'FraudSpy Verified'],
+            customAttributes: [
+              { key: "FraudSpy Status", value: orderPayload.fraud_status.toUpperCase() },
+              { key: "FraudSpy Score", value: orderPayload.fraud_score.toString() },
+              { key: "FraudSpy Delivered", value: (fraudRes.overall?.delivered || 0).toString() },
+              { key: "FraudSpy Returned", value: (fraudRes.overall?.returned || 0).toString() },
+              { key: "FraudSpy Success Ratio", value: `${fraudRes.overall?.success_ratio || 0}%` },
+              { key: "FraudSpy Last Checked", value: new Date().toLocaleString() }
+            ]
+          }).catch((e: any) => console.error("Failed to update Shopify order during sync:", e))
         );
       }
     }

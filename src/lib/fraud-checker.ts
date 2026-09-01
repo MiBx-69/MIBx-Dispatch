@@ -59,10 +59,9 @@ export async function performFraudCheck(orderIdentifier: string, supabase: any) 
     })
     .eq("id", order.id);
 
-  const noteAppend = `[FraudSpy Report]\nStatus: ${fraud_status.toUpperCase()}\nScore: ${fraud_score}\nDelivered: ${fraudData.overall?.delivered || 0}\nReturned: ${fraudData.overall?.returned || 0}\nSuccess Ratio: ${fraudData.overall?.success_ratio || 0}%\nLast Checked: ${new Date().toISOString()}`;
   const tag = `FraudSpy: ${fraud_status === 'fraud' ? 'High Risk' : fraud_status === 'risky' ? 'Medium Risk' : 'Safe'}`;
 
-  // 5. Update Shopify Customer Profile (Note & Tags)
+  // 5. Update Shopify Customer Profile (Tags)
   if (order.shopify_customer_id) {
     try {
       const { data: customerData } = await supabase.from("customers").select("shopify_tags").eq("shopify_id", order.shopify_customer_id).single();
@@ -71,7 +70,6 @@ export async function performFraudCheck(orderIdentifier: string, supabase: any) 
 
       await updateShopifyCustomer({
         id: `gid://shopify/Customer/${order.shopify_customer_id}`,
-        note: noteAppend,
         tags: mergedTags
       });
     } catch (shopifyError) {
