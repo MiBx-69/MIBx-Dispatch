@@ -126,7 +126,12 @@ async function pathaoFetch<T = any>(
 // ─── Store Management ─────────────────────────────────────────────────────────
 
 export async function getPathaoStores() {
-  return pathaoFetch("/aladdin/api/v1/stores");
+  const cached = await getCache<any>(CACHE_KEYS.PATHAO_STORES);
+  if (cached) return cached;
+
+  const data = await pathaoFetch("/aladdin/api/v1/stores");
+  await setCache(CACHE_KEYS.PATHAO_STORES, data, TTL.PATHAO_STORES);
+  return data;
 }
 
 // ─── Location APIs ────────────────────────────────────────────────────────────

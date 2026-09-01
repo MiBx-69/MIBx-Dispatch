@@ -10,6 +10,7 @@ export const redis = new Redis({
 export const CACHE_KEYS = {
   SHOPIFY_ORDERS: (page: number) => `shopify:orders:page:${page}`,
   PATHAO_CITIES: "pathao:locations:cities",
+  PATHAO_STORES: "pathao:merchant:stores",
   PATHAO_ZONES: (cityId: number) => `pathao:locations:zones:${cityId}`,
   PATHAO_AREAS: (zoneId: number) => `pathao:locations:areas:${zoneId}`,
   PATHAO_TOKEN: "pathao:auth:token",
@@ -22,6 +23,7 @@ export const CACHE_KEYS = {
 export const TTL = {
   SHOPIFY_ORDERS: 300,        // 5 minutes
   PATHAO_CITIES: 86400,       // 24 hours
+  PATHAO_STORES: 86400,       // 24 hours
   PATHAO_ZONES: 86400,        // 24 hours
   PATHAO_AREAS: 86400,        // 24 hours
   PATHAO_TOKEN: 3600,         // 1 hour (< actual 1.5h token life)
