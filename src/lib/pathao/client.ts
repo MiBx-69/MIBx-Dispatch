@@ -113,8 +113,10 @@ async function pathaoFetch<T = any>(
   const data = await response.json();
 
   if (!response.ok) {
+    console.error("[Pathao API Error response data]:", JSON.stringify(data, null, 2));
+    const errorDetails = data?.errors ? JSON.stringify(data.errors) : "";
     throw new Error(
-      data?.message || `Pathao API error: ${response.status}`
+      data?.message ? `${data.message} ${errorDetails}` : `Pathao API error: ${response.status}`
     );
   }
 

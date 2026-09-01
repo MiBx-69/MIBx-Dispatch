@@ -105,7 +105,25 @@ export function DispatchesClient({
           </div>
         )}
         {dispatches?.map((d: any) => {
-          const statusColor = PATHAO_STATUS_COLORS[d.pathao_order_status] || "bg-zinc-800 text-zinc-400 border-zinc-700";
+          const STATUS_MAP: Record<string, string> = {
+            "order.assigned_for_pickup": "Pending",
+            "order.pickup_cancelled": "Pending",
+            "order.pickup_collected": "Picked Up",
+            "order.in_transit": "In Transit",
+            "order.at_delivery_hub": "In Transit",
+            "order.out_for_delivery": "Out for Delivery",
+            "order.delivered": "Delivered",
+            "order.partial_delivery": "Delivered",
+            "order.payment_received": "Delivered",
+            "order.return_in_transit": "Return",
+            "order.returned": "Return Completed",
+            "order.hold": "Hold",
+            "order.failed": "Hold",
+            "order.cancelled": "Cancelled",
+          };
+          
+          const friendlyStatus = STATUS_MAP[d.pathao_order_status] || d.pathao_order_status || "Pending";
+          const statusColor = PATHAO_STATUS_COLORS[friendlyStatus] || PATHAO_STATUS_COLORS["Pending"];
           const order = d.orders;
           const trackingUrl = `https://merchant.pathao.com/tracking?consignment_id=${d.consignment_id}&phone=${encodeURIComponent(d.recipient_phone || order?.customer_phone || "")}`;
 
@@ -119,7 +137,7 @@ export function DispatchesClient({
                       {order?.shopify_order_name || d.shopify_order_name}
                     </span>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${statusColor}`}>
-                      {d.pathao_order_status || "Pending"}
+                      {friendlyStatus}
                     </span>
                   </div>
 

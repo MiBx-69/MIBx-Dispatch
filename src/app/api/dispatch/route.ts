@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient, createClient } from "@/lib/supabase/server";
-import { createPathaoOrder } from "@/lib/pathao/client";
+import { createPathaoOrder, getPathaoCities, getPathaoZones } from "@/lib/pathao/client";
 import { createShopifyFulfillment, updateShopifyOrder } from "@/lib/shopify/client";
 import { logOrderEvent } from "@/lib/audit";
 
@@ -55,8 +55,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Order not found" }, { status: 404 });
   }
 
-  // Removed already dispatched check to allow re-dispatching of orders
-
   // Get settings for store_id
   const { data: settings } = await supabase
     .from("app_settings")
@@ -72,24 +70,60 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    let finalAddress = recipient_address || (order.shipping_address as any)?.address1 || "";
+    const cityProv = `${(order.shipping_address as any)?.city || ""} ${(order.shipping_address as any)?.province || ""}`.trim();
+    if (finalAddress.length < 10) {
+      finalAddress = `${finalAddress}, ${cityProv}`.trim();
+      if (finalAddress.length < 10) {
+        finalAddress = finalAddress.padEnd(10, ".");
+      }
+    }
+
+    // Auto-resolve City & Zone if missing
+    let finalCity = recipient_city ? parseInt(recipient_city) : undefined;
+    let finalZone = recipient_zone ? parseInt(recipient_zone) : undefined;
+    let finalArea = recipient_area ? parseInt(recipient_area) : undefined;
+
+    if (!finalCity) {
+      const addressString = `${finalAddress} ${cityProv}`.toLowerCase();
+      const cities = await getPathaoCities();
+      const dhaka = cities.find((c: any) => c.city_name.toLowerCase().includes('dhaka'));
+      
+      const matchedCity = cities.find((c: any) => addressString.includes(c.city_name.toLowerCase()));
+      finalCity = matchedCity ? matchedCity.city_id : (dhaka ? dhaka.city_id : (cities[0]?.city_id || 1));
+      
+      if (!finalZone && finalCity) {
+        const zones = await getPathaoZones(finalCity);
+        const matchedZone = zones.find((z: any) => addressString.includes(z.zone_name.toLowerCase()));
+        finalZone = matchedZone ? matchedZone.zone_id : (zones[0]?.zone_id || 1);
+      }
+    }
+
+    let finalPhone = recipient_phone || order.customer_phone || "";
+    // Sanitize phone for BD format
+    finalPhone = finalPhone.replace(/\D/g, ""); // remove non-digits
+    if (finalPhone.startsWith("880")) finalPhone = finalPhone.substring(2);
+    if (finalPhone.startsWith("80")) finalPhone = finalPhone.substring(1);
+    if (!finalPhone.startsWith("0")) finalPhone = "0" + finalPhone;
+    if (finalPhone.length > 11) finalPhone = finalPhone.substring(finalPhone.length - 11);
+
+    const finalAmount = Math.round(parseFloat(amount_to_collect ?? (order.total_price || "0")));
+
     // 1. Create Pathao order
     const pathaoResponse = await createPathaoOrder({
       store_id: pathaoStoreId,
       merchant_order_id: order.shopify_order_name,
       recipient_name: recipient_name || order.customer_name,
-      recipient_phone: recipient_phone || order.customer_phone || "",
-      recipient_address:
-        recipient_address ||
-        (order.shipping_address as any)?.address1 ||
-        "",
-      ...(recipient_city && { recipient_city: parseInt(recipient_city) }),
-      ...(recipient_zone && { recipient_zone: parseInt(recipient_zone) }),
-      ...(recipient_area && { recipient_area: parseInt(recipient_area) }),
+      recipient_phone: finalPhone,
+      recipient_address: finalAddress,
+      ...(finalCity && { recipient_city: finalCity }),
+      ...(finalZone && { recipient_zone: finalZone }),
+      ...(finalArea && { recipient_area: finalArea }),
       delivery_type,
       item_type,
       item_quantity,
       item_weight,
-      amount_to_collect: amount_to_collect ?? order.total_price,
+      amount_to_collect: finalAmount,
       item_description: item_description || (order.line_items as any[])[0]?.title,
       special_instruction,
     });
@@ -247,20 +281,30 @@ export async function PUT(request: NextRequest) {
   }
 
   const results: any[] = [];
-  for (const orderId of order_ids) {
-    try {
-      const res = await POST(
-        new NextRequest(request.url, {
-          method: "POST",
-          body: JSON.stringify({ order_id: orderId, ...dispatch_params }),
-          headers: request.headers,
-        })
-      );
-      const data = await res.json();
-      results.push({ order_id: orderId, ...data });
-    } catch (err: any) {
-      results.push({ order_id: orderId, error: err.message });
-    }
+  
+  // Helper to process in chunks of 5 to speed up without hitting rate limits
+  const chunkSize = 5;
+  for (let i = 0; i < order_ids.length; i += chunkSize) {
+    const chunk = order_ids.slice(i, i + chunkSize);
+    
+    const chunkPromises = chunk.map(async (orderId) => {
+      try {
+        const res = await POST(
+          new NextRequest(request.url, {
+            method: "POST",
+            body: JSON.stringify({ order_id: orderId, ...dispatch_params }),
+            headers: request.headers,
+          })
+        );
+        const data = await res.json();
+        return { order_id: orderId, ...data };
+      } catch (err: any) {
+        return { order_id: orderId, error: err.message };
+      }
+    });
+
+    const chunkResults = await Promise.all(chunkPromises);
+    results.push(...chunkResults);
   }
 
   return NextResponse.json({ results });

@@ -25,7 +25,16 @@ export default async function OrdersPage({
   if (params.status === "archived") {
     query = query.eq("is_archived", true);
   } else if (params.status === "in_progress") {
-    query = query.eq("is_archived", false).eq("fulfillment_status", "in_progress");
+    query = query.eq("is_archived", false).eq("fulfillment_status", "in_progress").neq("internal_status", "dispatched");
+  } else if (params.status === "unfulfilled") {
+    query = query.eq("is_archived", false)
+                 .eq("fulfillment_status", "unfulfilled")
+                 .neq("internal_status", "dispatched")
+                 .neq("internal_status", "cancelled");
+  } else if (params.status === "on_hold") {
+    query = query.eq("is_archived", false)
+                 .eq("fulfillment_status", "on_hold")
+                 .neq("internal_status", "dispatched");
   } else if (!params.status || params.status === "all") {
     query = query.eq("is_archived", false).neq("internal_status", "dispatched").neq("internal_status", "cancelled");
   } else {
@@ -45,7 +54,8 @@ export default async function OrdersPage({
     .from("orders")
     .select("*", { count: "exact", head: true })
     .eq("is_archived", false)
-    .eq("fulfillment_status", "in_progress");
+    .eq("fulfillment_status", "in_progress")
+    .neq("internal_status", "dispatched");
 
   // Get Pathao location lists for dispatch modal
   const { data: settings } = await supabase.from("app_settings").select("pathao_store_id").single();

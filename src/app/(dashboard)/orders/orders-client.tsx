@@ -18,12 +18,13 @@ import type { Order, OrderStatus } from "@/types/database";
 
 const STATUS_FILTERS = [
   { value: "all", label: "All" },
+  { value: "unfulfilled", label: "Unfulfilled" },
   { value: "in_progress", label: "In progress" },
+  { value: "on_hold", label: "On Hold (Shopify)" },
   { value: "pending", label: "Pending" },
   { value: "preparing", label: "Preparing" },
   { value: "dispatched", label: "Dispatched" },
   { value: "delivered", label: "Delivered" },
-  { value: "hold", label: "Hold" },
   { value: "cancelled", label: "Cancelled" },
   { value: "delayed", label: "Delayed" },
   { value: "returned", label: "Returned" },
@@ -321,6 +322,13 @@ export function OrdersClient({
                         focus:ring-1 focus:ring-indigo-500"
             />
           </form>
+          <button 
+            type="button" 
+            onClick={selectAll} 
+            className="px-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors whitespace-nowrap"
+          >
+            {selected.size === ordersList.length && ordersList.length > 0 ? "Deselect All" : "Select All"}
+          </button>
         </div>
 
         {/* Status filters */}
@@ -670,6 +678,11 @@ export function OrdersClient({
           storeId={pathaoStoreId}
           onClose={() => setDispatchOrder(null)}
           onSuccess={() => {
+            if (currentStatus !== "all" && currentStatus !== "dispatched") {
+              setOrdersList(prev => prev.filter(o => o.id !== dispatchOrder.id));
+            } else {
+              setOrdersList(prev => prev.map(o => o.id === dispatchOrder.id ? { ...o, internal_status: 'dispatched' } : o));
+            }
             setDispatchOrder(null);
             router.refresh();
           }}
@@ -683,6 +696,11 @@ export function OrdersClient({
           storeId={pathaoStoreId}
           onClose={() => setBulkDispatchModalOpen(false)}
           onSuccess={() => {
+            if (currentStatus !== "all" && currentStatus !== "dispatched") {
+              setOrdersList(prev => prev.filter(o => !selected.has(o.id)));
+            } else {
+              setOrdersList(prev => prev.map(o => selected.has(o.id) ? { ...o, internal_status: 'dispatched' } : o));
+            }
             setBulkDispatchModalOpen(false);
             setSelected(new Set());
             router.refresh();

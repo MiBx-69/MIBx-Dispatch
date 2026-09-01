@@ -21,12 +21,32 @@ export default async function DispatchesPage({
     .order("dispatched_at", { ascending: false })
     .range(offset, offset + pageSize - 1);
 
+  const STATUS_MAP: Record<string, string[]> = {
+    "Pending": ["Pending", "order.assigned_for_pickup", "order.pickup_cancelled"],
+    "Picked Up": ["Picked Up", "order.pickup_collected"],
+    "In Transit": ["In Transit", "order.in_transit", "order.at_delivery_hub"],
+    "Out for Delivery": ["Out for Delivery", "order.out_for_delivery"],
+    "Delivered": ["Delivered", "order.delivered", "order.partial_delivery", "order.payment_received"],
+    "Return": ["Return", "order.return_in_transit"],
+    "Return Completed": ["Return Completed", "order.returned"],
+    "Hold": ["Hold", "order.hold", "order.failed"],
+    "Cancelled": ["Cancelled", "order.cancelled"],
+  };
+
   if (params.status) {
-    query = query.eq("pathao_order_status", params.status);
+    const mapped = STATUS_MAP[params.status] || [params.status];
+    query = query.in("pathao_order_status", mapped);
   }
 
-  const { data: dispatches, count } = await query;
+  const { data: rawDispatches, count } = await query;
   
+  const dispatches = rawDispatches?.sort((a: any, b: any) => {
+    // Sort strictly by order name descending (e.g. #1529 before #1513)
+    const numA = parseInt(a.orders.shopify_order_name.replace(/\D/g, ""));
+    const numB = parseInt(b.orders.shopify_order_name.replace(/\D/g, ""));
+    return numB - numA;
+  });
+
   const { data: settings } = await supabase.from("app_settings").select("pathao_store_id").single();
 
   return (

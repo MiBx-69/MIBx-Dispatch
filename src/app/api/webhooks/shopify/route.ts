@@ -169,23 +169,34 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload): 
     // Fetch true fulfillment status via GraphQL to handle 'In progress' which is null in REST
     try {
       if (trueFulfillmentStatus === null) {
-        // Add a 3 second delay to allow Shopify's read replicas to catch up. 
-        // When a user marks an order 'In progress', the webhook fires instantly but the GraphQL API 
-        // can return stale 'UNFULFILLED' data due to read-after-write eventual consistency.
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        // Add a 4 second delay to allow Shopify's read replicas to catch up. 
+        await new Promise(resolve => setTimeout(resolve, 4000));
       }
 
       const { data: settings } = await supabase.from("app_settings").select("shopify_shop_domain, shopify_access_token").single();
       if (settings?.shopify_shop_domain && settings?.shopify_access_token) {
-        const q = `{ order(id: "gid://shopify/Order/${payload.id}") { displayFulfillmentStatus } }`;
+        const q = `{ order(id: "gid://shopify/Order/${payload.id}") { displayFulfillmentStatus, fulfillmentOrders(first: 10) { edges { node { status } } } } }`;
         const res = await fetch(`https://${settings.shopify_shop_domain}/admin/api/2024-07/graphql.json`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": settings.shopify_access_token },
           body: JSON.stringify({ query: q })
         });
         const json = await res.json();
-        if (json.data?.order?.displayFulfillmentStatus) {
-          trueFulfillmentStatus = json.data.order.displayFulfillmentStatus.toLowerCase();
+        if (json.data?.order) {
+          if (json.data.order.displayFulfillmentStatus) {
+            trueFulfillmentStatus = json.data.order.displayFulfillmentStatus.toLowerCase();
+          }
+          
+          // Fallback: Check underlying fulfillment orders for immediate status changes
+          const foEdges = json.data.order.fulfillmentOrders?.edges || [];
+          const hasInProgress = foEdges.some((e: any) => e.node.status === "IN_PROGRESS");
+          const hasOnHold = foEdges.some((e: any) => e.node.status === "ON_HOLD");
+          
+          if (hasOnHold) {
+            trueFulfillmentStatus = "on_hold";
+          } else if (hasInProgress) {
+            trueFulfillmentStatus = "in_progress";
+          }
         }
       }
     } catch (err) {
