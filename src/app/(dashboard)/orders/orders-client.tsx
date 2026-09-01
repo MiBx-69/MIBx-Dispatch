@@ -17,7 +17,8 @@ import { OrderTimelineModal } from "@/components/orders/order-timeline-modal";
 import type { Order, OrderStatus } from "@/types/database";
 
 const STATUS_FILTERS = [
-  { value: "all", label: "All" },
+  { value: "everything", label: "Everything" },
+  { value: "all", label: "Pending Actions" },
   { value: "unfulfilled", label: "Unfulfilled" },
   { value: "in_progress", label: "Preparing (Shopify)" },
   { value: "on_hold", label: "On Hold (Shopify)" },
@@ -501,12 +502,12 @@ export function OrdersClient({
                 </div>
                 
                 {/* Dispatch Button for individual order */}
-                {!isDispatchedOrCancelled && !order.is_archived && (
+                {!order.is_archived && (
                   <button
                     onClick={() => setDispatchOrder(order)}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-colors"
                   >
-                    <Truck size={12} /> Dispatch
+                    <Truck size={12} /> {isDispatchedOrCancelled ? "Re-dispatch" : "Dispatch"}
                   </button>
                 )}
               </div>

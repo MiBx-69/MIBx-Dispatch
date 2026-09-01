@@ -20,15 +20,28 @@ export async function GET(request: NextRequest) {
 
     if (status === "archived") {
       query = query.eq("is_archived", true);
-    } else if (status === "in_progress") {
-      query = query.eq("is_archived", false).eq("fulfillment_status", "in_progress");
-    } else if (status === "all") {
-      query = query.eq("is_archived", false).neq("internal_status", "dispatched").neq("internal_status", "cancelled");
-    } else {
+    } else if (status === "everything") {
       query = query.eq("is_archived", false);
-      if (status !== "all") {
-        query = query.eq("internal_status", status);
-      }
+    } else if (status === "in_progress") {
+      query = query.eq("is_archived", false).eq("fulfillment_status", "in_progress").neq("internal_status", "dispatched");
+    } else if (status === "dispatched") {
+      query = query.eq("is_archived", false).or("internal_status.eq.dispatched,fulfillment_status.eq.fulfilled");
+    } else if (status === "unfulfilled") {
+      query = query.eq("is_archived", false)
+                   .eq("fulfillment_status", "unfulfilled")
+                   .neq("internal_status", "dispatched")
+                   .neq("internal_status", "cancelled");
+    } else if (status === "on_hold") {
+      query = query.eq("is_archived", false)
+                   .eq("fulfillment_status", "on_hold")
+                   .neq("internal_status", "dispatched");
+    } else if (status === "all") {
+      query = query.eq("is_archived", false)
+                   .neq("internal_status", "dispatched")
+                   .neq("internal_status", "cancelled")
+                   .neq("fulfillment_status", "fulfilled");
+    } else {
+      query = query.eq("is_archived", false).eq("internal_status", status);
     }
 
     if (search) {
