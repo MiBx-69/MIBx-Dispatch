@@ -202,12 +202,12 @@ export async function POST(request: NextRequest) {
 
     // 5. Add Pathao consignment ID as Shopify order note/tag
     try {
-      const shopifyOrderGid = `gid://shopify/Order/${order.shopify_order_id}`;
       await updateShopifyOrder({
-        id: shopifyOrderGid,
+        id: `gid://shopify/Order/${order.shopify_order_id}`,
         note: `Pathao Consignment: ${consignment_id}\nTracking: ${trackingUrl}`,
         tags: [
           ...(order.shopify_tags || []),
+          "Dispatched via Pathao",
           `pathao:${consignment_id}`,
           "dispatched",
         ],

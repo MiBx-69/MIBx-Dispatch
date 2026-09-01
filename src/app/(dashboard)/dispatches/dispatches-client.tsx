@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Truck, ExternalLink, RotateCw, ShieldCheck } from "lucide-react";
+import { Truck, ExternalLink, RotateCw, ShieldCheck, X } from "lucide-react";
 import { toast } from "sonner";
 import { DispatchModal } from "@/components/orders/dispatch-modal";
 import { FraudDetailsModal } from "@/components/modals/fraud-details-modal";
@@ -78,6 +78,20 @@ export function DispatchesClient({
       toast.error(err.message, { id: toastId });
     } finally {
       setIsCheckingFraud(false);
+    }
+  };
+
+  const removeDispatch = async (dispatchId: string) => {
+    if (!confirm("Are you sure you want to remove this dispatch? The order will be moved to the Removed section.")) return;
+    
+    const toastId = toast.loading("Removing dispatch...");
+    try {
+      const res = await fetch(`/api/dispatches/${dispatchId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error("Failed to remove dispatch");
+      toast.success("Dispatch removed and order archived", { id: toastId });
+      router.refresh();
+    } catch (err: any) {
+      toast.error(err.message, { id: toastId });
     }
   };
 
@@ -231,6 +245,12 @@ export function DispatchesClient({
                         <RotateCw size={10} /> Re-dispatch
                       </button>
                     )}
+                    <button
+                      onClick={() => removeDispatch(d.id)}
+                      className="inline-flex items-center gap-1 text-xs text-red-500 hover:text-red-400 transition-colors px-2 py-1 bg-red-500/10 rounded-md border border-red-500/20"
+                    >
+                      <X size={10} /> Remove
+                    </button>
                     {order && (
                       <button
                         onClick={() => setViewFraudOrder(order)}
