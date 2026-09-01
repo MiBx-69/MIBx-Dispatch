@@ -538,9 +538,7 @@ export function OrdersClient({
                     {order.financial_status && (
                       <ShopifyFinancialBadge status={order.financial_status} />
                     )}
-                    {order.fulfillment_status && (
-                      <ShopifyFulfillmentBadge status={order.fulfillment_status} />
-                    )}
+                    <ShopifyFulfillmentBadge status={order.fulfillment_status || "unfulfilled"} />
                   </div>
 
                   {/* Line Items */}

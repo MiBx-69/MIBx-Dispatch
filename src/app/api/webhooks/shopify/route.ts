@@ -164,23 +164,44 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload): 
       ? `${payload.customer.first_name} ${payload.customer.last_name}`.trim()
       : "Unknown");
 
-  const orderPayload: any = {
-    shopify_order_id: payload.id,
-    shopify_order_name: payload.name,
-    shopify_order_number: payload.order_number,
-    customer_id: customerId,
-    customer_shopify_id: payload.customer?.id || null,
-    customer_name: customerName,
-    customer_phone: customerPhone,
-    customer_email: customerEmail,
-    shipping_address: shippingAddr || null,
-    line_items: lineItems,
-    total_price: parseFloat(payload.total_price || "0"),
-    subtotal_price: parseFloat(payload.subtotal_price || "0"),
-    total_tax: parseFloat(payload.total_tax || "0"),
-    currency: payload.currency || "BDT",
-    financial_status: payload.financial_status,
-    fulfillment_status: payload.fulfillment_status || null,
+    let trueFulfillmentStatus = payload.fulfillment_status || null;
+    
+    // Fetch true fulfillment status via GraphQL to handle 'In progress' which is null in REST
+    try {
+      const { data: settings } = await supabase.from("app_settings").select("shopify_shop_domain, shopify_access_token").single();
+      if (settings?.shopify_shop_domain && settings?.shopify_access_token) {
+        const q = `{ order(id: "gid://shopify/Order/${payload.id}") { displayFulfillmentStatus } }`;
+        const res = await fetch(`https://${settings.shopify_shop_domain}/admin/api/2024-07/graphql.json`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": settings.shopify_access_token },
+          body: JSON.stringify({ query: q })
+        });
+        const json = await res.json();
+        if (json.data?.order?.displayFulfillmentStatus) {
+          trueFulfillmentStatus = json.data.order.displayFulfillmentStatus.toLowerCase();
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch true fulfillment status:", err);
+    }
+
+    const orderPayload: any = {
+      shopify_order_id: payload.id,
+      shopify_order_name: payload.name,
+      shopify_order_number: payload.order_number,
+      customer_id: customerId,
+      customer_shopify_id: payload.customer?.id || null,
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      customer_email: customerEmail,
+      shipping_address: shippingAddr || null,
+      line_items: lineItems,
+      total_price: parseFloat(payload.total_price || "0"),
+      subtotal_price: parseFloat(payload.subtotal_price || "0"),
+      total_tax: parseFloat(payload.total_tax || "0"),
+      currency: payload.currency || "BDT",
+      financial_status: payload.financial_status,
+      fulfillment_status: trueFulfillmentStatus,
     shopify_tags: payload.tags ? payload.tags.split(",").map((t) => t.trim()) : [],
     note: payload.note || null,
     shopify_created_at: payload.created_at,

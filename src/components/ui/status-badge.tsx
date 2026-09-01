@@ -92,6 +92,11 @@ export function ShopifyFulfillmentBadge({ status }: { status: string }) {
     text = "text-yellow-500";
     dot = "bg-yellow-500";
     label = "Unfulfilled";
+  } else if (s === "in_progress" || s === "partial" || s === "partially_fulfilled") {
+    bg = "bg-blue-500/15";
+    text = "text-blue-400";
+    dot = "bg-blue-500";
+    label = "In progress";
   } else if (s === "fulfilled") {
     bg = "bg-zinc-500/15";
     text = "text-zinc-400";
