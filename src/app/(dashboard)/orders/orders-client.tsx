@@ -139,11 +139,16 @@ export function OrdersClient({
     }
   }, [page, loadingMore, hasMore, currentStatus, currentSearch, pageSize]);
 
+  const loadMoreRef = useRef(loadMore);
+  useEffect(() => {
+    loadMoreRef.current = loadMore;
+  }, [loadMore]);
+
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
-          loadMore();
+          loadMoreRef.current();
         }
       },
       { threshold: 0.1 }
@@ -151,7 +156,7 @@ export function OrdersClient({
 
     if (observerTarget.current) observer.observe(observerTarget.current);
     return () => observer.disconnect();
-  }, [loadMore]);
+  }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
