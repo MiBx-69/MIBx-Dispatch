@@ -51,7 +51,7 @@ async function runShopifySync(supabase: any, logId?: string, fullSync = false) {
   let errors = 0;
   let cursor: string | undefined;
 
-  let query: string | undefined = undefined;
+  const minCreatedAt = "2026-08-31T18:00:00Z";
 
   if (!fullSync) {
     const { data: latestOrder } = await supabase
@@ -61,9 +61,13 @@ async function runShopifySync(supabase: any, logId?: string, fullSync = false) {
       .limit(1)
       .single();
 
-    if (latestOrder?.shopify_updated_at) {
-      query = `updated_at:>'${latestOrder.shopify_updated_at}'`;
+    if (latestOrder?.shopify_updated_at && new Date(latestOrder.shopify_updated_at) > new Date(minCreatedAt)) {
+      query = `updated_at:>'${latestOrder.shopify_updated_at}' AND created_at:>='${minCreatedAt}'`;
+    } else {
+      query = `created_at:>='${minCreatedAt}'`;
     }
+  } else {
+    query = `created_at:>='${minCreatedAt}'`;
   }
 
   try {

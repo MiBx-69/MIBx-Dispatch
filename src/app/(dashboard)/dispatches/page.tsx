@@ -11,7 +11,7 @@ export default async function DispatchesPage({
   const params = await searchParams;
   const supabase = createServiceClient();
   const page = parseInt(params.page || "1");
-  const pageSize = 20;
+  const pageSize = 1000;
   const offset = (page - 1) * pageSize;
 
   let query = supabase

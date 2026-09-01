@@ -33,6 +33,18 @@ export async function POST(request: NextRequest) {
     processed: false,
   });
 
+  // Ignore test webhook
+  if (payload.id === 123456) {
+    return NextResponse.json({ received: true }, { status: 200 });
+  }
+
+  // Ignore any order created before Sept 1st (BD Time)
+  const minCreatedAt = new Date("2026-08-31T18:00:00Z");
+  if (payload.created_at && new Date(payload.created_at) < minCreatedAt) {
+    console.log(`Ignoring webhook for old order ${payload.id}`);
+    return NextResponse.json({ received: true, ignored: true }, { status: 200 });
+  }
+
   // Await the processing to ensure it completes before the serverless function terminates
   try {
     await processShopifyWebhook(topic, payload);
