@@ -26,6 +26,8 @@ export default async function OrdersPage({
     query = query.eq("is_archived", true);
   } else if (params.status === "in_progress") {
     query = query.eq("is_archived", false).eq("fulfillment_status", "in_progress").neq("internal_status", "dispatched");
+  } else if (params.status === "dispatched") {
+    query = query.eq("is_archived", false).or("internal_status.eq.dispatched,fulfillment_status.eq.fulfilled");
   } else if (params.status === "unfulfilled") {
     query = query.eq("is_archived", false)
                  .eq("fulfillment_status", "unfulfilled")
@@ -36,7 +38,10 @@ export default async function OrdersPage({
                  .eq("fulfillment_status", "on_hold")
                  .neq("internal_status", "dispatched");
   } else if (!params.status || params.status === "all") {
-    query = query.eq("is_archived", false).neq("internal_status", "dispatched").neq("internal_status", "cancelled");
+    query = query.eq("is_archived", false)
+                 .neq("internal_status", "dispatched")
+                 .neq("internal_status", "cancelled")
+                 .neq("fulfillment_status", "fulfilled");
   } else {
     query = query.eq("is_archived", false).eq("internal_status", params.status);
   }
