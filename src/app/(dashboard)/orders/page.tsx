@@ -24,6 +24,8 @@ export default async function OrdersPage({
 
   if (params.status === "archived") {
     query = query.eq("is_archived", true);
+  } else if (params.status === "in_progress") {
+    query = query.eq("is_archived", false).eq("fulfillment_status", "in_progress");
   } else if (!params.status || params.status === "all") {
     query = query.eq("is_archived", false).neq("internal_status", "dispatched").neq("internal_status", "cancelled");
   } else {
