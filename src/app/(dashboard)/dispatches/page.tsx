@@ -85,7 +85,7 @@ export default async function DispatchesPage({
     return numB - numA;
   });
 
-  const totalAmount = statsData?.reduce((sum, d) => sum + Number(d.amount_to_collect || 0), 0) || 0;
+  const totalAmount = statsData?.reduce((sum: number, d: any) => sum + Number(d.amount_to_collect || 0), 0) || 0;
   const totalQuantity = statsData?.length || 0;
 
   const { data: settings } = await supabase.from("app_settings").select("pathao_store_id").single();
