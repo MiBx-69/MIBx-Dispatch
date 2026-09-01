@@ -98,16 +98,29 @@ export function DispatchesClient({
         </div>
 
         <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4">
-          <select 
-            value={dateFilter}
-            onChange={(e) => handleDateFilterChange(e.target.value)}
-            className="bg-zinc-900 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 outline-none focus:border-indigo-500 transition-colors"
-          >
-            <option value="all">All Time</option>
-            <option value="today">Today</option>
-            <option value="yesterday">Yesterday</option>
-            <option value="this_month">This Month</option>
-          </select>
+          <div className="flex items-center gap-2">
+            <select 
+              value={dateFilter}
+              onChange={(e) => handleDateFilterChange(e.target.value)}
+              className="bg-zinc-900 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 outline-none focus:border-indigo-500 transition-colors"
+            >
+              <option value="all">All Time</option>
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="this_month">This Month</option>
+            </select>
+            
+            <button 
+              onClick={() => {
+                const params = new URLSearchParams(window.location.search);
+                window.open(`/api/dispatches/export?${params.toString()}`, '_blank');
+              }}
+              title="Export Current Dispatches as CSV"
+              className="flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 rounded-lg h-[38px] px-3 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            </button>
+          </div>
           
           <div className="flex gap-4 bg-zinc-900 border border-zinc-800 rounded-xl p-3 px-5 shadow-sm">
             <div>
