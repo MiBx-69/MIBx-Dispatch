@@ -19,10 +19,10 @@ import type { Order, OrderStatus } from "@/types/database";
 const STATUS_FILTERS = [
   { value: "all", label: "All" },
   { value: "unfulfilled", label: "Unfulfilled" },
-  { value: "in_progress", label: "In progress" },
+  { value: "in_progress", label: "Preparing (Shopify)" },
   { value: "on_hold", label: "On Hold (Shopify)" },
   { value: "pending", label: "Pending" },
-  { value: "preparing", label: "Preparing" },
+  { value: "preparing", label: "Preparing (Manual)" },
   { value: "dispatched", label: "Dispatched" },
   { value: "delivered", label: "Delivered" },
   { value: "cancelled", label: "Cancelled" },
