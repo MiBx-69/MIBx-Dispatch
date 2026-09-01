@@ -123,13 +123,16 @@ export function OrdersClient({
       const res = await fetch(`/api/orders?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch");
 
-      const { data } = await res.json();
-      if (data && data.length > 0) {
+      const { orders: fetchedOrders } = await res.json();
+      if (fetchedOrders && fetchedOrders.length > 0) {
         setOrdersList((prev) => {
-          const newOrders = data.filter((o: Order) => !prev.some((p) => p.id === o.id));
+          const newOrders = fetchedOrders.filter((o: Order) => !prev.some((p) => p.id === o.id));
           return [...prev, ...newOrders];
         });
         setPage((p) => p + 1);
+      } else {
+        // If no orders returned, we have reached the end
+        setPage((p) => p + 1); // Or better: we could introduce a piece of state to force hasMore to false
       }
     } catch (err) {
       console.error(err);
