@@ -43,59 +43,64 @@ export async function GET(request: NextRequest) {
       return new NextResponse("No data found for this period", { status: 404 });
     }
 
-    // Prepare CSV header
-    const headers = [
-      "Order Name",
-      "Dispatch Date",
-      "Customer Name",
-      "Phone",
-      "City",
-      "Consignment ID",
-      "Product Name",
-      "Variant",
-      "Quantity",
-      "Price"
-    ];
-
-    // Build CSV rows
-    // Since we want to export "dispatched products", we should flatten the line items.
-    // So one row per product per order.
-    const rows: string[] = [];
-
-    const escape = (val: string | number | null | undefined) => {
+    const escapeCsv = (val: string | number | null | undefined) => {
       if (val == null) return "";
       const str = String(val).replace(/"/g, '""');
       return `"${str}"`;
     };
 
-    dispatches.forEach((d: any) => {
-      const dispatchDate = d.dispatched_at ? new Date(d.dispatched_at).toLocaleString() : "";
-      const o = d.orders;
-      if (!o) return;
+    // Prepare CSV header
+    const headers = [
+      "Dispatch Date",
+      "Product Name",
+      "Variant",
+      "Total Dispatched Quantity"
+    ];
 
-      const orderName = o.shopify_order_name || "";
-      const custName = o.customer_name || "";
-      const custPhone = o.customer_phone || "";
-      const city = o.customer_address?.city || "";
-      const consignment = o.pathao_consignment_id || "";
+    // Group by Date + Product + Variant
+    const productMap = new Map<string, { date: string, name: string, variant: string, qty: number }>();
 
-      const items = o.line_items as any[];
-      if (Array.isArray(items)) {
-        items.forEach(item => {
-          rows.push([
-            escape(orderName),
-            escape(dispatchDate),
-            escape(custName),
-            escape(custPhone),
-            escape(city),
-            escape(consignment),
-            escape(item.title || item.name || ""),
-            escape(item.variant_title || ""),
-            item.quantity || 1,
-            item.price || 0
-          ].join(","));
-        });
-      }
+    dispatches.forEach((dispatch: any) => {
+      const order = dispatch.orders;
+      if (!order || !order.line_items) return;
+      
+      const dispatchDate = new Date(dispatch.dispatched_at).toLocaleDateString();
+      const items = Array.isArray(order.line_items) ? order.line_items : [];
+      
+      items.forEach((item: any) => {
+        const title = item.title || item.name || "Unknown";
+        const variant = item.variant_title || "";
+        const key = `${dispatchDate}-${title}-${variant}`;
+        
+        if (!productMap.has(key)) {
+          productMap.set(key, {
+            date: dispatchDate,
+            name: title,
+            variant: variant,
+            qty: 0
+          });
+        }
+        productMap.get(key)!.qty += item.quantity || 1;
+      });
+    });
+
+    const rows: string[] = [];
+    const groupedItems = Array.from(productMap.values());
+    
+    // Sort by Date (desc), then Quantity (desc)
+    groupedItems.sort((a, b) => {
+      if (a.date !== b.date) return new Date(b.date).getTime() - new Date(a.date).getTime();
+      return b.qty - a.qty;
+    });
+
+    groupedItems.forEach((item) => {
+      const row = [
+        item.date,
+        item.name,
+        item.variant,
+        item.qty.toString()
+      ].map(escapeCsv).join(",");
+      rows.push(row);
     });
 
     const csvContent = [headers.join(","), ...rows].join("\n");

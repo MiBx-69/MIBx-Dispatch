@@ -24,6 +24,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   let startDateStr = "";
   let endDateStr = now.toISOString();
 
+  const MIN_DATE = new Date("2026-08-31T18:00:00.000Z");
+
   if (dateFilter === "today") {
     startDateStr = new Date(now.setHours(0, 0, 0, 0)).toISOString();
     endDateStr = new Date(now.setHours(23, 59, 59, 999)).toISOString();
@@ -34,12 +36,20 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     endDateStr = new Date(yesterday.setHours(23, 59, 59, 999)).toISOString();
   } else if (dateFilter === "last_7_days") {
     startDateStr = subDays(new Date(), 7).toISOString();
+    endDateStr = new Date(now.setHours(23, 59, 59, 999)).toISOString();
   } else if (dateFilter === "this_month") {
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
     startDateStr = new Date(firstDay.setHours(0, 0, 0, 0)).toISOString();
+    endDateStr = new Date(now.setHours(23, 59, 59, 999)).toISOString();
   } else {
     // last_30_days (default)
     startDateStr = subDays(new Date(), 30).toISOString();
+    endDateStr = new Date(now.setHours(23, 59, 59, 999)).toISOString();
+  }
+
+  // Clamp startDateStr to MIN_DATE
+  if (new Date(startDateStr) < MIN_DATE) {
+    startDateStr = MIN_DATE.toISOString();
   }
 
   // Fetch 10 most recent orders
@@ -58,7 +68,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     .order("shopify_created_at", { ascending: false });
 
   // --- Data Processing for Dashboards ---
-  const orders = (recentMonthOrders || []).filter(o => o.internal_status !== 'cancelled');
+  const orders = (recentMonthOrders || []).filter((o: any) => o.internal_status !== 'cancelled');
   
   // 1. Revenue Chart
   const revenueMap = new Map<string, { total: number, subtotal: number }>();
