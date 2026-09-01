@@ -168,6 +168,13 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload): 
     
     // Fetch true fulfillment status via GraphQL to handle 'In progress' which is null in REST
     try {
+      if (trueFulfillmentStatus === null) {
+        // Add a 3 second delay to allow Shopify's read replicas to catch up. 
+        // When a user marks an order 'In progress', the webhook fires instantly but the GraphQL API 
+        // can return stale 'UNFULFILLED' data due to read-after-write eventual consistency.
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+
       const { data: settings } = await supabase.from("app_settings").select("shopify_shop_domain, shopify_access_token").single();
       if (settings?.shopify_shop_domain && settings?.shopify_access_token) {
         const q = `{ order(id: "gid://shopify/Order/${payload.id}") { displayFulfillmentStatus } }`;
