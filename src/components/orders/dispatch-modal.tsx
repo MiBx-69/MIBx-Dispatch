@@ -92,8 +92,8 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
           ...form,
           order_id: order.id,
           store_id: parseInt(form.store_id),
-          recipient_city: parseInt(form.recipient_city),
-          recipient_zone: parseInt(form.recipient_zone),
+          recipient_city: form.recipient_city ? parseInt(form.recipient_city) : undefined,
+          recipient_zone: form.recipient_zone ? parseInt(form.recipient_zone) : undefined,
           recipient_area: form.recipient_area ? parseInt(form.recipient_area) : undefined,
           delivery_type: parseInt(form.delivery_type),
           item_type: parseInt(form.item_type),
@@ -188,36 +188,7 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
             </Field>
           </Section>
 
-          {/* Location */}
-          <Section icon={<MapPin size={14} />} title="Delivery Location">
-            {loadingLocations ? (
-              <p className="text-xs text-zinc-500">Loading locations...</p>
-            ) : (
-              <div className="grid grid-cols-3 gap-2">
-                <Field label="City">
-                  <select value={form.recipient_city} onChange={(e) => { set("recipient_city", e.target.value); set("recipient_zone", ""); set("recipient_area", ""); }}
-                    className={selectCls}>
-                    <option value="">Auto-assign</option>
-                    {cities.map((c) => <option key={c.city_id} value={c.city_id}>{c.city_name}</option>)}
-                  </select>
-                </Field>
-                <Field label="Zone">
-                  <select value={form.recipient_zone} onChange={(e) => { set("recipient_zone", e.target.value); set("recipient_area", ""); }}
-                    className={selectCls} disabled={!form.recipient_city}>
-                    <option value="">Auto-assign</option>
-                    {zones.map((z) => <option key={z.zone_id} value={z.zone_id}>{z.zone_name}</option>)}
-                  </select>
-                </Field>
-                <Field label="Area">
-                  <select value={form.recipient_area} onChange={(e) => set("recipient_area", e.target.value)}
-                    className={selectCls} disabled={!form.recipient_zone}>
-                    <option value="">Auto-assign</option>
-                    {areas.map((a) => <option key={a.area_id} value={a.area_id}>{a.area_name}</option>)}
-                  </select>
-                </Field>
-              </div>
-            )}
-          </Section>
+
 
           {/* Parcel Details */}
           <Section icon={<Weight size={14} />} title="Parcel Details">
