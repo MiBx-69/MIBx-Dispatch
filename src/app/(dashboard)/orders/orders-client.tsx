@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   Search, Filter, ChevronLeft, ChevronRight,
-  Truck, Package, X, CheckCircle, PauseCircle, AlertCircle, Archive, ArchiveRestore, Copy, Check, MessageSquare, ShieldCheck, List
+  Truck, Package, X, CheckCircle, PauseCircle, AlertCircle, Archive, ArchiveRestore, Copy, Check, MessageSquare, ShieldCheck, List, Loader2
 } from "lucide-react";
 import { StatusBadge, ShopifyFinancialBadge, ShopifyFulfillmentBadge } from "@/components/ui/status-badge";
 import { DispatchModal } from "@/components/orders/dispatch-modal";
@@ -36,6 +36,9 @@ interface OrdersClientProps {
   orders: Order[];
   total: number;
   inProgressCount?: number;
+  dispatchedCount?: number;
+  onHoldCount?: number;
+  cancelledCount?: number;
   page: number;
   pageSize: number;
   currentStatus?: string;
@@ -47,6 +50,9 @@ export function OrdersClient({
   orders,
   total,
   inProgressCount = 0,
+  dispatchedCount = 0,
+  onHoldCount = 0,
+  cancelledCount = 0,
   pageSize,
   currentStatus,
   currentSearch,
@@ -186,7 +192,7 @@ export function OrdersClient({
           router.push(`/orders?${params.toString()}`);
         });
       }
-    }, 400);
+    }, 300);
     return () => clearTimeout(handler);
   }, [search, currentStatus, currentSearch, router]);
 
@@ -323,6 +329,22 @@ export function OrdersClient({
 
   return (
     <div className="space-y-4 animate-fade-in">
+      {/* Consolidated Orders Status Bar */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col justify-center items-center">
+          <div className="text-zinc-400 text-xs font-medium uppercase tracking-wider mb-1">Dispatched</div>
+          <div className="text-2xl font-semibold text-emerald-400">{dispatchedCount}</div>
+        </div>
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col justify-center items-center">
+          <div className="text-zinc-400 text-xs font-medium uppercase tracking-wider mb-1">On Hold</div>
+          <div className="text-2xl font-semibold text-amber-400">{onHoldCount}</div>
+        </div>
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col justify-center items-center">
+          <div className="text-zinc-400 text-xs font-medium uppercase tracking-wider mb-1">Cancelled</div>
+          <div className="text-2xl font-semibold text-rose-400">{cancelledCount}</div>
+        </div>
+      </div>
+
       {/* Search + Filter */}
       <div className="space-y-3">
         <div className="flex gap-2">
@@ -332,10 +354,13 @@ export function OrdersClient({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search orders, customers, phones..."
-              className="w-full pl-9 pr-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm
+              className="w-full pl-9 pr-10 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm
                         text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500
-                        focus:ring-1 focus:ring-indigo-500"
+                        focus:ring-1 focus:ring-indigo-500 transition-all"
             />
+            {isPending && (
+              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 animate-spin" />
+            )}
           </form>
           <button 
             type="button" 

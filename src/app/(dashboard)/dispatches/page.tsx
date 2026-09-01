@@ -6,7 +6,7 @@ export const metadata = { title: "Dispatches" };
 export default async function DispatchesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; page?: string; dateFilter?: string; startDate?: string; endDate?: string; }>;
+  searchParams: Promise<{ status?: string; page?: string; dateFilter?: string; startDate?: string; endDate?: string; search?: string; }>;
 }) {
   const params = await searchParams;
   const supabase = createServiceClient();
@@ -42,6 +42,12 @@ export default async function DispatchesPage({
     const mapped = STATUS_MAP[params.status] || [params.status];
     query = query.in("pathao_order_status", mapped);
     statsQuery = statsQuery.in("pathao_order_status", mapped);
+  }
+
+  if (params.search) {
+    const s = params.search;
+    query = query.or(`consignment_id.ilike.%${s}%,recipient_phone.ilike.%${s}%,shopify_order_name.ilike.%${s}%`);
+    statsQuery = statsQuery.or(`consignment_id.ilike.%${s}%,recipient_phone.ilike.%${s}%,shopify_order_name.ilike.%${s}%`);
   }
 
   // Date Filtering
@@ -95,6 +101,7 @@ export default async function DispatchesPage({
       dispatches={dispatches || []}
       count={count || 0}
       currentStatus={params.status}
+      currentSearch={params.search}
       pathaoStoreId={settings?.pathao_store_id}
       dateFilter={dateFilter}
       startDate={params.startDate}

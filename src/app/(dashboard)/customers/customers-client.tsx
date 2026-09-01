@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Users, Phone, Mail, ShoppingBag, Search, ChevronDown } from "lucide-react";
+import { Users, Phone, Mail, ShoppingBag, Search, ChevronDown, Loader2 } from "lucide-react";
 import { CustomerDrawer } from "@/components/customers/customer-drawer";
 
 export function CustomersClient({
@@ -48,6 +48,16 @@ export function CustomersClient({
     }
   };
 
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (search !== (currentSearch || "")) {
+        setPage(1);
+        fetchCustomers(1, search, sort, false);
+      }
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [search, sort, currentSearch]);
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(1);
@@ -59,6 +69,7 @@ export function CustomersClient({
     setPage(1);
     fetchCustomers(1, search, newSort, false);
   };
+
 
   // Infinite scroll
   useEffect(() => {
@@ -112,9 +123,13 @@ export function CustomersClient({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search customers by name, phone, or email..."
-            className="w-full pl-9 pr-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm
-                      text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
+            className="w-full pl-9 pr-10 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm
+                      text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500
+                      focus:ring-1 focus:ring-indigo-500 transition-all"
           />
+          {loading && (
+            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 animate-spin" />
+          )}
         </form>
         <a
           href={`/api/customers/export?search=${encodeURIComponent(search)}&sort=${sort}`}

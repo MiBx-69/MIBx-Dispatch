@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { Package, Truck, CheckCircle, Clock, AlertCircle, TrendingUp, Zap } from "lucide-react";
+import { Package, Truck, CheckCircle, Clock, AlertCircle, TrendingUp, Zap, XCircle } from "lucide-react";
 import Link from "next/link";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { subDays, format, parseISO, differenceInDays } from "date-fns";
@@ -185,6 +185,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     hold_orders: 0,
     orders_today: 0,
     dispatched_today: 0,
+    cancelled_today: 0,
     revenue_today: 0,
     subtotal_today: 0
   };
@@ -225,6 +226,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       liveStats.orders_today++;
       liveStats.revenue_today += Number(o.total_price) || 0;
       liveStats.subtotal_today += Number(o.subtotal_price) || 0;
+      if (o.internal_status === 'cancelled') {
+        liveStats.cancelled_today++;
+      }
     }
 
     // Courier Stats
@@ -267,20 +271,46 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <DashboardHeader />
 
       {/* Today's Summary */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4">
-        <div className="col-span-2 sm:col-span-1 rounded-2xl p-5 glass">
-          <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider">Orders Today</p>
-          <p className="text-4xl font-bold text-white mt-2">{liveStats.orders_today || 0}</p>
-          <p className="text-xs text-zinc-500 mt-2">
-            {liveStats.dispatched_today || 0} dispatched today
-          </p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        {/* Orders Today */}
+        <div className="rounded-2xl p-5 bg-zinc-900 border border-zinc-800/50 shadow-sm relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+            <Package className="w-16 h-16 text-zinc-100" />
+          </div>
+          <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider relative z-10">Orders Today</p>
+          <p className="text-4xl font-bold text-white mt-2 relative z-10">{liveStats.orders_today || 0}</p>
         </div>
-        <div className="col-span-2 sm:col-span-1 rounded-2xl p-5 bg-indigo-600/10 border border-indigo-500/20">
-          <p className="text-xs text-indigo-400 font-medium uppercase tracking-wider">Dispatched Today</p>
-          <p className="text-4xl font-bold text-indigo-300 mt-2">{liveStats.dispatched_today || 0}</p>
-          <Link href="/dispatches" className="text-xs text-indigo-500 mt-2 inline-block hover:text-indigo-400 transition-colors">
-            View all dispatches →
-          </Link>
+
+        {/* Sales Today */}
+        <div className="rounded-2xl p-5 bg-emerald-500/5 border border-emerald-500/20 shadow-sm relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <TrendingUp className="w-16 h-16 text-emerald-400" />
+          </div>
+          <p className="text-xs text-emerald-400/80 font-medium uppercase tracking-wider relative z-10">Sales Today</p>
+          <p className="text-4xl font-bold text-emerald-400 mt-2 relative z-10">৳{Number(liveStats.revenue_today || 0).toLocaleString()}</p>
+        </div>
+
+        {/* Dispatched Today */}
+        <div className="rounded-2xl p-5 bg-indigo-500/5 border border-indigo-500/20 shadow-sm relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <Truck className="w-16 h-16 text-indigo-400" />
+          </div>
+          <p className="text-xs text-indigo-400/80 font-medium uppercase tracking-wider relative z-10">Dispatched Today</p>
+          <div className="flex items-baseline gap-2 relative z-10 mt-2">
+            <p className="text-4xl font-bold text-indigo-400">{liveStats.dispatched_today || 0}</p>
+            <Link href="/dispatches" className="text-[10px] text-indigo-500/60 hover:text-indigo-400 transition-colors uppercase tracking-widest font-semibold border border-indigo-500/20 px-2 py-0.5 rounded-full">
+              View
+            </Link>
+          </div>
+        </div>
+
+        {/* Cancelled Today */}
+        <div className="rounded-2xl p-5 bg-rose-500/5 border border-rose-500/20 shadow-sm relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <XCircle className="w-16 h-16 text-rose-400" />
+          </div>
+          <p className="text-xs text-rose-400/80 font-medium uppercase tracking-wider relative z-10">Cancelled Today</p>
+          <p className="text-4xl font-bold text-rose-400 mt-2 relative z-10">{liveStats.cancelled_today || 0}</p>
         </div>
       </div>
 

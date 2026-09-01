@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Truck, ExternalLink, RotateCw, ShieldCheck, X, Search } from "lucide-react";
+import { Truck, ExternalLink, RotateCw, ShieldCheck, X, Search, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { DispatchModal } from "@/components/orders/dispatch-modal";
 import { FraudDetailsModal } from "@/components/modals/fraud-details-modal";
@@ -29,6 +29,7 @@ export function DispatchesClient({
   dispatches,
   count,
   currentStatus,
+  currentSearch,
   pathaoStoreId,
   dateFilter = "all",
   startDate,
@@ -39,6 +40,7 @@ export function DispatchesClient({
   dispatches: any[];
   count: number;
   currentStatus?: string;
+  currentSearch?: string;
   pathaoStoreId?: number;
   dateFilter?: string;
   startDate?: string;
@@ -50,16 +52,26 @@ export function DispatchesClient({
   const [dispatchOrder, setDispatchOrder] = useState<any | null>(null);
   const [viewFraudOrder, setViewFraudOrder] = useState<any | null>(null);
   const [isCheckingFraud, setIsCheckingFraud] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [isPending, startTransition] = useTransition();
+  const [searchQuery, setSearchQuery] = useState(currentSearch || "");
 
-  const filteredDispatches = dispatches.filter((d: any) => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    const orderName = (d.orders?.shopify_order_name || "").toLowerCase();
-    const phone = (d.recipient_phone || d.orders?.customer_phone || "").toLowerCase();
-    const cons = (d.consignment_id || "").toLowerCase();
-    return orderName.includes(q) || phone.includes(q) || cons.includes(q);
-  });
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (searchQuery !== (currentSearch || "")) {
+        startTransition(() => {
+          const params = new URLSearchParams(window.location.search);
+          if (searchQuery) {
+            params.set("search", searchQuery);
+          } else {
+            params.delete("search");
+          }
+          params.delete("page");
+          router.push(`/dispatches?${params.toString()}`);
+        });
+      }
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchQuery, currentSearch, router]);
 
   const manualFraudCheck = async (orderId: string) => {
     setIsCheckingFraud(true);
@@ -129,9 +141,12 @@ export function DispatchesClient({
                 placeholder="Search phone, order, cons..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-zinc-900 border border-zinc-700 text-zinc-200 text-sm rounded-lg pl-8 pr-3 py-2 w-full sm:w-56 outline-none focus:border-indigo-500 transition-colors"
+                className="bg-zinc-900 border border-zinc-700 text-zinc-200 text-sm rounded-lg pl-8 pr-8 py-2 w-full sm:w-56 outline-none focus:border-indigo-500 transition-colors"
               />
               <Search className="w-4 h-4 text-zinc-500 absolute left-2.5 top-2.5" />
+              {isPending && (
+                <Loader2 className="absolute right-2.5 top-2.5 w-4 h-4 text-zinc-400 animate-spin" />
+              )}
             </div>
 
             <select 
@@ -190,13 +205,13 @@ export function DispatchesClient({
 
       {/* Dispatches list */}
       <div className="space-y-2">
-        {(!filteredDispatches || filteredDispatches.length === 0) && (
+        {(!dispatches || dispatches.length === 0) && (
           <div className="text-center py-16 text-zinc-600">
             <Truck className="w-10 h-10 mx-auto mb-3 opacity-30" />
             <p className="text-sm">No dispatches found</p>
           </div>
         )}
-        {filteredDispatches?.map((d: any) => {
+        {dispatches?.map((d: any) => {
           const STATUS_MAP: Record<string, string> = {
             "order.assigned_for_pickup": "Pending",
             "order.pickup_cancelled": "Pending",

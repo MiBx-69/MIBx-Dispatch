@@ -64,6 +64,25 @@ export default async function OrdersPage({
     .eq("fulfillment_status", "in_progress")
     .neq("internal_status", "dispatched");
 
+  const { count: dispatchedCount } = await supabase
+    .from("orders")
+    .select("*", { count: "exact", head: true })
+    .eq("is_archived", false)
+    .or("internal_status.eq.dispatched,fulfillment_status.eq.fulfilled");
+
+  const { count: onHoldCount } = await supabase
+    .from("orders")
+    .select("*", { count: "exact", head: true })
+    .eq("is_archived", false)
+    .eq("fulfillment_status", "on_hold")
+    .neq("internal_status", "dispatched");
+
+  const { count: cancelledCount } = await supabase
+    .from("orders")
+    .select("*", { count: "exact", head: true })
+    .eq("is_archived", false)
+    .eq("internal_status", "cancelled");
+
   // Get Pathao location lists for dispatch modal
   const { data: settings } = await supabase.from("app_settings").select("pathao_store_id").single();
 
@@ -72,6 +91,9 @@ export default async function OrdersPage({
       orders={orders || []}
       total={count || 0}
       inProgressCount={inProgressCount || 0}
+      dispatchedCount={dispatchedCount || 0}
+      onHoldCount={onHoldCount || 0}
+      cancelledCount={cancelledCount || 0}
       page={page}
       pageSize={pageSize}
       currentStatus={params.status}
