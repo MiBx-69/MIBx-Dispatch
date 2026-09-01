@@ -33,6 +33,7 @@ const STATUS_FILTERS = [
 interface OrdersClientProps {
   orders: Order[];
   total: number;
+  inProgressCount?: number;
   page: number;
   pageSize: number;
   currentStatus?: string;
@@ -43,6 +44,7 @@ interface OrdersClientProps {
 export function OrdersClient({
   orders,
   total,
+  inProgressCount = 0,
   pageSize,
   currentStatus,
   currentSearch,
@@ -343,6 +345,9 @@ export function OrdersClient({
               `}
             >
               {f.label}
+              {f.value === "in_progress" && (
+                <span className="ml-1 opacity-70 text-xs">({inProgressCount})</span>
+              )}
             </button>
           ))}
         </div>

@@ -40,6 +40,13 @@ export default async function OrdersPage({
 
   const { data: orders, count } = await query;
 
+  // Get count of in_progress orders
+  const { count: inProgressCount } = await supabase
+    .from("orders")
+    .select("*", { count: "exact", head: true })
+    .eq("is_archived", false)
+    .eq("fulfillment_status", "in_progress");
+
   // Get Pathao location lists for dispatch modal
   const { data: settings } = await supabase.from("app_settings").select("pathao_store_id").single();
 
@@ -47,6 +54,7 @@ export default async function OrdersPage({
     <OrdersClient
       orders={orders || []}
       total={count || 0}
+      inProgressCount={inProgressCount || 0}
       page={page}
       pageSize={pageSize}
       currentStatus={params.status}
