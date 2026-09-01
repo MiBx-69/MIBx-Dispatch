@@ -32,7 +32,7 @@ export default async function OrdersPage({
     query = query.eq("is_archived", false).or("internal_status.eq.dispatched,fulfillment_status.eq.fulfilled");
   } else if (params.status === "unfulfilled") {
     query = query.eq("is_archived", false)
-                 .eq("fulfillment_status", "unfulfilled")
+                 .or("fulfillment_status.eq.unfulfilled,fulfillment_status.is.null")
                  .neq("internal_status", "dispatched")
                  .neq("internal_status", "cancelled");
   } else if (params.status === "on_hold") {
@@ -43,7 +43,7 @@ export default async function OrdersPage({
     query = query.eq("is_archived", false)
                  .neq("internal_status", "dispatched")
                  .neq("internal_status", "cancelled")
-                 .neq("fulfillment_status", "fulfilled");
+                 .or("fulfillment_status.neq.fulfilled,fulfillment_status.is.null");
   } else {
     query = query.eq("is_archived", false).eq("internal_status", params.status);
   }

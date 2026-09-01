@@ -9,12 +9,14 @@ import {
   Users,
   Settings,
   Wallet,
+  BarChart,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/orders", label: "Orders", icon: ShoppingCart },
   { href: "/dispatches", label: "Dispatches", icon: Truck },
+  { href: "/reports", label: "Reports", icon: BarChart },
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/finances", label: "Finances", icon: Wallet },
   { href: "/settings", label: "Settings", icon: Settings },

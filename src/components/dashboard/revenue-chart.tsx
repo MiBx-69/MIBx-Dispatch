@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-export function RevenueChart({ data }: { data: { date: string; displayDate?: string; revenue: number }[] }) {
+export function RevenueChart({ data }: { data: { date: string; displayDate?: string; revenue: number; subtotal?: number }[] }) {
   const formattedData = data;
 
   if (!data || data.length === 0) {
@@ -23,6 +23,10 @@ export function RevenueChart({ data }: { data: { date: string; displayDate?: str
               <stop offset="5%" stopColor="#818cf8" stopOpacity={0.3} />
               <stop offset="95%" stopColor="#818cf8" stopOpacity={0} />
             </linearGradient>
+            <linearGradient id="colorSubtotal" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+            </linearGradient>
           </defs>
           <XAxis 
             dataKey="displayDate" 
@@ -40,12 +44,19 @@ export function RevenueChart({ data }: { data: { date: string; displayDate?: str
           <Tooltip 
             content={({ active, payload, label }) => {
               if (active && payload && payload.length) {
+                const total = payload.find(p => p.dataKey === 'revenue')?.value || 0;
+                const subtotal = payload.find(p => p.dataKey === 'subtotal')?.value || 0;
                 return (
                   <div className="bg-zinc-900 border border-zinc-800 p-3 rounded-lg shadow-xl">
-                    <p className="text-zinc-400 text-xs mb-1">{label}</p>
-                    <p className="text-indigo-400 font-bold">
-                      ৳{Number(payload[0].value).toLocaleString()}
-                    </p>
+                    <p className="text-zinc-400 text-xs mb-2">{label}</p>
+                    <div className="flex justify-between gap-4 mb-1">
+                      <span className="text-indigo-400 font-medium text-xs">w/ Delivery</span>
+                      <span className="text-indigo-400 font-bold">৳{Number(total).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-emerald-400 font-medium text-xs">w/o Delivery</span>
+                      <span className="text-emerald-400 font-bold">৳{Number(subtotal).toLocaleString()}</span>
+                    </div>
                   </div>
                 );
               }
@@ -59,6 +70,16 @@ export function RevenueChart({ data }: { data: { date: string; displayDate?: str
             strokeWidth={2}
             fillOpacity={1} 
             fill="url(#colorRevenue)" 
+            name="w/ Delivery"
+          />
+          <Area 
+            type="monotone" 
+            dataKey="subtotal" 
+            stroke="#10b981" 
+            strokeWidth={2}
+            fillOpacity={1} 
+            fill="url(#colorSubtotal)" 
+            name="w/o Delivery"
           />
         </AreaChart>
       </ResponsiveContainer>

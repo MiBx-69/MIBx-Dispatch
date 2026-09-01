@@ -170,11 +170,25 @@ export function OrdersClient({
     e.preventDefault();
     startTransition(() => {
       const params = new URLSearchParams();
-      if (currentStatus) params.set("status", currentStatus);
+      if (currentStatus && currentStatus !== "all") params.set("status", currentStatus);
       if (search) params.set("search", search);
       router.push(`/orders?${params.toString()}`);
     });
   };
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (search !== (currentSearch || "")) {
+        startTransition(() => {
+          const params = new URLSearchParams();
+          if (currentStatus && currentStatus !== "all") params.set("status", currentStatus);
+          if (search) params.set("search", search);
+          router.push(`/orders?${params.toString()}`);
+        });
+      }
+    }, 400);
+    return () => clearTimeout(handler);
+  }, [search, currentStatus, currentSearch, router]);
 
   const toggleSelect = (id: string) => {
     const next = new Set(selected);

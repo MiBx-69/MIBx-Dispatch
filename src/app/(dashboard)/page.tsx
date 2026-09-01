@@ -10,6 +10,7 @@ import { FinancialsWidget } from "@/components/dashboard/financials-widget";
 import { CourierPerformanceChart } from "@/components/dashboard/courier-performance-chart";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { FraudWidget } from "@/components/dashboard/fraud-widget";
+import { DispatchedProductsToday } from "@/components/dashboard/dispatched-today";
 import type { Order } from "@/types/database";
 
 export const metadata = { title: "Dashboard" };
@@ -51,41 +52,47 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // Fetch orders matching the date filter
   const { data: recentMonthOrders } = await supabase
     .from("orders")
-    .select("total_price, shopify_created_at, created_at, line_items, financial_status, fulfillment_status, internal_status, fraud_status")
+    .select("total_price, subtotal_price, shopify_created_at, created_at, line_items, financial_status, fulfillment_status, internal_status, fraud_status")
     .gte("shopify_created_at", startDateStr)
     .lte("shopify_created_at", endDateStr)
     .order("shopify_created_at", { ascending: false });
 
   // --- Data Processing for Dashboards ---
-  const orders = recentMonthOrders || [];
+  const orders = (recentMonthOrders || []).filter(o => o.internal_status !== 'cancelled');
   
   // 1. Revenue Chart
-  const revenueMap = new Map<string, number>();
+  const revenueMap = new Map<string, { total: number, subtotal: number }>();
   
   // Ensure we show at least a few days on the chart even if it's "Today"
   let daysDiff = differenceInDays(parseISO(endDateStr), parseISO(startDateStr));
   if (daysDiff < 7) {
      const tempStart = subDays(parseISO(endDateStr), 6);
      for (let i = 6; i >= 0; i--) {
-        revenueMap.set(format(subDays(parseISO(endDateStr), i), 'yyyy-MM-dd'), 0);
+        revenueMap.set(format(subDays(parseISO(endDateStr), i), 'yyyy-MM-dd'), { total: 0, subtotal: 0 });
      }
   } else {
      for (let i = daysDiff; i >= 0; i--) {
-        revenueMap.set(format(subDays(parseISO(endDateStr), i), 'yyyy-MM-dd'), 0);
+        revenueMap.set(format(subDays(parseISO(endDateStr), i), 'yyyy-MM-dd'), { total: 0, subtotal: 0 });
      }
   }
   
   orders.forEach((o: any) => {
+    if (o.internal_status === 'cancelled') return;
     if (!o.shopify_created_at) return;
     const dateStr = format(parseISO(o.shopify_created_at), 'yyyy-MM-dd');
     if (revenueMap.has(dateStr)) {
-      revenueMap.set(dateStr, revenueMap.get(dateStr)! + Number(o.total_price));
+      const current = revenueMap.get(dateStr)!;
+      revenueMap.set(dateStr, {
+        total: current.total + (Number(o.total_price) || 0),
+        subtotal: current.subtotal + (Number(o.subtotal_price) || 0)
+      });
     }
   });
-  const revenueData = Array.from(revenueMap.entries()).map(([date, revenue]) => ({ 
+  const revenueData = Array.from(revenueMap.entries()).map(([date, data]) => ({ 
     date, 
     displayDate: format(parseISO(date), "MMM d"),
-    revenue 
+    revenue: data.total,
+    subtotal: data.subtotal
   }));
 
   // 2. Top Products
@@ -114,6 +121,38 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     .sort((a, b) => b.qty - a.qty)
     .slice(0, 5);
 
+  // 2b. Dispatched Products Today
+  const startOfTodayStrLocal = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
+  const { data: dispatchesToday } = await supabase
+    .from("dispatches")
+    .select("dispatched_at, is_cancelled, orders(line_items)")
+    .gte("dispatched_at", startOfTodayStrLocal)
+    .eq("is_cancelled", false);
+
+  const dispatchedTodayMap = new Map<string, { id: string, title: string, variant: string, qty: number }>();
+  if (dispatchesToday) {
+    dispatchesToday.forEach((d: any) => {
+      const items = d.orders?.line_items;
+      if (Array.isArray(items)) {
+        items.forEach((item: any) => {
+          const key = `${item.product_id || item.title}-${item.variant_id || item.variant_title}`;
+          if (!dispatchedTodayMap.has(key)) {
+            dispatchedTodayMap.set(key, { 
+              id: key, 
+              title: item.title || item.name || 'Unknown', 
+              variant: item.variant_title || '', 
+              qty: 0
+            });
+          }
+          dispatchedTodayMap.get(key)!.qty += item.quantity || 1;
+        });
+      }
+    });
+  }
+  
+  const topDispatchedToday = Array.from(dispatchedTodayMap.values())
+    .sort((a, b) => b.qty - a.qty);
+
   // 3. Fulfillment Stats
   const fStats = {
     unfulfilled: 0,
@@ -136,7 +175,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     hold_orders: 0,
     orders_today: 0,
     dispatched_today: 0,
-    revenue_today: 0
+    revenue_today: 0,
+    subtotal_today: 0
   };
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -169,10 +209,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     // Today counts
     const createdDate = o.shopify_created_at ? format(parseISO(o.shopify_created_at), 'yyyy-MM-dd') : null;
     const sysCreatedDate = o.created_at ? format(parseISO(o.created_at), 'yyyy-MM-dd') : null;
-
-    if (createdDate === todayStr || sysCreatedDate === todayStr) {
+    const dateToUse = createdDate || sysCreatedDate;
+    
+    if (dateToUse === todayStr) {
       liveStats.orders_today++;
       liveStats.revenue_today += Number(o.total_price) || 0;
+      liveStats.subtotal_today += Number(o.subtotal_price) || 0;
     }
 
     // Courier Stats
@@ -207,7 +249,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     { label: "Dispatched", value: liveStats.dispatched_orders || 0, icon: Truck, color: "text-indigo-400", bg: "bg-indigo-500/10", href: "/orders?status=dispatched" },
     { label: "Delivered", value: liveStats.delivered_orders || 0, icon: CheckCircle, color: "text-emerald-400", bg: "bg-emerald-500/10", href: "/orders?status=delivered" },
     { label: "On Hold", value: liveStats.hold_orders || 0, icon: AlertCircle, color: "text-orange-400", bg: "bg-orange-500/10", href: "/orders?status=hold" },
-    { label: "Today's Revenue", value: `৳${Number(liveStats.revenue_today || 0).toLocaleString()}`, icon: TrendingUp, color: "text-violet-400", bg: "bg-violet-500/10", isText: true },
+    { label: "Today's Revenue", value: `৳${Number(liveStats.revenue_today || 0).toLocaleString()}`, subValue: `৳${Number(liveStats.subtotal_today || 0).toLocaleString()} w/o delivery`, icon: TrendingUp, color: "text-violet-400", bg: "bg-violet-500/10", isText: true },
   ];
 
   return (
@@ -262,13 +304,19 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       {/* Top Products & Stat Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Top Products */}
-        <div className="lg:col-span-2 rounded-2xl p-5 border border-zinc-800/50 bg-zinc-900">
+        <div className="lg:col-span-1 rounded-2xl p-5 border border-zinc-800/50 bg-zinc-900">
           <h2 className="text-sm font-semibold text-zinc-300 mb-4">Top Selling Products</h2>
           <TopProducts products={topProducts} />
         </div>
 
+        {/* Dispatched Today Products */}
+        <div className="lg:col-span-1 rounded-2xl p-5 border border-zinc-800/50 bg-zinc-900">
+          <h2 className="text-sm font-semibold text-zinc-300 mb-4">Dispatched Today</h2>
+          <DispatchedProductsToday products={topDispatchedToday} />
+        </div>
+
         {/* Quick Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
+        <div className="lg:col-span-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
           {statCards.map((card) => (
             <div
               key={card.label}
@@ -361,11 +409,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   );
 }
 
-function StatCardContent({ label, value, icon: Icon, color, isText }: any) {
+function StatCardContent({ label, value, subValue, icon: Icon, color, isText }: any) {
   return (
     <>
       <Icon className={`w-5 h-5 ${color} mb-2`} />
       <p className={`text-xl font-bold ${isText ? color : "text-white"}`}>{value}</p>
+      {subValue && <p className="text-xs font-semibold text-zinc-400 mt-1">{subValue}</p>}
       <p className="text-xs text-zinc-500 mt-0.5">{label}</p>
     </>
   );

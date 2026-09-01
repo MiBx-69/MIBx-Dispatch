@@ -52,6 +52,7 @@ async function runShopifySync(supabase: any, logId?: string, fullSync = false) {
   let cursor: string | undefined;
 
   const minCreatedAt = "2026-08-31T18:00:00Z";
+  let query = "";
 
   if (!fullSync) {
     const { data: latestOrder } = await supabase
