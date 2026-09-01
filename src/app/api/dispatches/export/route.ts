@@ -106,7 +106,7 @@ export async function GET(request: Request) {
     escapeCSV(d.dispatched_at ? new Date(d.dispatched_at).toLocaleString() : "")
   ]);
 
-  const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+  const csvContent = [headers.join(","), ...rows.map((r: string[]) => r.join(","))].join("\n");
 
   return new NextResponse(csvContent, {
     headers: {
