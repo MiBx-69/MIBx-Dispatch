@@ -18,6 +18,7 @@ import type { Order, OrderStatus } from "@/types/database";
 
 const STATUS_FILTERS = [
   { value: "all", label: "All" },
+  { value: "in_progress", label: "In progress" },
   { value: "pending", label: "Pending" },
   { value: "preparing", label: "Preparing" },
   { value: "dispatched", label: "Dispatched" },

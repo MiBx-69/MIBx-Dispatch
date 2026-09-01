@@ -9,7 +9,9 @@ export async function GET(request: NextRequest) {
   const supabase = createServiceClient();
   let query = supabase.from("orders").select("*").order("shopify_created_at", { ascending: false });
 
-  if (status !== "all") {
+  if (status === "in_progress") {
+    query = query.eq("fulfillment_status", "in_progress");
+  } else if (status !== "all") {
     query = query.eq("internal_status", status);
   }
 
