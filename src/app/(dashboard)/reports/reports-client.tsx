@@ -220,31 +220,35 @@ export function ReportsClient({
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-2xl">
-          <p className="text-sm font-medium text-zinc-400 mb-1">Total Revenue</p>
-          <p className="text-3xl font-bold text-white">৳{Number(totalGross).toLocaleString()}</p>
-          <p className="text-xs text-indigo-400 mt-1">Gross (With Delivery)</p>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+        <div className="bg-zinc-900 border border-zinc-800 p-4 lg:p-5 rounded-2xl flex flex-col justify-center">
+          <p className="text-xs lg:text-sm font-medium text-zinc-400 mb-1">Total Revenue</p>
+          <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-white truncate" title={`৳${Number(totalGross).toLocaleString()}`}>
+            ৳{Number(totalGross).toLocaleString()}
+          </p>
+          <p className="text-[10px] lg:text-xs text-indigo-400 mt-1 leading-tight">Gross (With Delivery)</p>
         </div>
-        <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-2xl">
-          <p className="text-sm font-medium text-zinc-400 mb-1">Net Revenue</p>
-          <p className="text-3xl font-bold text-emerald-400">৳{Number(totalSubtotal).toLocaleString()}</p>
-          <p className="text-xs text-emerald-400/80 mt-1">Subtotal (Without Delivery)</p>
+        <div className="bg-zinc-900 border border-zinc-800 p-4 lg:p-5 rounded-2xl flex flex-col justify-center">
+          <p className="text-xs lg:text-sm font-medium text-zinc-400 mb-1">Net Revenue</p>
+          <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-emerald-400 truncate" title={`৳${Number(totalSubtotal).toLocaleString()}`}>
+            ৳{Number(totalSubtotal).toLocaleString()}
+          </p>
+          <p className="text-[10px] lg:text-xs text-emerald-400/80 mt-1 leading-tight">Subtotal (No Delivery)</p>
         </div>
-        <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-2xl">
-          <p className="text-sm font-medium text-zinc-400 mb-1">Total Orders</p>
-          <p className="text-3xl font-bold text-white flex items-center gap-2">
-            <ShoppingCart className="w-5 h-5 text-zinc-500" />
+        <div className="bg-zinc-900 border border-zinc-800 p-4 lg:p-5 rounded-2xl flex flex-col justify-center">
+          <p className="text-xs lg:text-sm font-medium text-zinc-400 mb-1">Total Orders</p>
+          <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-white flex items-center gap-2 truncate">
+            <ShoppingCart className="w-4 h-4 lg:w-5 lg:h-5 text-zinc-500 shrink-0" />
             {orderStats.totalOrders}
           </p>
         </div>
-        <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-2xl">
-          <p className="text-sm font-medium text-zinc-400 mb-1">Dispatched</p>
-          <p className="text-3xl font-bold text-white flex items-center gap-2">
-            <Truck className="w-5 h-5 text-indigo-400" />
+        <div className="bg-zinc-900 border border-zinc-800 p-4 lg:p-5 rounded-2xl flex flex-col justify-center">
+          <p className="text-xs lg:text-sm font-medium text-zinc-400 mb-1">Dispatched</p>
+          <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-white flex items-center gap-2 truncate">
+            <Truck className="w-4 h-4 lg:w-5 lg:h-5 text-indigo-400 shrink-0" />
             {orderStats.dispatchedOrders}
           </p>
-          <p className="text-xs text-indigo-400 mt-1">৳{Number(totalDispatchedAmount).toLocaleString()} Value (With Delivery)</p>
+          <p className="text-[10px] lg:text-xs text-indigo-400 mt-1 leading-tight">৳{Number(totalDispatchedAmount).toLocaleString()} Value (With Delivery)</p>
         </div>
       </div>
 
