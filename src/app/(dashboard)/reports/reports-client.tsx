@@ -244,7 +244,7 @@ export function ReportsClient({
             <Truck className="w-5 h-5 text-indigo-400" />
             {orderStats.dispatchedOrders}
           </p>
-          <p className="text-xs text-indigo-400 mt-1">৳{Number(totalDispatchedAmount).toLocaleString()} Total Value</p>
+          <p className="text-xs text-indigo-400 mt-1">৳{Number(totalDispatchedAmount).toLocaleString()} Value (With Delivery)</p>
         </div>
       </div>
 
