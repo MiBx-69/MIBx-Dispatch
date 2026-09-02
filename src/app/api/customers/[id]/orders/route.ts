@@ -11,7 +11,7 @@ export async function GET(
 
     const { data: customer } = await supabase
       .from("customers")
-      .select("shopify_customer_id, phone")
+      .select("shopify_customer_id, phone, email")
       .eq("id", id)
       .single();
 
@@ -19,20 +19,16 @@ export async function GET(
       return NextResponse.json({ orders: [] });
     }
 
-    let query = supabase
+    const orConditions = [`customer_id.eq.${id}`];
+    if (customer.shopify_customer_id) orConditions.push(`customer_shopify_id.eq.${customer.shopify_customer_id}`);
+    if (customer.phone) orConditions.push(`customer_phone.eq.${customer.phone}`);
+    if (customer.email) orConditions.push(`customer_email.eq.${customer.email}`);
+
+    const { data: orders, error } = await supabase
       .from("orders")
       .select("*, dispatches(pathao_order_status, consignment_id)")
+      .or(orConditions.join(","))
       .order("shopify_created_at", { ascending: false });
-
-    if (customer.shopify_customer_id) {
-      query = query.eq("customer_shopify_id", customer.shopify_customer_id);
-    } else if (customer.phone) {
-      query = query.eq("customer_phone", customer.phone);
-    } else {
-      return NextResponse.json({ orders: [] });
-    }
-
-    const { data: orders, error } = await query;
 
     if (error) {
       throw error;
