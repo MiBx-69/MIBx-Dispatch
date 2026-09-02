@@ -51,7 +51,6 @@ export default function RootLayout({
       <body className={`${inter.variable} font-sans antialiased bg-zinc-950 text-zinc-50`}>
         <NextTopLoader color="#6366f1" showSpinner={false} height={3} />
         {children}
-        <InstallPWA />
         <Toaster
           theme="dark"
           position="top-right"
