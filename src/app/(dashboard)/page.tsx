@@ -267,44 +267,46 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       {/* Period Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         {/* Orders */}
-        <div className="rounded-2xl p-5 bg-zinc-900 border border-zinc-800/50 shadow-sm relative overflow-hidden group">
+        <div className="rounded-2xl p-4 lg:p-5 bg-zinc-900 border border-zinc-800/50 shadow-sm relative overflow-hidden group flex flex-col justify-center">
           <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
             <Package className="w-16 h-16 text-zinc-100" />
           </div>
           <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider relative z-10">Orders</p>
-          <p className="text-4xl font-bold text-white mt-2 relative z-10">{liveStats.orders_period || 0}</p>
+          <p className="text-2xl lg:text-4xl font-bold text-white mt-2 relative z-10 truncate">{liveStats.orders_period || 0}</p>
         </div>
 
         {/* Sales */}
-        <div className="rounded-2xl p-5 bg-emerald-500/5 border border-emerald-500/20 shadow-sm relative overflow-hidden group">
+        <div className="rounded-2xl p-4 lg:p-5 bg-emerald-500/5 border border-emerald-500/20 shadow-sm relative overflow-hidden group flex flex-col justify-center">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <TrendingUp className="w-16 h-16 text-emerald-400" />
           </div>
           <p className="text-xs text-emerald-400/80 font-medium uppercase tracking-wider relative z-10">Sales</p>
-          <p className="text-4xl font-bold text-emerald-400 mt-2 relative z-10">৳{Number(liveStats.revenue_period || 0).toLocaleString()}</p>
+          <p className="text-2xl lg:text-4xl font-bold text-emerald-400 mt-2 relative z-10 truncate" title={`৳${Number(liveStats.revenue_period || 0).toLocaleString()}`}>
+            ৳{Number(liveStats.revenue_period || 0).toLocaleString()}
+          </p>
         </div>
 
         {/* Dispatched */}
-        <div className="rounded-2xl p-5 bg-indigo-500/5 border border-indigo-500/20 shadow-sm relative overflow-hidden group">
+        <div className="rounded-2xl p-4 lg:p-5 bg-indigo-500/5 border border-indigo-500/20 shadow-sm relative overflow-hidden group flex flex-col justify-center">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <Truck className="w-16 h-16 text-indigo-400" />
           </div>
           <p className="text-xs text-indigo-400/80 font-medium uppercase tracking-wider relative z-10">Dispatched</p>
-          <div className="flex items-baseline gap-2 relative z-10 mt-2">
-            <p className="text-4xl font-bold text-indigo-400">{liveStats.dispatched_period || 0}</p>
-            <Link href="/dispatches" className="text-[10px] text-indigo-500/60 hover:text-indigo-400 transition-colors uppercase tracking-widest font-semibold border border-indigo-500/20 px-2 py-0.5 rounded-full">
+          <div className="flex items-center gap-2 relative z-10 mt-2 truncate">
+            <p className="text-2xl lg:text-4xl font-bold text-indigo-400 truncate">{liveStats.dispatched_period || 0}</p>
+            <Link href="/dispatches" className="text-[10px] text-indigo-500/60 hover:text-indigo-400 transition-colors uppercase tracking-widest font-semibold border border-indigo-500/20 px-2 py-0.5 rounded-full shrink-0">
               View
             </Link>
           </div>
         </div>
 
         {/* Cancelled */}
-        <div className="rounded-2xl p-5 bg-rose-500/5 border border-rose-500/20 shadow-sm relative overflow-hidden group">
+        <div className="rounded-2xl p-4 lg:p-5 bg-rose-500/5 border border-rose-500/20 shadow-sm relative overflow-hidden group flex flex-col justify-center">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <XCircle className="w-16 h-16 text-rose-400" />
           </div>
           <p className="text-xs text-rose-400/80 font-medium uppercase tracking-wider relative z-10">Cancelled</p>
-          <p className="text-4xl font-bold text-rose-400 mt-2 relative z-10">{liveStats.cancelled_period || 0}</p>
+          <p className="text-2xl lg:text-4xl font-bold text-rose-400 mt-2 relative z-10 truncate">{liveStats.cancelled_period || 0}</p>
         </div>
       </div>
 

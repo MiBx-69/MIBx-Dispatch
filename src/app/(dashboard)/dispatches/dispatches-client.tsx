@@ -236,7 +236,7 @@ export function DispatchesClient({
 
           return (
             <div key={d.id} className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-all">
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 sm:gap-3">
                 <div className="flex-1 min-w-0">
                   {/* Consignment ID */}
                   <div className="flex items-center gap-2 flex-wrap">
@@ -271,8 +271,8 @@ export function DispatchesClient({
                   </div>
                 </div>
 
-                <div className="text-right shrink-0 flex flex-col items-end">
-                  <div className="flex items-center gap-3">
+                <div className="w-full sm:w-auto sm:text-right shrink-0 flex flex-col sm:items-end gap-3 sm:gap-0">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                     {order && (
                       <button
                         onClick={() => setDispatchOrder(order)}
@@ -299,12 +299,12 @@ export function DispatchesClient({
                       href={trackingUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                      className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors ml-auto sm:ml-0"
                     >
                       Track <ExternalLink size={10} />
                     </a>
                   </div>
-                  <p className="text-xs text-zinc-600 mt-2">
+                  <p className="text-xs text-zinc-600 sm:mt-2 text-right sm:text-right w-full sm:w-auto">
                     {new Date(d.dispatched_at).toLocaleDateString("en-BD", {
                       month: "short",
                       day: "numeric",
