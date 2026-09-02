@@ -70,13 +70,14 @@ async function processShopifyWebhook(
         if (isNew) {
           await logOrderEvent(payload.id.toString(), "SYNCED", "Order imported from Shopify via webhook");
           
-          // Automatically run fraud check in background
-          performFraudCheck(payload.id.toString(), supabase)
-            .then(res => console.log(`Auto fraud check for ${payload.id}: ${res.fraud_status}`))
-            .catch(e => console.error(`Auto fraud check failed for ${payload.id}:`, e));
-
-          // Fire and forget SMS
-          sendOrderConfirmationSMS(supabase, payload).catch(e => console.error("Order SMS Error:", e));
+          // Await background tasks so they don't get terminated by serverless environment
+          await Promise.allSettled([
+            performFraudCheck(payload.id.toString(), supabase)
+              .then(res => console.log(`Auto fraud check for ${payload.id}: ${res.fraud_status}`))
+              .catch(e => console.error(`Auto fraud check failed for ${payload.id}:`, e)),
+            sendOrderConfirmationSMS(supabase, payload)
+              .catch(e => console.error("Order SMS Error:", e))
+          ]);
         }
         break;
       }
@@ -96,8 +97,8 @@ async function processShopifyWebhook(
           })
           .eq("shopify_order_id", payload.id);
         
-        // Fire and forget cancelled SMS
-        sendOrderCancelledSMS(supabase, payload).catch(e => console.error("Order Cancelled SMS Error:", e));
+        // Await the SMS so it doesn't get cancelled by serverless termination
+        await sendOrderCancelledSMS(supabase, payload).catch(e => console.error("Order Cancelled SMS Error:", e));
         break;
 
       case "orders/fulfilled":

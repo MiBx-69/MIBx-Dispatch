@@ -131,36 +131,36 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     .sort((a, b) => b.qty - a.qty)
     .slice(0, 5);
 
-  // 2b. Dispatched Products Today
-  const startOfTodayStrLocal = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
-  const { data: dispatchesToday } = await supabase
+  // 2b. Dispatched Products in Period
+  const { data: dispatchesInPeriod } = await supabase
     .from("dispatches")
     .select("dispatched_at, is_cancelled, orders(line_items)")
-    .gte("dispatched_at", startOfTodayStrLocal)
+    .gte("dispatched_at", startDateStr)
+    .lte("dispatched_at", endDateStr)
     .eq("is_cancelled", false);
 
-  const dispatchedTodayMap = new Map<string, { id: string, title: string, variant: string, qty: number }>();
-  if (dispatchesToday) {
-    dispatchesToday.forEach((d: any) => {
+  const dispatchedPeriodMap = new Map<string, { id: string, title: string, variant: string, qty: number }>();
+  if (dispatchesInPeriod) {
+    dispatchesInPeriod.forEach((d: any) => {
       const items = d.orders?.line_items;
       if (Array.isArray(items)) {
         items.forEach((item: any) => {
           const key = `${item.product_id || item.title}-${item.variant_id || item.variant_title}`;
-          if (!dispatchedTodayMap.has(key)) {
-            dispatchedTodayMap.set(key, { 
+          if (!dispatchedPeriodMap.has(key)) {
+            dispatchedPeriodMap.set(key, { 
               id: key, 
               title: item.title || item.name || 'Unknown', 
               variant: item.variant_title || '', 
               qty: 0
             });
           }
-          dispatchedTodayMap.get(key)!.qty += item.quantity || 1;
+          dispatchedPeriodMap.get(key)!.qty += item.quantity || 1;
         });
       }
     });
   }
   
-  const topDispatchedToday = Array.from(dispatchedTodayMap.values())
+  const topDispatchedPeriod = Array.from(dispatchedPeriodMap.values())
     .sort((a, b) => b.qty - a.qty);
 
   // 3. Fulfillment Stats
@@ -183,14 +183,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     dispatched_orders: 0,
     delivered_orders: 0,
     hold_orders: 0,
-    orders_today: 0,
-    dispatched_today: 0,
-    cancelled_today: 0,
-    revenue_today: 0,
-    subtotal_today: 0
+    orders_period: 0,
+    dispatched_period: 0,
+    cancelled_period: 0,
+    revenue_period: 0,
+    subtotal_period: 0
   };
 
-  const todayStr = format(new Date(), 'yyyy-MM-dd');
   let pendingCOD = 0;
   let deliveredCOD = 0;
   let returnedCOD = 0;
@@ -217,18 +216,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     else if (o.internal_status === 'delivered') liveStats.delivered_orders++;
     else if (o.internal_status === 'hold') liveStats.hold_orders++;
 
-    // Today counts
-    const createdDate = o.shopify_created_at ? format(parseISO(o.shopify_created_at), 'yyyy-MM-dd') : null;
-    const sysCreatedDate = o.created_at ? format(parseISO(o.created_at), 'yyyy-MM-dd') : null;
-    const dateToUse = createdDate || sysCreatedDate;
-    
-    if (dateToUse === todayStr) {
-      liveStats.orders_today++;
-      liveStats.revenue_today += Number(o.total_price) || 0;
-      liveStats.subtotal_today += Number(o.subtotal_price) || 0;
-      if (o.internal_status === 'cancelled') {
-        liveStats.cancelled_today++;
-      }
+    // Period counts (all orders in this array fall within the selected date period)
+    liveStats.orders_period++;
+    liveStats.revenue_period += Number(o.total_price) || 0;
+    liveStats.subtotal_period += Number(o.subtotal_price) || 0;
+    if (o.internal_status === 'cancelled') {
+      liveStats.cancelled_period++;
     }
 
     // Courier Stats
@@ -247,13 +240,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     }
   });
 
-  const todayISO = format(new Date(), 'yyyy-MM-dd') + 'T00:00:00Z';
-  const { count: dispatchedTodayCount } = await supabase
+  const { count: dispatchedPeriodCount } = await supabase
     .from("dispatches")
     .select("id", { count: 'exact' })
-    .gte("dispatched_at", todayISO);
+    .gte("dispatched_at", startDateStr)
+    .lte("dispatched_at", endDateStr);
 
-  liveStats.dispatched_today = dispatchedTodayCount || 0;
+  liveStats.dispatched_period = dispatchedPeriodCount || 0;
 
   const courierStats = Array.from(statusCountMap.entries()).map(([status, count]) => ({ status, count }));
 
@@ -263,54 +256,54 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     { label: "Dispatched", value: liveStats.dispatched_orders || 0, icon: Truck, color: "text-indigo-400", bg: "bg-indigo-500/10", href: "/orders?status=dispatched" },
     { label: "Delivered", value: liveStats.delivered_orders || 0, icon: CheckCircle, color: "text-emerald-400", bg: "bg-emerald-500/10", href: "/orders?status=delivered" },
     { label: "On Hold", value: liveStats.hold_orders || 0, icon: AlertCircle, color: "text-orange-400", bg: "bg-orange-500/10", href: "/orders?status=hold" },
-    { label: "Today's Revenue", value: `৳${Number(liveStats.revenue_today || 0).toLocaleString()}`, subValue: `৳${Number(liveStats.subtotal_today || 0).toLocaleString()} w/o delivery`, icon: TrendingUp, color: "text-violet-400", bg: "bg-violet-500/10", isText: true },
+    { label: "Today's Revenue", value: `৳${Number(liveStats.revenue_period || 0).toLocaleString()}`, subValue: `৳${Number(liveStats.subtotal_period || 0).toLocaleString()} w/o delivery`, icon: TrendingUp, color: "text-violet-400", bg: "bg-violet-500/10", isText: true },
   ];
 
   return (
     <div className="space-y-6 animate-fade-in">
       <DashboardHeader />
 
-      {/* Today's Summary */}
+      {/* Period Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-        {/* Orders Today */}
+        {/* Orders */}
         <div className="rounded-2xl p-5 bg-zinc-900 border border-zinc-800/50 shadow-sm relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
             <Package className="w-16 h-16 text-zinc-100" />
           </div>
-          <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider relative z-10">Orders Today</p>
-          <p className="text-4xl font-bold text-white mt-2 relative z-10">{liveStats.orders_today || 0}</p>
+          <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider relative z-10">Orders</p>
+          <p className="text-4xl font-bold text-white mt-2 relative z-10">{liveStats.orders_period || 0}</p>
         </div>
 
-        {/* Sales Today */}
+        {/* Sales */}
         <div className="rounded-2xl p-5 bg-emerald-500/5 border border-emerald-500/20 shadow-sm relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <TrendingUp className="w-16 h-16 text-emerald-400" />
           </div>
-          <p className="text-xs text-emerald-400/80 font-medium uppercase tracking-wider relative z-10">Sales Today</p>
-          <p className="text-4xl font-bold text-emerald-400 mt-2 relative z-10">৳{Number(liveStats.revenue_today || 0).toLocaleString()}</p>
+          <p className="text-xs text-emerald-400/80 font-medium uppercase tracking-wider relative z-10">Sales</p>
+          <p className="text-4xl font-bold text-emerald-400 mt-2 relative z-10">৳{Number(liveStats.revenue_period || 0).toLocaleString()}</p>
         </div>
 
-        {/* Dispatched Today */}
+        {/* Dispatched */}
         <div className="rounded-2xl p-5 bg-indigo-500/5 border border-indigo-500/20 shadow-sm relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <Truck className="w-16 h-16 text-indigo-400" />
           </div>
-          <p className="text-xs text-indigo-400/80 font-medium uppercase tracking-wider relative z-10">Dispatched Today</p>
+          <p className="text-xs text-indigo-400/80 font-medium uppercase tracking-wider relative z-10">Dispatched</p>
           <div className="flex items-baseline gap-2 relative z-10 mt-2">
-            <p className="text-4xl font-bold text-indigo-400">{liveStats.dispatched_today || 0}</p>
+            <p className="text-4xl font-bold text-indigo-400">{liveStats.dispatched_period || 0}</p>
             <Link href="/dispatches" className="text-[10px] text-indigo-500/60 hover:text-indigo-400 transition-colors uppercase tracking-widest font-semibold border border-indigo-500/20 px-2 py-0.5 rounded-full">
               View
             </Link>
           </div>
         </div>
 
-        {/* Cancelled Today */}
+        {/* Cancelled */}
         <div className="rounded-2xl p-5 bg-rose-500/5 border border-rose-500/20 shadow-sm relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <XCircle className="w-16 h-16 text-rose-400" />
           </div>
-          <p className="text-xs text-rose-400/80 font-medium uppercase tracking-wider relative z-10">Cancelled Today</p>
-          <p className="text-4xl font-bold text-rose-400 mt-2 relative z-10">{liveStats.cancelled_today || 0}</p>
+          <p className="text-xs text-rose-400/80 font-medium uppercase tracking-wider relative z-10">Cancelled</p>
+          <p className="text-4xl font-bold text-rose-400 mt-2 relative z-10">{liveStats.cancelled_period || 0}</p>
         </div>
       </div>
 
@@ -349,10 +342,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <TopProducts products={topProducts} />
         </div>
 
-        {/* Dispatched Today Products */}
+        {/* Dispatched Products */}
         <div className="lg:col-span-1 rounded-2xl p-5 border border-zinc-800/50 bg-zinc-900">
-          <h2 className="text-sm font-semibold text-zinc-300 mb-4">Dispatched Today</h2>
-          <DispatchedProductsToday products={topDispatchedToday} />
+          <h2 className="text-sm font-semibold text-zinc-300 mb-4">Dispatched Products</h2>
+          <DispatchedProductsToday products={topDispatchedPeriod} />
         </div>
 
         {/* Quick Stats Grid */}
