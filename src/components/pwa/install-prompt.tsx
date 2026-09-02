@@ -90,9 +90,9 @@ export function InstallPWA() {
       <div className="flex items-start justify-between gap-4 max-w-md mx-auto">
         <div className="flex items-center gap-4">
           <img 
-            src="/web-app-manifest-192x192.png" 
+            src="/logo.png" 
             alt="MiBx Dispatch Logo" 
-            className="w-12 h-12 rounded-xl border border-zinc-700 shadow-md"
+            className="w-12 h-12 rounded-xl border border-zinc-700 shadow-md object-cover"
           />
           <div>
             <h3 className="text-white font-semibold leading-tight">MiBx Dispatch</h3>
