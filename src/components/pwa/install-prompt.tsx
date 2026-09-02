@@ -8,6 +8,7 @@ export function InstallPWA() {
   const [promptInstall, setPromptInstall] = useState<any>(null);
   const [isStandalone, setIsStandalone] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
 
   useEffect(() => {
     // 1. Register Service Worker
@@ -20,9 +21,15 @@ export function InstallPWA() {
     }
 
     // 2. Check if already installed / standalone
-    if (window.matchMedia("(display-mode: standalone)").matches) {
+    if (window.matchMedia("(display-mode: standalone)").matches || (window.navigator as any).standalone === true) {
       setIsStandalone(true);
       return;
+    }
+
+    // Detect iOS
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    if (/iphone|ipad|ipod/.test(userAgent)) {
+      setIsIOS(true);
     }
 
     // 3. Listen for the install prompt event
@@ -44,6 +51,11 @@ export function InstallPWA() {
   }, []);
 
   const handleInstall = () => {
+    if (isIOS) {
+      alert("To install on iOS: Tap the Share button at the bottom of Safari, then scroll down and tap 'Add to Home Screen'.");
+      return;
+    }
+    
     if (!promptInstall) {
       return;
     }
@@ -62,7 +74,12 @@ export function InstallPWA() {
     localStorage.setItem("pwa-prompt-dismissed", "true");
   };
 
-  if (!supportsPWA || isStandalone || isDismissed) {
+  if (isStandalone || isDismissed) {
+    return null;
+  }
+
+  // If not iOS and no install prompt is ready, don't show yet.
+  if (!isIOS && !supportsPWA) {
     return null;
   }
 
@@ -101,7 +118,7 @@ export function InstallPWA() {
           className="w-full flex items-center justify-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white font-medium py-3 px-4 rounded-xl transition-all"
         >
           <Download className="w-5 h-5" />
-          Install App
+          {isIOS ? "How to Install (iOS)" : "Install App"}
         </button>
       </div>
     </div>
