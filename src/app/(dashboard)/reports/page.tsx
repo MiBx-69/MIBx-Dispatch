@@ -42,7 +42,7 @@ export default async function ReportsPage({
   // 2. Fetch Dispatches in date range
   const { data: dispatchesData } = await supabase
     .from("dispatches")
-    .select("dispatched_at, is_cancelled, orders(line_items)")
+    .select("dispatched_at, is_cancelled, orders(line_items, total_price)")
     .gte("dispatched_at", startDateStr)
     .lte("dispatched_at", endDateStr)
     .eq("is_cancelled", false);
@@ -150,6 +150,10 @@ export default async function ReportsPage({
     returnedOrders: orders.filter((o: any) => o.internal_status === 'returned').length,
   };
 
+  const totalDispatchedAmount = dispatches.reduce((acc: number, d: any) => {
+    return acc + (Number(d.orders?.total_price) || 0);
+  }, 0);
+
   return (
     <ReportsClient 
       revenueData={revenueData}
@@ -158,6 +162,7 @@ export default async function ReportsPage({
       orderStats={orderStats}
       totalGross={totalGross}
       totalSubtotal={totalSubtotal}
+      totalDispatchedAmount={totalDispatchedAmount}
       initialStartDate={startDateStr}
       initialEndDate={endDateStr}
       initialFilterType={params.filterType || "last_30_days"}
