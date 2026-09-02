@@ -57,8 +57,10 @@ export function InstallPWA() {
     }
     
     if (!promptInstall) {
+      alert("To install: Tap the 3-dot menu (⋮) in your browser and select 'Install app' or 'Add to Home screen'.");
       return;
     }
+
     promptInstall.prompt();
     promptInstall.userChoice.then((choiceResult: { outcome: string }) => {
       if (choiceResult.outcome === "accepted") {
@@ -75,11 +77,6 @@ export function InstallPWA() {
   };
 
   if (isStandalone || isDismissed) {
-    return null;
-  }
-
-  // If not iOS and no install prompt is ready, don't show yet.
-  if (!isIOS && !supportsPWA) {
     return null;
   }
 
@@ -118,7 +115,7 @@ export function InstallPWA() {
           className="w-full flex items-center justify-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white font-medium py-3 px-4 rounded-xl transition-all"
         >
           <Download className="w-5 h-5" />
-          {isIOS ? "How to Install (iOS)" : "Install App"}
+          {isIOS || !promptInstall ? "How to Install" : "Install App"}
         </button>
       </div>
     </div>
