@@ -1,7 +1,9 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { DispatchesClient } from "./dispatches-client";
+import { Metadata } from "next";
 
-export const metadata = { title: "Dispatches" };
+export const metadata: Metadata = { title: "Dispatches" };
+export const dynamic = "force-dynamic";
 
 export default async function DispatchesPage({
   searchParams,

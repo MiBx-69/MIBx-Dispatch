@@ -14,6 +14,7 @@ import { DispatchedProductsToday } from "@/components/dashboard/dispatched-today
 import type { Order } from "@/types/database";
 
 export const metadata = { title: "Dashboard" };
+export const dynamic = "force-dynamic";
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ dateFilter?: string }> }) {
   const supabase = createServiceClient();

@@ -4,6 +4,7 @@ import { ReportsClient } from "./reports-client";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Reports" };
+export const dynamic = "force-dynamic";
 
 export default async function ReportsPage({
   searchParams,

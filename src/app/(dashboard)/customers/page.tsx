@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { CustomersClient } from "./customers-client";
 
 export const metadata = { title: "Customers" };
+export const dynamic = "force-dynamic";
 
 export default async function CustomersPage({
   searchParams,
