@@ -4,6 +4,8 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { TopBar } from "@/components/layout/top-bar";
 
+import { ForcePasswordResetModal } from "@/components/force-password-reset-modal";
+
 export default async function DashboardLayout({
   children,
 }: {
@@ -20,8 +22,12 @@ export default async function DashboardLayout({
     .eq("user_id", user.id)
     .single();
 
+  const forcePasswordReset = user.user_metadata?.force_password_reset === true;
+
   return (
     <div className="flex h-dvh bg-zinc-950 overflow-hidden">
+      {forcePasswordReset && <ForcePasswordResetModal />}
+      
       {/* Desktop sidebar */}
       <Sidebar profile={profile} />
 

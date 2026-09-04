@@ -170,13 +170,16 @@ export function AccountTabs({ userProfile, teamProfiles }: { userProfile: any, t
               </ActionForm>
             </div>
             
-            <div className="p-0">
+            <div className="p-0 overflow-x-auto">
               <table className="w-full text-left text-sm whitespace-nowrap">
                 <thead className="bg-zinc-950 border-b border-zinc-800 text-zinc-500 uppercase tracking-wider text-[10px]">
                   <tr>
                     <th className="px-6 py-3 font-semibold">User</th>
                     <th className="px-6 py-3 font-semibold">Role</th>
                     <th className="px-6 py-3 font-semibold">Joined</th>
+                    {userProfile?.role === 'admin' && (
+                      <th className="px-6 py-3 font-semibold text-right">Actions</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/50">
@@ -195,11 +198,33 @@ export function AccountTabs({ userProfile, teamProfiles }: { userProfile: any, t
                       <td className="px-6 py-4 text-zinc-500">
                         {new Date(profile.created_at).toLocaleDateString()}
                       </td>
+                      {userProfile?.role === 'admin' && (
+                        <td className="px-6 py-4 text-right">
+                          {profile.user_id !== userProfile.user_id && (
+                            <button
+                              onClick={async () => {
+                                if (confirm("Are you sure you want to remove this user?")) {
+                                  const { removeTeamMember } = await import("./actions");
+                                  const result = await removeTeamMember(profile.user_id);
+                                  if (result?.error) {
+                                    toast.error(result.error);
+                                  } else {
+                                    toast.success("User removed successfully.");
+                                  }
+                                }
+                              }}
+                              className="text-xs font-medium text-red-500 hover:text-red-400 transition-colors"
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   ))}
                   {teamProfiles.length === 0 && (
                     <tr>
-                      <td colSpan={3} className="px-6 py-8 text-center text-zinc-500">
+                      <td colSpan={userProfile?.role === 'admin' ? 4 : 3} className="px-6 py-8 text-center text-zinc-500">
                         No team members found.
                       </td>
                     </tr>
