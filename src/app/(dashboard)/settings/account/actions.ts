@@ -96,13 +96,74 @@ export async function inviteTeamMember(formData: FormData) {
       email,
       `You've been invited to ${appName}`,
       `
-      <div style="font-family: sans-serif; padding: 20px;">
-        <h2>Welcome to ${appName}!</h2>
-        <p>You have been invited by ${user.user_metadata?.full_name || user.email}.</p>
-        <p>Your temporary password is: <strong>${tempPassword}</strong></p>
-        <p>Please log in at <a href="${appUrl}/login">${appUrl}/login</a> using your email and this temporary password.</p>
-        <p>You will be prompted to reset your password upon your first login.</p>
-      </div>
+      <!DOCTYPE html>
+      <html>
+      <body style="margin: 0; padding: 0; background-color: #09090b; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f4f4f5;">
+        <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #09090b; padding: 40px 0;">
+          <tr>
+            <td align="center">
+              <table width="100%" max-width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width: 600px; background-color: #18181b; border: 1px solid #27272a; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+                
+                <!-- Header -->
+                <tr>
+                  <td style="padding: 40px 40px 20px 40px; text-align: center;">
+                    <h1 style="margin: 0; font-size: 24px; font-weight: 700; color: #ffffff; letter-spacing: -0.5px;">Welcome to ${appName}</h1>
+                  </td>
+                </tr>
+
+                <!-- Content -->
+                <tr>
+                  <td style="padding: 20px 40px;">
+                    <p style="margin: 0 0 24px 0; font-size: 15px; line-height: 24px; color: #a1a1aa;">
+                      You have been invited by <strong>${user.user_metadata?.full_name || user.email}</strong> to join the team.
+                    </p>
+
+                    <div style="background-color: #09090b; border: 1px solid #27272a; border-radius: 8px; padding: 24px; margin-bottom: 32px;">
+                      <p style="margin: 0 0 8px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: #71717a; font-weight: 600;">Your Login Details</p>
+                      
+                      <p style="margin: 0 0 12px 0; font-size: 15px; color: #e4e4e7;">
+                        <span style="color: #a1a1aa; display: inline-block; width: 80px;">Email:</span> 
+                        <strong>${email}</strong>
+                      </p>
+                      
+                      <p style="margin: 0; font-size: 15px; color: #e4e4e7;">
+                        <span style="color: #a1a1aa; display: inline-block; width: 80px;">Password:</span> 
+                        <span style="background-color: #27272a; padding: 4px 8px; border-radius: 4px; font-family: monospace; font-size: 16px; color: #6366f1; letter-spacing: 1px; font-weight: bold;">${tempPassword}</span>
+                      </p>
+                    </div>
+
+                    <p style="margin: 0 0 24px 0; font-size: 14px; line-height: 22px; color: #a1a1aa;">
+                      For security reasons, you will be required to choose a new private password immediately upon your first login.
+                    </p>
+
+                    <!-- Button -->
+                    <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                      <tr>
+                        <td align="center" style="padding-top: 10px;">
+                          <a href="${appUrl}/login" style="display: inline-block; background-color: #6366f1; color: #ffffff; font-size: 15px; font-weight: 600; text-decoration: none; padding: 14px 32px; border-radius: 8px; transition: background-color 0.2s;">
+                            Log in to your account
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Footer -->
+                <tr>
+                  <td style="padding: 30px 40px; text-align: center; border-top: 1px solid #27272a; background-color: #121214;">
+                    <p style="margin: 0; font-size: 12px; color: #71717a;">
+                      If you did not expect this invitation, you can safely ignore this email.
+                    </p>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
       `
     );
   }
