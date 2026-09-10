@@ -32,7 +32,7 @@ export default async function ReportsPage({
   // 1. Fetch Orders in date range
   const { data: ordersData } = await supabase
     .from("orders")
-    .select("total_price, subtotal_price, shopify_created_at, created_at, line_items, financial_status, fulfillment_status, internal_status, fraud_status")
+    .select("total_price, subtotal_price, shopify_created_at, created_at, line_items, financial_status, fulfillment_status, internal_status, fraud_status, returned_at, return_reason, return_delivery_fee")
     .gte("shopify_created_at", startDateStr)
     .lte("shopify_created_at", endDateStr)
     .order("shopify_created_at", { ascending: false });
@@ -49,9 +49,18 @@ export default async function ReportsPage({
     
   const dispatches = dispatchesData || [];
 
+  // 3. Fetch Returns in date range (from returns table for accurate fee tracking)
+  const { data: returnsData } = await supabase
+    .from("returns")
+    .select("id, order_total, return_delivery_fee, returned_at, return_reason, return_source, return_type, is_verified, refund_amount")
+    .gte("returned_at", startDateStr)
+    .lte("returned_at", endDateStr);
+
+  const returns = returnsData || [];
+
   // --- Process Data for Charts ---
 
-  // A. Revenue Data
+  // A. Revenue Data (now excludes cancelled AND returned)
   const revenueMap = new Map<string, { total: number, subtotal: number }>();
   let daysDiff = differenceInDays(parseISO(endDateStr), parseISO(startDateStr));
   if (daysDiff < 7) {
@@ -70,14 +79,16 @@ export default async function ReportsPage({
   orders.forEach((o: any) => {
     if (!o.shopify_created_at) return;
     const dateStr = format(parseISO(o.shopify_created_at), 'yyyy-MM-dd');
+    
+    const orderTotal = Number(o.total_price) || 0;
+    const orderSubtotal = Number(o.subtotal_price) || 0;
+    
+    // Count ALL orders for gross totals (including returned/cancelled for reference)
+    totalGross += orderTotal;
+    totalSubtotal += orderSubtotal;
+
     if (revenueMap.has(dateStr)) {
       const current = revenueMap.get(dateStr)!;
-      const orderTotal = Number(o.total_price) || 0;
-      const orderSubtotal = Number(o.subtotal_price) || 0;
-      
-      totalGross += orderTotal;
-      totalSubtotal += orderSubtotal;
-      
       revenueMap.set(dateStr, {
         total: current.total + orderTotal,
         subtotal: current.subtotal + orderSubtotal
@@ -141,13 +152,42 @@ export default async function ReportsPage({
     .sort((a, b) => b.qty - a.qty)
     .slice(0, 10);
 
+  // D. Return-adjusted calculations
+  const returnedOrders = orders.filter((o: any) => o.internal_status === 'returned');
+  const cancelledOrders = orders.filter((o: any) => o.internal_status === 'cancelled');
+  const deliveredOrders = orders.filter((o: any) => o.internal_status === 'delivered');
+
+  const returnedRevenue = returnedOrders.reduce((acc: number, o: any) => acc + (Number(o.total_price) || 0), 0);
+  const cancelledRevenue = cancelledOrders.reduce((acc: number, o: any) => acc + (Number(o.total_price) || 0), 0);
+  const deliveredRevenue = deliveredOrders.reduce((acc: number, o: any) => acc + (Number(o.total_price) || 0), 0);
+
+  // Return delivery fees from the returns table (more accurate than order-level)
+  const totalReturnDeliveryFees = returns.reduce((acc: number, r: any) => acc + (Number(r.return_delivery_fee) || 0), 0);
+
+  // Partial return deductions: sum of refund_amount from verified partial returns
+  const partialReturnDeductions = returns
+    .filter((r: any) => r.return_type === 'partial' && r.is_verified && r.refund_amount)
+    .reduce((acc: number, r: any) => acc + (Number(r.refund_amount) || 0), 0);
+
+  // Total returned = full returns (from order status) + partial return deductions
+  const totalReturnedRevenue = returnedRevenue + partialReturnDeductions;
+
+  // Net collectible = Total Gross - Cancelled - Full Returns - Partial Deductions
+  const netCollectibleRevenue = totalGross - cancelledRevenue - totalReturnedRevenue;
+
+  // Success rate = Delivered / (Delivered + Returned) * 100
+  const totalFinalizedOrders = deliveredOrders.length + returnedOrders.length;
+  const successRate = totalFinalizedOrders > 0
+    ? Math.round((deliveredOrders.length / totalFinalizedOrders) * 100)
+    : 100;
+
   // General Order Stats
   const orderStats = {
     totalOrders: orders.length,
     dispatchedOrders: dispatches.length,
-    deliveredOrders: orders.filter((o: any) => o.internal_status === 'delivered').length,
-    cancelledOrders: orders.filter((o: any) => o.internal_status === 'cancelled').length,
-    returnedOrders: orders.filter((o: any) => o.internal_status === 'returned').length,
+    deliveredOrders: deliveredOrders.length,
+    cancelledOrders: cancelledOrders.length,
+    returnedOrders: returnedOrders.length,
   };
 
   const totalDispatchedAmount = dispatches.reduce((acc: number, d: any) => {
@@ -163,6 +203,13 @@ export default async function ReportsPage({
       totalGross={totalGross}
       totalSubtotal={totalSubtotal}
       totalDispatchedAmount={totalDispatchedAmount}
+      returnedRevenue={totalReturnedRevenue}
+      cancelledRevenue={cancelledRevenue}
+      deliveredRevenue={deliveredRevenue}
+      netCollectibleRevenue={netCollectibleRevenue}
+      totalReturnDeliveryFees={totalReturnDeliveryFees}
+      partialReturnDeductions={partialReturnDeductions}
+      successRate={successRate}
       initialStartDate={startDateStr}
       initialEndDate={endDateStr}
       initialFilterType={params.filterType || "last_30_days"}

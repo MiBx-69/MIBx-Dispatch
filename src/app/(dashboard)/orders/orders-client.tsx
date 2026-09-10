@@ -5,15 +5,19 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   Search, Filter, ChevronLeft, ChevronRight,
-  Truck, Package, X, CheckCircle, PauseCircle, AlertCircle, Archive, ArchiveRestore, Copy, Check, MessageSquare, ShieldCheck, List, Loader2
+  Truck, Package, X, CheckCircle, PauseCircle, AlertCircle, Archive, ArchiveRestore, Copy, Check, MessageSquare, ShieldCheck, List, Loader2, RotateCcw, UploadCloud
 } from "lucide-react";
 import { StatusBadge, ShopifyFinancialBadge, ShopifyFulfillmentBadge } from "@/components/ui/status-badge";
 import { DispatchModal } from "@/components/orders/dispatch-modal";
 import { BulkDispatchModal } from "@/components/orders/bulk-dispatch-modal";
 import { SendSMSModal } from "@/components/orders/send-sms-modal";
+import { ReturnModal } from "@/components/orders/return-modal";
+import { DeliverModal } from "@/components/orders/deliver-modal";
 import { ReportFraudModal } from "@/components/modals/report-fraud-modal";
 import { FraudDetailsModal } from "@/components/modals/fraud-details-modal";
 import { OrderTimelineModal } from "@/components/orders/order-timeline-modal";
+import { FraudWarningModal } from "@/components/orders/fraud-warning-modal";
+import { BulkImportDeliveriesModal } from "@/components/orders/bulk-import-deliveries-modal";
 import type { Order, OrderStatus } from "@/types/database";
 
 const STATUS_FILTERS = [
@@ -323,6 +327,9 @@ export function OrdersClient({
   };
 
   const [bulkDispatchModalOpen, setBulkDispatchModalOpen] = useState(false);
+  const [returnModalOpen, setReturnModalOpen] = useState(false);
+  const [deliverModalOpen, setDeliverModalOpen] = useState(false);
+  const [bulkImportDeliveriesOpen, setBulkImportDeliveriesOpen] = useState(false);
 
   const singleOrder = selected.size === 1 ? ordersList.find(o => o.id === Array.from(selected)[0]) : null;
   const singleLineItems = singleOrder ? ((singleOrder.line_items as any[]) || []) : [];
@@ -362,14 +369,22 @@ export function OrdersClient({
               <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 animate-spin" />
             )}
           </form>
-          <button 
-            type="button" 
-            onClick={selectAll} 
-            className="px-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors whitespace-nowrap"
-          >
-            {selected.size === ordersList.length && ordersList.length > 0 ? "Deselect All" : "Select All"}
-          </button>
-        </div>
+            <button 
+              type="button" 
+              onClick={selectAll} 
+              className="px-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors whitespace-nowrap"
+            >
+              {selected.size === ordersList.length && ordersList.length > 0 ? "Deselect All" : "Select All"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setBulkImportDeliveriesOpen(true)}
+              className="px-4 py-2.5 bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-sm font-medium hover:bg-emerald-600/30 transition-colors whitespace-nowrap flex items-center gap-2"
+            >
+              <UploadCloud className="w-4 h-4" />
+              Import Deliveries
+            </button>
+          </div>
 
         {/* Status filters */}
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
@@ -493,6 +508,12 @@ export function OrdersClient({
               </button>
               <button onClick={() => bulkUpdateStatus("cancelled")} className="flex items-center gap-1.5 bg-red-500/15 text-red-400 hover:bg-red-500/25 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border border-red-500/20">
                 <X size={14} /> Cancel
+              </button>
+              <button onClick={() => setDeliverModalOpen(true)} className="flex items-center gap-1.5 bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border border-emerald-500/20">
+                <CheckCircle size={14} /> Deliver
+              </button>
+              <button onClick={() => setReturnModalOpen(true)} className="flex items-center gap-1.5 bg-rose-500/15 text-rose-400 hover:bg-rose-500/25 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border border-rose-500/20">
+                <RotateCcw size={14} /> Return
               </button>
 
               <div className="w-px h-6 bg-zinc-700 mx-1 hidden sm:block"></div>
@@ -772,6 +793,44 @@ export function OrdersClient({
         open={!!timelineOrderId}
         onOpenChange={(open) => !open && setTimelineOrderId(null)}
       />
+
+      {/* Return Modal */}
+      {returnModalOpen && (
+        <ReturnModal
+          orders={Array.from(selected).map(id => ordersList.find(o => o.id === id)).filter(Boolean)}
+          onClose={() => setReturnModalOpen(false)}
+          onSuccess={() => {
+            // Note: Optimistic UI update is trickier now because partial returns don't change internal_status.
+            // But we will refresh the router, so the server component will fetch fresh data.
+            setReturnModalOpen(false);
+            setSelected(new Set());
+            router.refresh();
+          }}
+        />
+      )}
+
+      {/* Deliver Modal */}
+      {deliverModalOpen && (
+        <DeliverModal
+          orders={Array.from(selected).map(id => ordersList.find(o => o.id === id)).filter(Boolean)}
+          onClose={() => setDeliverModalOpen(false)}
+          onSuccess={() => {
+            setDeliverModalOpen(false);
+            setSelected(new Set());
+            router.refresh();
+          }}
+        />
+      )}
+
+      {bulkImportDeliveriesOpen && (
+        <BulkImportDeliveriesModal
+          onClose={() => setBulkImportDeliveriesOpen(false)}
+          onSuccess={() => {
+            // Re-fetch or refresh
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format, subDays, startOfMonth } from "date-fns";
-import { Download, Calendar, BarChart, ShoppingCart, Truck, CheckCircle, XCircle } from "lucide-react";
+import { Download, Calendar, BarChart, ShoppingCart, Truck, CheckCircle, XCircle, RotateCcw, TrendingUp, Award } from "lucide-react";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
 import { TopProducts } from "@/components/dashboard/top-products";
 import { DispatchedProductsToday } from "@/components/dashboard/dispatched-today";
@@ -22,6 +22,13 @@ interface ReportsClientProps {
   totalGross: number;
   totalSubtotal: number;
   totalDispatchedAmount: number;
+  returnedRevenue: number;
+  cancelledRevenue: number;
+  deliveredRevenue: number;
+  netCollectibleRevenue: number;
+  totalReturnDeliveryFees: number;
+  partialReturnDeductions: number;
+  successRate: number;
   initialStartDate: string;
   initialEndDate: string;
   initialFilterType: string;
@@ -35,6 +42,13 @@ export function ReportsClient({
   totalGross,
   totalSubtotal,
   totalDispatchedAmount,
+  returnedRevenue,
+  cancelledRevenue,
+  deliveredRevenue,
+  netCollectibleRevenue,
+  totalReturnDeliveryFees,
+  partialReturnDeductions,
+  successRate,
   initialStartDate,
   initialEndDate,
   initialFilterType,
@@ -148,6 +162,34 @@ export function ReportsClient({
     }
   };
 
+  const [isExportingReturns, setIsExportingReturns] = useState(false);
+
+  const handleExportReturns = async () => {
+    try {
+      setIsExportingReturns(true);
+      const startIso = new Date(`${startDate}T00:00:00`).toISOString();
+      const endIso = new Date(`${endDate}T23:59:59.999`).toISOString();
+      
+      const res = await fetch(`/api/reports/export-returns?startDate=${startIso}&endDate=${endIso}`);
+      if (!res.ok) throw new Error("Failed to generate CSV");
+      
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `returns-report-${startDate}-to-${endDate}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to export returns.");
+    } finally {
+      setIsExportingReturns(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in pb-20">
       {/* Header and Controls */}
@@ -216,25 +258,66 @@ export function ReportsClient({
             <Truck className="w-4 h-4" />
             {isExportingDispatched ? "Exporting..." : "Products CSV"}
           </button>
+
+          <button
+            onClick={handleExportReturns}
+            disabled={isExportingReturns || isPending}
+            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-rose-500 hover:bg-rose-600 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
+            title="Export Returns"
+          >
+            <RotateCcw className="w-4 h-4" />
+            {isExportingReturns ? "Exporting..." : "Returns CSV"}
+          </button>
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
-        <div className="bg-zinc-900 border border-zinc-800 p-4 lg:p-5 rounded-2xl flex flex-col justify-center">
-          <p className="text-xs lg:text-sm font-medium text-zinc-400 mb-1">Total Revenue</p>
-          <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-white truncate" title={`৳${Number(totalGross).toLocaleString()}`}>
-            ৳{Number(totalGross).toLocaleString()}
-          </p>
-          <p className="text-[10px] lg:text-xs text-indigo-400 mt-1 leading-tight">Gross (With Delivery)</p>
+      {/* Primary Financial Summary — The accurate month-end numbers */}
+      <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-2xl">
+        <h2 className="text-sm font-semibold text-zinc-300 mb-4 flex items-center gap-2">
+          <TrendingUp className="w-4 h-4 text-emerald-400" />
+          Financial Summary
+        </h2>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+          <div className="bg-zinc-950/50 border border-zinc-800/50 p-4 lg:p-5 rounded-xl flex flex-col justify-center">
+            <p className="text-xs lg:text-sm font-medium text-zinc-400 mb-1">Gross Revenue</p>
+            <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-white truncate" title={`৳${Number(totalGross).toLocaleString()}`}>
+              ৳{Number(totalGross).toLocaleString()}
+            </p>
+            <p className="text-[10px] lg:text-xs text-zinc-500 mt-1 leading-tight">All orders (with delivery)</p>
+          </div>
+          <div className="bg-rose-500/5 border border-rose-500/20 p-4 lg:p-5 rounded-xl flex flex-col justify-center">
+            <p className="text-xs lg:text-sm font-medium text-rose-400/80 mb-1">Deductions</p>
+            <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-rose-400 truncate" title={`-৳${Number(returnedRevenue + cancelledRevenue).toLocaleString()}`}>
+              -৳{Number(returnedRevenue + cancelledRevenue).toLocaleString()}
+            </p>
+            <p className="text-[10px] lg:text-xs text-rose-400/60 mt-1 leading-tight">
+              Returned: ৳{Number(returnedRevenue).toLocaleString()}
+              {partialReturnDeductions > 0 && ` (incl. ৳${partialReturnDeductions.toLocaleString()} partial)`}
+              {' '}• Cancelled: ৳{Number(cancelledRevenue).toLocaleString()}
+            </p>
+          </div>
+          <div className="bg-emerald-500/5 border border-emerald-500/20 p-4 lg:p-5 rounded-xl flex flex-col justify-center">
+            <p className="text-xs lg:text-sm font-medium text-emerald-400/80 mb-1">Net Collectible</p>
+            <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-emerald-400 truncate" title={`৳${Number(netCollectibleRevenue).toLocaleString()}`}>
+              ৳{Number(netCollectibleRevenue).toLocaleString()}
+            </p>
+            <p className="text-[10px] lg:text-xs text-emerald-400/60 mt-1 leading-tight">Gross − Returns − Cancelled</p>
+          </div>
+          <div className="bg-indigo-500/5 border border-indigo-500/20 p-4 lg:p-5 rounded-xl flex flex-col justify-center">
+            <p className="text-xs lg:text-sm font-medium text-indigo-400/80 mb-1">Success Rate</p>
+            <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-indigo-400 flex items-center gap-2 truncate">
+              <Award className="w-5 h-5 lg:w-6 lg:h-6 shrink-0" />
+              {successRate}%
+            </p>
+            <p className="text-[10px] lg:text-xs text-indigo-400/60 mt-1 leading-tight">
+              {orderStats.deliveredOrders} delivered / {orderStats.deliveredOrders + orderStats.returnedOrders} finalized
+            </p>
+          </div>
         </div>
-        <div className="bg-zinc-900 border border-zinc-800 p-4 lg:p-5 rounded-2xl flex flex-col justify-center">
-          <p className="text-xs lg:text-sm font-medium text-zinc-400 mb-1">Net Revenue</p>
-          <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-emerald-400 truncate" title={`৳${Number(totalSubtotal).toLocaleString()}`}>
-            ৳{Number(totalSubtotal).toLocaleString()}
-          </p>
-          <p className="text-[10px] lg:text-xs text-emerald-400/80 mt-1 leading-tight">Subtotal (No Delivery)</p>
-        </div>
+      </div>
+
+      {/* Order & Return Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4">
         <div className="bg-zinc-900 border border-zinc-800 p-4 lg:p-5 rounded-2xl flex flex-col justify-center">
           <p className="text-xs lg:text-sm font-medium text-zinc-400 mb-1">Total Orders</p>
           <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-white flex items-center gap-2 truncate">
@@ -248,7 +331,34 @@ export function ReportsClient({
             <Truck className="w-4 h-4 lg:w-5 lg:h-5 text-indigo-400 shrink-0" />
             {orderStats.dispatchedOrders}
           </p>
-          <p className="text-[10px] lg:text-xs text-indigo-400 mt-1 leading-tight">৳{Number(totalDispatchedAmount).toLocaleString()} Value (With Delivery)</p>
+          <p className="text-[10px] lg:text-xs text-indigo-400 mt-1 leading-tight">৳{Number(totalDispatchedAmount).toLocaleString()} Value</p>
+        </div>
+        <div className="bg-zinc-900 border border-zinc-800 p-4 lg:p-5 rounded-2xl flex flex-col justify-center">
+          <p className="text-xs lg:text-sm font-medium text-zinc-400 mb-1">Delivered</p>
+          <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-emerald-400 flex items-center gap-2 truncate">
+            <CheckCircle className="w-4 h-4 lg:w-5 lg:h-5 shrink-0" />
+            {orderStats.deliveredOrders}
+          </p>
+          <p className="text-[10px] lg:text-xs text-emerald-400/80 mt-1 leading-tight">৳{Number(deliveredRevenue).toLocaleString()}</p>
+        </div>
+        <div className="bg-zinc-900 border border-zinc-800 p-4 lg:p-5 rounded-2xl flex flex-col justify-center">
+          <p className="text-xs lg:text-sm font-medium text-zinc-400 mb-1">Returned</p>
+          <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-rose-400 flex items-center gap-2 truncate">
+            <RotateCcw className="w-4 h-4 lg:w-5 lg:h-5 shrink-0" />
+            {orderStats.returnedOrders}
+          </p>
+          <p className="text-[10px] lg:text-xs text-rose-400/80 mt-1 leading-tight">
+            ৳{Number(returnedRevenue).toLocaleString()} lost
+            {totalReturnDeliveryFees > 0 && ` + ৳${Number(totalReturnDeliveryFees).toLocaleString()} fees`}
+          </p>
+        </div>
+        <div className="bg-zinc-900 border border-zinc-800 p-4 lg:p-5 rounded-2xl flex flex-col justify-center">
+          <p className="text-xs lg:text-sm font-medium text-zinc-400 mb-1">Cancelled</p>
+          <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-zinc-400 flex items-center gap-2 truncate">
+            <XCircle className="w-4 h-4 lg:w-5 lg:h-5 shrink-0" />
+            {orderStats.cancelledOrders}
+          </p>
+          <p className="text-[10px] lg:text-xs text-zinc-500 mt-1 leading-tight">৳{Number(cancelledRevenue).toLocaleString()}</p>
         </div>
       </div>
 

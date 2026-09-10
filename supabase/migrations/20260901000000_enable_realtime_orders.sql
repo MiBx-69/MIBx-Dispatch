@@ -1,2 +1,7 @@
 -- Enable Realtime for the orders table so the UI can auto-update
-ALTER PUBLICATION supabase_realtime ADD TABLE orders;
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE orders;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;

@@ -3,10 +3,13 @@
 import { useState, useEffect, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Truck, ExternalLink, RotateCw, ShieldCheck, X, Search, Loader2 } from "lucide-react";
+import { Truck, ExternalLink, RotateCw, RotateCcw, ShieldCheck, X, Search, Loader2, CheckCircle2, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
 import { DispatchModal } from "@/components/orders/dispatch-modal";
+import { ReturnModal } from "@/components/orders/return-modal";
+import { DeliverModal } from "@/components/orders/deliver-modal";
 import { FraudDetailsModal } from "@/components/modals/fraud-details-modal";
+import { BulkImportDeliveriesModal } from "@/components/orders/bulk-import-deliveries-modal";
 
 const PATHAO_STATUS_COLORS: Record<string, string> = {
   "Pending": "bg-zinc-800 text-zinc-400 border-zinc-700",
@@ -36,6 +39,8 @@ export function DispatchesClient({
   endDate,
   totalAmount = 0,
   totalQuantity = 0,
+  page = 1,
+  pageSize = 50,
 }: {
   dispatches: any[];
   count: number;
@@ -47,13 +52,36 @@ export function DispatchesClient({
   endDate?: string;
   totalAmount?: number;
   totalQuantity?: number;
+  page?: number;
+  pageSize?: number;
 }) {
   const router = useRouter();
   const [dispatchOrder, setDispatchOrder] = useState<any | null>(null);
+  const [returnOrder, setReturnOrder] = useState<any | null>(null);
+  const [deliverOrder, setDeliverOrder] = useState<any | null>(null);
   const [viewFraudOrder, setViewFraudOrder] = useState<any | null>(null);
   const [isCheckingFraud, setIsCheckingFraud] = useState(false);
+  const [bulkImportDeliveriesOpen, setBulkImportDeliveriesOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [searchQuery, setSearchQuery] = useState(currentSearch || "");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (selected.size === (dispatches?.length || 0)) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set((dispatches || []).map((d: any) => d.id)));
+    }
+  };
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -101,6 +129,14 @@ export function DispatchesClient({
     } finally {
       setIsCheckingFraud(false);
     }
+  };
+
+  const handlePageChange = (newPage: number) => {
+    startTransition(() => {
+      const params = new URLSearchParams(window.location.search);
+      params.set("page", newPage.toString());
+      router.push(`/dispatches?${params.toString()}`);
+    });
   };
 
   const removeDispatch = async (dispatchId: string) => {
@@ -170,6 +206,14 @@ export function DispatchesClient({
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             </button>
+
+            <button
+              onClick={() => setBulkImportDeliveriesOpen(true)}
+              className="flex items-center justify-center bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 rounded-lg h-[38px] px-3 transition-colors whitespace-nowrap gap-2 text-sm font-medium"
+            >
+              <UploadCloud className="w-4 h-4" />
+              Import Deliveries
+            </button>
           </div>
           
           <div className="flex gap-4 bg-zinc-900 border border-zinc-800 rounded-xl p-3 px-5 shadow-sm">
@@ -187,7 +231,14 @@ export function DispatchesClient({
       </div>
 
       {/* Status filters */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
+      <div className="flex gap-2 overflow-x-auto pb-1 items-center">
+        <button
+          onClick={selectAll}
+          className="px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-all shrink-0"
+        >
+          {selected.size === (dispatches?.length || 0) && (dispatches?.length || 0) > 0 ? "Deselect All" : "Select All"}
+        </button>
+        <div className="w-px h-4 bg-zinc-800 shrink-0 mx-1"></div>
         {statusFilters.map((s) => (
           <Link
             key={s}
@@ -229,16 +280,41 @@ export function DispatchesClient({
             "order.cancelled": "Cancelled",
           };
           
-          const friendlyStatus = STATUS_MAP[d.pathao_order_status] || d.pathao_order_status || "Pending";
-          const statusColor = PATHAO_STATUS_COLORS[friendlyStatus] || PATHAO_STATUS_COLORS["Pending"];
+          let friendlyStatus = STATUS_MAP[d.pathao_order_status] || d.pathao_order_status || "Pending";
+          let statusColor = PATHAO_STATUS_COLORS[friendlyStatus] || PATHAO_STATUS_COLORS["Pending"];
           const order = d.orders;
+          
+          // Override status if a return exists
+          const returnRecord = order?.returns?.[0];
+          if (returnRecord) {
+            if (returnRecord.return_type === "partial") {
+              friendlyStatus = "Partially Returned";
+              statusColor = "text-amber-400 border-amber-400/30 bg-amber-400/10";
+            } else {
+              friendlyStatus = "Returned (Manual)";
+              statusColor = "text-rose-400 border-rose-400/30 bg-rose-400/10";
+            }
+          } else if (order?.internal_status === "returned") {
+            friendlyStatus = "Return Completed";
+            statusColor = "text-rose-400 border-rose-400/30 bg-rose-400/10";
+          }
+
           const trackingUrl = `https://merchant.pathao.com/tracking?consignment_id=${d.consignment_id}&phone=${encodeURIComponent(d.recipient_phone || order?.customer_phone || "")}`;
 
           return (
-            <div key={d.id} className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-all">
+            <div key={d.id} className={`p-4 rounded-xl border transition-all ${selected.has(d.id) ? 'border-indigo-500/50 bg-indigo-500/5' : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700'}`}>
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 sm:gap-3">
-                <div className="flex-1 min-w-0">
-                  {/* Consignment ID */}
+                <div className="flex-1 min-w-0 flex items-start gap-3">
+                  <div className="pt-0.5">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(d.id)}
+                      onChange={() => toggleSelect(d.id)}
+                      className="w-4 h-4 rounded border-zinc-700 bg-zinc-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-zinc-900"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    {/* Consignment ID */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-bold text-zinc-100">
                       {order?.shopify_order_name || d.shopify_order_name}
@@ -270,6 +346,7 @@ export function DispatchesClient({
                     )}
                   </div>
                 </div>
+                </div>
 
                 <div className="w-full sm:w-auto sm:text-right shrink-0 flex flex-col sm:items-end gap-3 sm:gap-0">
                   <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -287,6 +364,22 @@ export function DispatchesClient({
                     >
                       <X size={10} /> Remove
                     </button>
+                    {order && (
+                      <button
+                        onClick={() => setDeliverOrder(order)}
+                        className="inline-flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition-colors px-2 py-1 bg-emerald-500/10 rounded-md border border-emerald-500/20"
+                      >
+                        <CheckCircle2 size={10} /> Deliver
+                      </button>
+                    )}
+                    {order && (
+                      <button
+                        onClick={() => setReturnOrder(order)}
+                        className="inline-flex items-center gap-1 text-xs text-rose-400 hover:text-rose-300 transition-colors px-2 py-1 bg-rose-500/10 rounded-md border border-rose-500/20"
+                      >
+                        <RotateCcw size={10} /> Return
+                      </button>
+                    )}
                     {order && (
                       <button
                         onClick={() => setViewFraudOrder(order)}
@@ -318,6 +411,34 @@ export function DispatchesClient({
           );
         })}
       </div>
+      
+      {/* Pagination Controls */}
+      {count > pageSize && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-4 px-2 border-t border-zinc-800/50 mt-4">
+          <p className="text-sm text-zinc-400">
+            Showing <span className="font-medium text-zinc-200">{Math.min((page - 1) * pageSize + 1, count)}</span> to <span className="font-medium text-zinc-200">{Math.min(page * pageSize, count)}</span> of <span className="font-medium text-zinc-200">{count}</span> results
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handlePageChange(page - 1)}
+              disabled={page === 1 || isPending}
+              className="px-3 py-1.5 text-sm font-medium text-zinc-300 bg-zinc-900 border border-zinc-700 rounded-lg hover:bg-zinc-800 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Previous
+            </button>
+            <div className="text-sm font-medium text-zinc-400">
+              Page {page} of {Math.ceil(count / pageSize)}
+            </div>
+            <button
+              onClick={() => handlePageChange(page + 1)}
+              disabled={page >= Math.ceil(count / pageSize) || isPending}
+              className="px-3 py-1.5 text-sm font-medium text-zinc-300 bg-zinc-900 border border-zinc-700 rounded-lg hover:bg-zinc-800 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
 
       {dispatchOrder && (
         <DispatchModal
@@ -337,6 +458,80 @@ export function DispatchesClient({
         onCheckAgain={manualFraudCheck}
         isChecking={isCheckingFraud}
       />
+
+      {returnOrder && (
+        <ReturnModal
+          orders={Array.isArray(returnOrder) ? returnOrder : [returnOrder]}
+          onClose={() => {
+            setReturnOrder(null);
+            if (Array.isArray(returnOrder)) setSelected(new Set());
+          }}
+          onSuccess={() => {
+            setReturnOrder(null);
+            if (Array.isArray(returnOrder)) setSelected(new Set());
+            router.refresh();
+          }}
+        />
+      )}
+
+      {deliverOrder && (
+        <DeliverModal
+          orders={Array.isArray(deliverOrder) ? deliverOrder : [deliverOrder]}
+          onClose={() => {
+            setDeliverOrder(null);
+            if (Array.isArray(deliverOrder)) setSelected(new Set());
+          }}
+          onSuccess={() => {
+            setDeliverOrder(null);
+            if (Array.isArray(deliverOrder)) setSelected(new Set());
+            router.refresh();
+          }}
+        />
+      )}
+
+      {/* Fixed Bulk Action Bar */}
+      {selected.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-zinc-900 border border-zinc-800 p-3 rounded-2xl shadow-2xl flex items-center gap-4 z-50 animate-slide-up">
+          <div className="flex items-center gap-2 px-2">
+            <div className="bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded-md text-xs font-bold">
+              {selected.size}
+            </div>
+            <span className="text-sm text-zinc-300 font-medium">selected</span>
+          </div>
+          
+          <div className="h-6 w-px bg-zinc-800"></div>
+          
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                const selectedOrders = dispatches.filter((d: any) => selected.has(d.id) && d.orders).map((d: any) => d.orders);
+                if (selectedOrders.length > 0) setDeliverOrder(selectedOrders);
+              }}
+              className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
+            >
+              <CheckCircle2 size={16} /> Mark as Delivered
+            </button>
+            <button
+              onClick={() => {
+                const selectedOrders = dispatches.filter((d: any) => selected.has(d.id) && d.orders).map((d: any) => d.orders);
+                if (selectedOrders.length > 0) setReturnOrder(selectedOrders);
+              }}
+              className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
+            >
+              <RotateCcw size={16} /> Mark as Returned
+            </button>
+          </div>
+        </div>
+      )}
+
+      {bulkImportDeliveriesOpen && (
+        <BulkImportDeliveriesModal
+          onClose={() => setBulkImportDeliveriesOpen(false)}
+          onSuccess={() => {
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }

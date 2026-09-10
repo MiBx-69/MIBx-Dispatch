@@ -42,6 +42,9 @@ export type Database = {
       app_settings: {
         Row: {
           created_at: string
+          auto_mark_delivered_days: number | null
+          delivery_charge_inside_dhaka: number | null
+          delivery_charge_outside_dhaka: number | null
           fraud_check_enabled: boolean | null
           fraudspy_api_key: string | null
           id: string
@@ -72,6 +75,9 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          auto_mark_delivered_days?: number | null
+          delivery_charge_inside_dhaka?: number | null
+          delivery_charge_outside_dhaka?: number | null
           fraud_check_enabled?: boolean | null
           fraudspy_api_key?: string | null
           id?: string
@@ -102,6 +108,9 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          auto_mark_delivered_days?: number | null
+          delivery_charge_inside_dhaka?: number | null
+          delivery_charge_outside_dhaka?: number | null
           fraud_check_enabled?: boolean | null
           fraudspy_api_key?: string | null
           id?: string
@@ -332,6 +341,9 @@ export type Database = {
           pathao_consignment_id: string | null
           pathao_delivery_status: string | null
           pathao_tracking_url: string | null
+          return_delivery_fee: number | null
+          return_reason: string | null
+          returned_at: string | null
           shipping_address: Json | null
           shopify_created_at: string | null
           shopify_fulfillment_id: string | null
@@ -370,6 +382,9 @@ export type Database = {
           pathao_consignment_id?: string | null
           pathao_delivery_status?: string | null
           pathao_tracking_url?: string | null
+          return_delivery_fee?: number | null
+          return_reason?: string | null
+          returned_at?: string | null
           shipping_address?: Json | null
           shopify_created_at?: string | null
           shopify_fulfillment_id?: string | null
@@ -408,6 +423,9 @@ export type Database = {
           pathao_consignment_id?: string | null
           pathao_delivery_status?: string | null
           pathao_tracking_url?: string | null
+          return_delivery_fee?: number | null
+          return_reason?: string | null
+          returned_at?: string | null
           shipping_address?: Json | null
           shopify_created_at?: string | null
           shopify_fulfillment_id?: string | null
@@ -533,6 +551,97 @@ export type Database = {
           },
         ]
       }
+      returns: {
+        Row: {
+          id: string
+          order_id: string
+          dispatch_id: string | null
+          consignment_id: string | null
+          return_reason: string | null
+          return_type: string
+          return_source: string
+          returned_items: Json | null
+          order_total: number | null
+          return_delivery_fee: number | null
+          refund_amount: number | null
+          is_paid_return: boolean
+          is_verified: boolean
+          processed_by: string | null
+          status: string
+          notes: string | null
+          returned_at: string
+          processed_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          order_id: string
+          dispatch_id?: string | null
+          consignment_id?: string | null
+          return_reason?: string | null
+          return_type?: string
+          return_source?: string
+          returned_items?: Json | null
+          order_total?: number | null
+          return_delivery_fee?: number | null
+          refund_amount?: number | null
+          is_paid_return?: boolean
+          is_verified?: boolean
+          processed_by?: string | null
+          status?: string
+          notes?: string | null
+          returned_at?: string
+          processed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          order_id?: string
+          dispatch_id?: string | null
+          consignment_id?: string | null
+          return_reason?: string | null
+          return_type?: string
+          return_source?: string
+          returned_items?: Json | null
+          order_total?: number | null
+          return_delivery_fee?: number | null
+          refund_amount?: number | null
+          is_paid_return?: boolean
+          is_verified?: boolean
+          processed_by?: string | null
+          status?: string
+          notes?: string | null
+          returned_at?: string
+          processed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "returns_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "returns_dispatch_id_fkey"
+            columns: ["dispatch_id"]
+            isOneToOne: false
+            referencedRelation: "dispatches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "returns_processed_by_fkey"
+            columns: ["processed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
           amount: number
@@ -625,6 +734,9 @@ export type Database = {
           orders_today: number | null
           pending_orders: number | null
           preparing_orders: number | null
+          returned_orders: number | null
+          returned_revenue: number | null
+          total_return_fees: number | null
           revenue_today: number | null
         }
         Relationships: []
@@ -828,6 +940,7 @@ export type Customer = Database["public"]["Tables"]["customers"]["Row"];
 export type Order = Database["public"]["Tables"]["orders"]["Row"];
 export type Dispatch = Database["public"]["Tables"]["dispatches"]["Row"];
 export type Transaction = Database["public"]["Tables"]["transactions"]["Row"];
+export type Return = Database["public"]["Tables"]["returns"]["Row"];
 export type DashboardStats = Database["public"]["Views"]["dashboard_stats"]["Row"];
 
 export type OrderStatus =

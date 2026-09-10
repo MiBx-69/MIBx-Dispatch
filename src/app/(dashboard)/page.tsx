@@ -88,7 +88,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   }
   
   orders.forEach((o: any) => {
-    if (o.internal_status === 'cancelled') return;
+    if (o.internal_status === 'cancelled' || o.internal_status === 'returned') return;
     if (!o.shopify_created_at) return;
     const dateStr = format(parseISO(o.shopify_created_at), 'yyyy-MM-dd');
     if (revenueMap.has(dateStr)) {
@@ -187,6 +187,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     orders_period: 0,
     dispatched_period: 0,
     cancelled_period: 0,
+    returned_period: 0,
+    returned_revenue: 0,
     revenue_period: 0,
     subtotal_period: 0
   };
@@ -219,10 +221,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
     // Period counts (all orders in this array fall within the selected date period)
     liveStats.orders_period++;
-    liveStats.revenue_period += Number(o.total_price) || 0;
-    liveStats.subtotal_period += Number(o.subtotal_price) || 0;
+    // Only count revenue from non-cancelled and non-returned orders
+    if (o.internal_status !== 'cancelled' && o.internal_status !== 'returned') {
+      liveStats.revenue_period += Number(o.total_price) || 0;
+      liveStats.subtotal_period += Number(o.subtotal_price) || 0;
+    }
     if (o.internal_status === 'cancelled') {
       liveStats.cancelled_period++;
+    }
+    if (o.internal_status === 'returned') {
+      liveStats.returned_period++;
+      liveStats.returned_revenue += Number(o.total_price) || 0;
     }
 
     // Courier Stats
@@ -249,6 +258,21 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   liveStats.dispatched_period = dispatchedPeriodCount || 0;
 
+  // Fetch verified partial return deductions in this period
+  const { data: partialReturnsData } = await supabase
+    .from("returns")
+    .select("refund_amount")
+    .eq("return_type", "partial")
+    .eq("is_verified", true)
+    .gte("returned_at", startDateStr)
+    .lte("returned_at", endDateStr);
+
+  const partialDeductions = (partialReturnsData || []).reduce(
+    (acc: number, r: any) => acc + (Number(r.refund_amount) || 0), 0
+  );
+  liveStats.returned_revenue += partialDeductions;
+  returnedCOD += partialDeductions;
+
   const courierStats = Array.from(statusCountMap.entries()).map(([status, count]) => ({ status, count }));
 
   const statCards = [
@@ -257,7 +281,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     { label: "Dispatched", value: liveStats.dispatched_orders || 0, icon: Truck, color: "text-indigo-400", bg: "bg-indigo-500/10", href: "/orders?status=dispatched" },
     { label: "Delivered", value: liveStats.delivered_orders || 0, icon: CheckCircle, color: "text-emerald-400", bg: "bg-emerald-500/10", href: "/orders?status=delivered" },
     { label: "On Hold", value: liveStats.hold_orders || 0, icon: AlertCircle, color: "text-orange-400", bg: "bg-orange-500/10", href: "/orders?status=hold" },
-    { label: "Today's Revenue", value: `৳${Number(liveStats.revenue_period || 0).toLocaleString()}`, subValue: `৳${Number(liveStats.subtotal_period || 0).toLocaleString()} w/o delivery`, icon: TrendingUp, color: "text-violet-400", bg: "bg-violet-500/10", isText: true },
+    { label: "Net Revenue", value: `৳${Number(liveStats.revenue_period || 0).toLocaleString()}`, subValue: `৳${Number(liveStats.subtotal_period || 0).toLocaleString()} w/o delivery`, icon: TrendingUp, color: "text-violet-400", bg: "bg-violet-500/10", isText: true },
   ];
 
   return (

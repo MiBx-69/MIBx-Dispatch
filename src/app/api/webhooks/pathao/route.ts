@@ -63,6 +63,15 @@ export async function POST(request: NextRequest) {
     console.error("Pathao Webhook processing error:", err);
   }
 
+  // Hook auto-deliver processing here
+  // We run this asynchronously so it doesn't block the webhook response
+  try {
+    const { processAutoDeliveredOrders } = await import("@/lib/auto-deliver");
+    await processAutoDeliveredOrders();
+  } catch (err) {
+    console.error("Auto Deliver processing error:", err);
+  }
+
   // Pathao expects 202 with the header for all valid events
   return new NextResponse(JSON.stringify({ received: true }), {
     status: 202,
@@ -130,14 +139,63 @@ async function processPathaoWebhook(payload: any, storedSecret: string) {
       // Map Pathao event to internal ERP status
       const internalStatus = mapPathaoEventToInternal(newEvent);
 
+      // Build update payload for the order
+      const orderUpdate: any = {
+        pathao_delivery_status: newEvent,
+        internal_status: internalStatus,
+      };
+
+      const isPartialDelivery = newEvent.includes("partial-delivery");
+
+      // If this is a return event, add return metadata to the order
+      if (internalStatus === "returned" && !isPartialDelivery) {
+        orderUpdate.returned_at = new Date().toISOString();
+        orderUpdate.return_reason = payload.reason || "Returned via Pathao";
+      }
+
       // Update order internal status
       await supabase
         .from("orders")
-        .update({
-          pathao_delivery_status: newEvent,
-          internal_status: internalStatus,
-        })
+        .update(orderUpdate)
         .eq("id", order.id);
+
+      // Create a return record in the returns table if this is a full return or partial delivery
+      if (internalStatus === "returned" || isPartialDelivery) {
+        // Check if a return record already exists for this order
+        const { data: existingReturn } = await supabase
+          .from("returns")
+          .select("id")
+          .eq("order_id", order.id)
+          .maybeSingle();
+
+        if (!existingReturn) {
+          const isVerified = !isPartialDelivery; 
+          const returnStatus = isPartialDelivery 
+            ? "pending_verification" 
+            : (newEvent.includes("return_completed") || newEvent.includes("return-completed") ? "received" : "in_transit");
+
+          await supabase.from("returns").insert({
+            order_id: order.id,
+            dispatch_id: dispatch?.id || null,
+            consignment_id: consignmentId,
+            return_reason: isPartialDelivery ? "Partial Delivery via Pathao" : (payload.reason || "Returned via Pathao"),
+            return_type: isPartialDelivery ? "partial" : "full",
+            return_source: "pathao_webhook",
+            order_total: Number(order.total_price) || 0,
+            return_delivery_fee: Number(payload.delivery_fee) || 0,
+            status: returnStatus,
+            is_verified: isVerified,
+            returned_at: new Date().toISOString(),
+          });
+
+          // Also update the return_delivery_fee on the order if Pathao provides it (for full returns)
+          if (payload.delivery_fee && !isPartialDelivery) {
+            await supabase.from("orders").update({
+              return_delivery_fee: Number(payload.delivery_fee) || 0,
+            }).eq("id", order.id);
+          }
+        }
+      }
 
       // Update Shopify fulfillment tracking if order has fulfillment
       if (order.shopify_fulfillment_id) {

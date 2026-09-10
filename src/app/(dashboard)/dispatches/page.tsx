@@ -13,12 +13,12 @@ export default async function DispatchesPage({
   const params = await searchParams;
   const supabase = createServiceClient();
   const page = parseInt(params.page || "1");
-  const pageSize = 1000;
+  const pageSize = 50;
   const offset = (page - 1) * pageSize;
 
   let query = supabase
     .from("dispatches")
-    .select("*, orders!inner(*)", { count: "exact" })
+    .select("*, orders!inner(*, returns(id, return_type, status))", { count: "exact" })
     .neq("orders.internal_status", "cancelled")
     .order("dispatched_at", { ascending: false })
     .range(offset, offset + pageSize - 1);
@@ -110,6 +110,8 @@ export default async function DispatchesPage({
       endDate={params.endDate}
       totalAmount={totalAmount}
       totalQuantity={totalQuantity}
+      page={page}
+      pageSize={pageSize}
     />
   );
 }

@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   LayoutDashboard,
   ShoppingCart,
   Truck,
+  RotateCcw,
   Users,
   Settings,
-  Package,
+  PackageCheck,
   LogOut,
   Zap,
   Wallet,
@@ -23,6 +24,8 @@ const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/orders", label: "Orders", icon: ShoppingCart },
   { href: "/dispatches", label: "Dispatches", icon: Truck },
+  { href: "/orders?status=delivered", label: "Deliveries", icon: PackageCheck },
+  { href: "/returns", label: "Returns", icon: RotateCcw },
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/finances", label: "Finances", icon: Wallet },
   { href: "/reports", label: "Reports", icon: BarChart },
@@ -35,6 +38,8 @@ interface SidebarProps {
 
 export function Sidebar({ profile }: SidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const statusParam = searchParams.get("status");
   const [isExpanded, setIsExpanded] = useState(true);
 
   return (
@@ -64,8 +69,14 @@ export function Sidebar({ profile }: SidebarProps) {
       {/* Nav */}
       <nav className={`flex-1 ${isExpanded ? "px-3" : "px-2"} py-4 space-y-2 overflow-y-auto overflow-x-hidden`}>
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-          const isActive =
-            href === "/" ? pathname === "/" : pathname.startsWith(href);
+          let isActive = false;
+          if (href === "/orders?status=delivered") {
+            isActive = pathname === "/orders" && statusParam === "delivered";
+          } else if (href === "/orders") {
+            isActive = pathname === "/orders" && statusParam !== "delivered";
+          } else {
+            isActive = href === "/" ? pathname === "/" : pathname.startsWith(href);
+          }
 
           return (
             <Link

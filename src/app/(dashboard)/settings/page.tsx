@@ -63,6 +63,15 @@ export default async function SettingsPage() {
       bg: "bg-blue-500/10",
       isConfigured: true,
     },
+    {
+      title: "Shipping & Returns",
+      description: "Configure delivery charges and return logic.",
+      icon: Truck,
+      href: "/settings/shipping",
+      color: "text-rose-400",
+      bg: "bg-rose-500/10",
+      isConfigured: settings?.delivery_charge_inside_dhaka !== null,
+    },
   ];
 
   return (

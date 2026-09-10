@@ -35,7 +35,10 @@ export async function GET(request: NextRequest) {
         fulfillment_status,
         fraud_status,
         line_items,
-        pathao_consignment_id
+        pathao_consignment_id,
+        returned_at,
+        return_reason,
+        return_delivery_fee
       `)
       .gte("shopify_created_at", queryStart)
       .lte("shopify_created_at", queryEnd)
@@ -61,7 +64,10 @@ export async function GET(request: NextRequest) {
       "Fraud Status",
       "Consignment ID",
       "Items Count",
-      "Products"
+      "Products",
+      "Returned At",
+      "Return Reason",
+      "Return Delivery Fee"
     ];
 
     // Build CSV rows
@@ -99,7 +105,10 @@ export async function GET(request: NextRequest) {
         escape(o.fraud_status),
         escape(o.pathao_consignment_id),
         itemsCount,
-        escape(productsList)
+        escape(productsList),
+        o.returned_at ? escape(new Date(o.returned_at).toLocaleString()) : "",
+        escape(o.return_reason),
+        o.return_delivery_fee || 0
       ].join(",");
     });
 

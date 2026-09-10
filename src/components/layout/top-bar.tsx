@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Bell, Zap } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -16,6 +16,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/settings/pathao": "Pathao Settings",
   "/settings/account": "Account",
   "/settings/webhooks": "Webhooks",
+  "/returns": "Returns",
 };
 
 interface TopBarProps {
@@ -24,9 +25,13 @@ interface TopBarProps {
 
 export function TopBar({ profile }: TopBarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [syncing, setSyncing] = useState(false);
 
-  const title = PAGE_TITLES[pathname] || "MiBx Dispatch v3";
+  let title = PAGE_TITLES[pathname] || "MiBx Dispatch v3";
+  if (pathname === "/orders" && searchParams.get("status") === "delivered") {
+    title = "Deliveries";
+  }
 
   const handleSync = async () => {
     setSyncing(true);
