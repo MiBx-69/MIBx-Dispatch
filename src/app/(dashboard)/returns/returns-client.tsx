@@ -7,6 +7,7 @@ import {
   RotateCcw, Package, Search, TrendingDown, Truck, CheckCircle, XCircle,
   AlertCircle, Eye, ChevronDown, Clock, ArrowRight, Upload
 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import type { Return } from "@/types/database";
 
 const STATUS_STYLES: Record<string, { label: string; class: string; icon: any }> = {
@@ -58,9 +59,12 @@ export function ReturnsClient({
   // Bulk state
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+  const [isLoadingAllIds, setIsLoadingAllIds] = useState(false);
   const [bulkInputModalOpen, setBulkInputModalOpen] = useState(false);
   const [bulkInputText, setBulkInputText] = useState("");
   const [bulkStatus, setBulkStatus] = useState("received");
+  const [bulkReturnClassification, setBulkReturnClassification] = useState<"normal" | "paid">("normal");
+  const [bulkDeliveryFee, setBulkDeliveryFee] = useState<string>("60");
   
   // Bulk preview state
   const [previewData, setPreviewData] = useState<{ matched: any[], unmatched: string[] } | null>(null);
@@ -70,6 +74,22 @@ export function ReturnsClient({
   useEffect(() => {
     setReturns(initialReturns);
   }, [initialReturns]);
+
+  // Load default shipping fee setting
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const supabase = createClient();
+        const { data } = await supabase.from("app_settings").select("delivery_charge_inside_dhaka").single();
+        if (data?.delivery_charge_inside_dhaka) {
+          setBulkDeliveryFee(String(data.delivery_charge_inside_dhaka));
+        }
+      } catch (e) {
+        // Fallback to default
+      }
+    }
+    loadSettings();
+  }, []);
 
   // Debounced search & filter sync
   useEffect(() => {
@@ -95,6 +115,15 @@ export function ReturnsClient({
     startTransition(() => {
       const params = new URLSearchParams(window.location.search);
       params.set("page", newPage.toString());
+      router.push(`/returns?${params.toString()}`);
+    });
+  };
+
+  const handlePageSizeChange = (newSize: string) => {
+    startTransition(() => {
+      const params = new URLSearchParams(window.location.search);
+      params.set("pageSize", newSize);
+      params.delete("page");
       router.push(`/returns?${params.toString()}`);
     });
   };
@@ -165,14 +194,14 @@ export function ReturnsClient({
   };
 
   const undoReturn = async (returnId: string) => {
-    if (!confirm("Are you sure you want to undo this return? The order will be set back to 'dispatched'.")) return;
+    if (!confirm("Mark this order as Not Delivered & Not Returned? It will remove the return record and move the order back to Dispatched/Old status.")) return;
     setUpdatingId(returnId);
     try {
       const res = await fetch(`/api/returns/${returnId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to undo return");
+      if (!res.ok) throw new Error("Failed to mark as Not Delivered / Not Returned");
 
       setReturns(prev => prev.filter(r => r.id !== returnId));
-      toast.success("Return undone successfully");
+      toast.success("Order marked as Not Delivered & Not Returned");
       router.refresh();
     } catch (err: any) {
       toast.error(err.message);
@@ -180,6 +209,33 @@ export function ReturnsClient({
       setUpdatingId(null);
     }
   };
+
+  const markSelectedAsNotDeliveredNotReturned = async () => {
+    if (selected.size === 0) return;
+    if (!confirm(`Mark ${selected.size} order(s) as Not Delivered & Not Returned? This will remove the return records and move the orders back to Dispatched/Old status.`)) {
+      return;
+    }
+    setIsBulkUpdating(true);
+    try {
+      const res = await fetch("/api/returns/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ returnIds: Array.from(selected) })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update orders");
+
+      setReturns(prev => prev.filter(r => !selected.has(r.id)));
+      toast.success(`Marked ${data.processed} order(s) as Not Delivered & Not Returned`);
+      setSelected(new Set());
+      router.refresh();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update orders");
+    } finally {
+      setIsBulkUpdating(false);
+    }
+  };
+
   const getNextStatus = (current: string): string | null => {
     const flow: Record<string, string> = {
       pending_verification: "received",
@@ -196,30 +252,93 @@ export function ReturnsClient({
     setSelected(next);
   };
 
-  const selectAll = () => {
-    if (selected.size === filteredReturns.length) {
+  const selectAll = async (forceSelectAll = false) => {
+    // If some or all are selected and not forced to select all, deselect all
+    if (selected.size > 0 && !forceSelectAll) {
       setSelected(new Set());
-    } else {
-      setSelected(new Set(filteredReturns.map(r => r.id)));
+      return;
     }
+
+    // If count is within current page
+    if (count <= filteredReturns.length && !forceSelectAll) {
+      if (selected.size === filteredReturns.length) {
+        setSelected(new Set());
+      } else {
+        setSelected(new Set(filteredReturns.map(r => r.id)));
+      }
+      return;
+    }
+
+    // Unlimited selection: fetch ALL matching IDs across all pages
+    setIsLoadingAllIds(true);
+    try {
+      const params = new URLSearchParams();
+      if (filter && filter !== "all") params.set("filter", filter);
+      if (searchQuery) params.set("search", searchQuery);
+
+      const res = await fetch(`/api/returns/ids?${params.toString()}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to select all returns");
+
+      setSelected(new Set(data.ids));
+      toast.success(`Selected all ${data.total} returns across all pages`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to select all returns");
+      setSelected(new Set(filteredReturns.map(r => r.id)));
+    } finally {
+      setIsLoadingAllIds(false);
+    }
+  };
+
+  const selectCurrentPageOnly = () => {
+    setSelected(new Set(filteredReturns.map(r => r.id)));
+    toast.info(`Selected ${filteredReturns.length} returns on this page`);
   };
 
   const bulkUpdateStatus = async () => {
     if (selected.size === 0) return;
+    if (bulkStatus === "cancel_return" || bulkStatus === "not_delivered_not_returned") {
+      await markSelectedAsNotDeliveredNotReturned();
+      return;
+    }
     setIsBulkUpdating(true);
     try {
+
+      const payload: any = {
+        returnIds: Array.from(selected),
+        status: bulkStatus
+      };
+      if (bulkStatus === "mark_paid") {
+        payload.is_paid_return = true;
+      } else if (bulkStatus === "mark_normal") {
+        payload.is_paid_return = false;
+      }
+
       const res = await fetch("/api/returns/bulk-status", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          returnIds: Array.from(selected),
-          status: bulkStatus
-        })
+        body: JSON.stringify(payload)
       });
       if (!res.ok) throw new Error("Failed to bulk update");
       
-      setReturns(prev => prev.map(r => selected.has(r.id) ? { ...r, status: bulkStatus } : r));
-      toast.success(`Bulk updated ${selected.size} returns to ${STATUS_STYLES[bulkStatus]?.label || bulkStatus}`);
+      setReturns(prev => prev.map(r => {
+        if (!selected.has(r.id)) return r;
+        if (bulkStatus === "mark_paid") {
+          return { ...r, is_paid_return: true, return_delivery_fee: 0 };
+        }
+        if (bulkStatus === "mark_normal") {
+          return { ...r, is_paid_return: false };
+        }
+        return { ...r, status: bulkStatus };
+      }));
+
+      const actionLabel = bulkStatus === "mark_paid"
+        ? "Paid Return"
+        : bulkStatus === "mark_normal"
+        ? "Normal Return"
+        : (STATUS_STYLES[bulkStatus]?.label || bulkStatus);
+
+      toast.success(`Bulk updated ${selected.size} returns to ${actionLabel}`);
       setSelected(new Set());
       router.refresh();
     } catch (err: any) {
@@ -252,19 +371,31 @@ export function ReturnsClient({
 
   const confirmBulkInput = async () => {
     if (!previewData || previewData.matched.length === 0) return;
-    const identifiers = previewData.matched.map(m => m.shopify_order_name);
+    const readyOrders = previewData.matched.filter(m => !m.has_existing_return);
+    if (readyOrders.length === 0) {
+      toast.error("No valid unreturned orders to process.");
+      return;
+    }
+    const identifiers = readyOrders.map(m => m.shopify_order_name);
     
     setIsBulkUpdating(true);
     try {
+      const isPaid = bulkReturnClassification === "paid";
+      const fee = isPaid ? 0 : (Number(bulkDeliveryFee) || 0);
+
       const res = await fetch("/api/returns/bulk-create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifiers })
+        body: JSON.stringify({
+          identifiers,
+          is_paid_return: isPaid,
+          return_delivery_fee: fee
+        })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed");
       
-      toast.success(`Successfully processed ${data.processed} returns. ${data.failed > 0 ? `${data.failed} failed.` : ''}`);
+      toast.success(`Successfully processed ${data.processed} returns (${isPaid ? "Paid Return" : "Normal Return"}). ${data.failed > 0 ? `${data.failed} failed.` : ''}`);
       setBulkInputModalOpen(false);
       setBulkInputText("");
       setPreviewData(null);
@@ -321,13 +452,48 @@ export function ReturnsClient({
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <button 
-          onClick={selectAll} 
-          className="px-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors whitespace-nowrap"
-        >
-          {selected.size > 0 ? "Deselect All" : "Select All"}
-        </button>
+      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => selectAll()} 
+            disabled={isLoadingAllIds}
+            className="px-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors whitespace-nowrap flex items-center gap-2 disabled:opacity-50"
+          >
+            {isLoadingAllIds ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                Selecting all {count}...
+              </>
+            ) : selected.size > 0 ? (
+              `Deselect All (${selected.size})`
+            ) : (
+              `Select All (${count})`
+            )}
+          </button>
+
+          {count > filteredReturns.length && selected.size === 0 && (
+            <button
+              onClick={selectCurrentPageOnly}
+              className="px-3 py-2.5 bg-zinc-900/60 border border-zinc-800/80 rounded-xl text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors whitespace-nowrap"
+              title="Select only the returns shown on this page"
+            >
+              Select Page ({filteredReturns.length})
+            </button>
+          )}
+        </div>
+
+        {selected.size > 0 && (
+          <button
+            onClick={markSelectedAsNotDeliveredNotReturned}
+            disabled={isBulkUpdating}
+            className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 whitespace-nowrap shadow-sm"
+            title="Mark selected orders as Not Delivered & Not Returned"
+          >
+            <RotateCcw size={15} />
+            Not Delivered / Not Returned ({selected.size})
+          </button>
+        )}
+
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
           <input
@@ -352,6 +518,20 @@ export function ReturnsClient({
           <option value="damaged">Damaged</option>
         </select>
       </div>
+
+      {/* Helper Banner when only page was selected and more exist */}
+      {selected.size === filteredReturns.length && count > filteredReturns.length && (
+        <div className="bg-indigo-500/10 border border-indigo-500/25 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-indigo-300 animate-in fade-in">
+          <span>All <strong>{filteredReturns.length}</strong> returns on this page are selected.</span>
+          <button
+            onClick={() => selectAll(true)}
+            disabled={isLoadingAllIds}
+            className="underline hover:text-white font-semibold ml-2 disabled:opacity-50"
+          >
+            {isLoadingAllIds ? "Selecting..." : `Select all ${count} returns matching current filters`}
+          </button>
+        </div>
+      )}
 
       {/* Status Pipeline Indicator */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
@@ -437,6 +617,15 @@ export function ReturnsClient({
                       }`}>
                         {ret.return_type === 'partial' ? 'Partial' : 'Full'}
                       </span>
+                      {ret.is_paid_return ? (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          Paid Return
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                          Normal Return
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-zinc-500 mt-0.5">
                       {order?.customer_name} • {ret.return_reason || "No reason"} • {returnDate ? returnDate.toLocaleDateString() : ""}
@@ -445,9 +634,19 @@ export function ReturnsClient({
 
                   {/* Amount */}
                   <div className="text-right shrink-0">
-                    <p className="text-sm font-bold text-rose-400">৳{Number(ret.order_total || order?.total_price || 0).toLocaleString()}</p>
-                    {Number(ret.return_delivery_fee) > 0 && (
+                    <p className="text-sm font-bold text-rose-400">
+                      ৳{Number(
+                        ret.return_type === 'partial'
+                          ? (ret.refund_amount || (Array.isArray(ret.returned_items) && ret.returned_items.length > 0 && ret.returned_items.reduce((s: number, i: any) => s + (Number(i.price || 0) * Number(i.quantity || 1)), 0)) || ret.order_total || 0)
+                          : (ret.order_total || order?.total_price || 0)
+                      ).toLocaleString()}
+                    </p>
+                    {ret.is_paid_return ? (
+                      <p className="text-[10px] text-emerald-400 font-medium">Paid (৳0 loss)</p>
+                    ) : Number(ret.return_delivery_fee) > 0 ? (
                       <p className="text-[10px] text-amber-400/80">+৳{Number(ret.return_delivery_fee).toLocaleString()} fee</p>
+                    ) : (
+                      <p className="text-[10px] text-zinc-500">Normal</p>
                     )}
                   </div>
 
@@ -458,10 +657,16 @@ export function ReturnsClient({
                 {isExpanded && (
                   <div className="border-t border-zinc-800 bg-zinc-950/50 p-4 space-y-3">
                     {/* Details Grid */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
                       <div>
                         <p className="text-zinc-500 mb-0.5">Return Type</p>
                         <p className="text-zinc-200 font-medium capitalize">{ret.return_type}</p>
+                      </div>
+                      <div>
+                        <p className="text-zinc-500 mb-0.5">Classification</p>
+                        <p className={`font-medium ${ret.is_paid_return ? "text-emerald-400" : "text-rose-400"}`}>
+                          {ret.is_paid_return ? "Paid Return (No Loss)" : `Normal Return (Fee: ৳${Number(ret.return_delivery_fee || 0).toLocaleString()})`}
+                        </p>
                       </div>
                       <div>
                         <p className="text-zinc-500 mb-0.5">Consignment</p>
@@ -577,12 +782,14 @@ export function ReturnsClient({
                       )}
 
                       {/* Undo return */}
+                      {/* Not Delivered / Not Returned */}
                       <button
                         onClick={(e) => { e.stopPropagation(); undoReturn(ret.id); }}
                         disabled={updatingId === ret.id}
-                        className="ml-auto flex items-center gap-1.5 text-zinc-500 hover:text-zinc-300 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                        className="ml-auto flex items-center gap-1.5 text-rose-300 hover:text-rose-200 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                        title="Mark this order as Not Delivered & Not Returned"
                       >
-                        <RotateCcw size={14} /> Undo Return
+                        <RotateCcw size={14} /> Not Delivered / Not Returned
                       </button>
                     </div>
                   </div>
@@ -594,29 +801,57 @@ export function ReturnsClient({
       )}
       
       {/* Pagination Controls */}
-      {count > pageSize && (
+      {count > 0 && (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-t border-zinc-800">
           <p className="text-sm text-zinc-400">
             Showing <span className="font-medium text-zinc-200">{Math.min((page - 1) * pageSize + 1, count)}</span> to <span className="font-medium text-zinc-200">{Math.min(page * pageSize, count)}</span> of <span className="font-medium text-zinc-200">{count}</span> results
           </p>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => handlePageChange(page - 1)}
-              disabled={page === 1 || isPending}
-              className="px-3 py-1.5 text-sm font-medium text-zinc-300 bg-zinc-900 border border-zinc-700 rounded-lg hover:bg-zinc-800 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Previous
-            </button>
-            <div className="text-sm font-medium text-zinc-400">
-              Page {page} of {Math.ceil(count / pageSize)}
+          <div className="flex items-center gap-2 flex-wrap justify-center">
+            {count > pageSize && (
+              <>
+                <button
+                  onClick={() => handlePageChange(page - 1)}
+                  disabled={page === 1 || isPending}
+                  className="px-3 py-1.5 text-sm font-medium text-zinc-300 bg-zinc-900 border border-zinc-700 rounded-lg hover:bg-zinc-800 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Previous
+                </button>
+                <div className="text-sm font-medium text-zinc-400">
+                  Page {page} of {Math.ceil(count / pageSize) || 1}
+                </div>
+                <button
+                  onClick={() => handlePageChange(page + 1)}
+                  disabled={page >= Math.ceil(count / pageSize) || isPending}
+                  className="px-3 py-1.5 text-sm font-medium text-zinc-300 bg-zinc-900 border border-zinc-700 rounded-lg hover:bg-zinc-800 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
+              </>
+            )}
+
+            <div className="flex items-center gap-1 sm:ml-2 sm:pl-2 border-t sm:border-t-0 sm:border-l border-zinc-800 pt-2 sm:pt-0 text-xs text-zinc-400">
+              <span className="text-zinc-500 mr-1">Show:</span>
+              {[25, 50, 100].map((size) => (
+                <button
+                  key={size}
+                  onClick={() => handlePageSizeChange(size.toString())}
+                  className={`px-2 py-1 rounded text-xs transition-colors ${
+                    pageSize === size ? "bg-indigo-600 text-white font-bold" : "hover:bg-zinc-800 text-zinc-400"
+                  }`}
+                >
+                  {size}
+                </button>
+              ))}
+              <button
+                onClick={() => handlePageSizeChange("all")}
+                className={`px-2 py-1 rounded text-xs transition-colors ${
+                  pageSize >= 5000 ? "bg-indigo-600 text-white font-bold" : "hover:bg-zinc-800 text-zinc-400"
+                }`}
+                title="Show all returns on one page"
+              >
+                All ({count})
+              </button>
             </div>
-            <button
-              onClick={() => handlePageChange(page + 1)}
-              disabled={page >= Math.ceil(count / pageSize) || isPending}
-              className="px-3 py-1.5 text-sm font-medium text-zinc-300 bg-zinc-900 border border-zinc-700 rounded-lg hover:bg-zinc-800 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Next
-            </button>
           </div>
         </div>
       )}
@@ -624,7 +859,7 @@ export function ReturnsClient({
 
     {/* Fixed Bulk Action Bar */}
       {selected.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-zinc-900 border border-zinc-800 p-3 rounded-2xl shadow-2xl flex items-center gap-4 z-50 animate-slide-up">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-zinc-900 border border-zinc-800 p-3 rounded-2xl shadow-2xl flex flex-wrap items-center gap-3 z-50 animate-slide-up max-w-[95vw]">
           <div className="flex items-center gap-2 px-2">
             <div className="bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded-md text-xs font-bold">
               {selected.size}
@@ -632,17 +867,27 @@ export function ReturnsClient({
             <span className="text-sm text-zinc-300 font-medium">selected</span>
           </div>
           
-          <div className="h-6 w-px bg-zinc-800"></div>
+          <div className="h-6 w-px bg-zinc-800 hidden sm:block"></div>
           
           <select
             value={bulkStatus}
             onChange={(e) => setBulkStatus(e.target.value)}
             className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm text-zinc-300 focus:outline-none focus:border-zinc-700"
           >
-            <option value="received">Mark as Received</option>
-            <option value="inspected">Mark as Inspected</option>
-            <option value="restocked">Mark as Restocked</option>
-            <option value="damaged">Mark as Damaged</option>
+            <optgroup label="Status Actions">
+              <option value="received">Mark as Received</option>
+              <option value="inspected">Mark as Inspected</option>
+              <option value="restocked">Mark as Restocked</option>
+              <option value="damaged">Mark as Damaged</option>
+            </optgroup>
+            <optgroup label="Classification">
+              <option value="mark_paid">Mark as Paid Return</option>
+              <option value="mark_normal">Mark as Normal Return</option>
+            </optgroup>
+            <optgroup label="Revert">
+              <option value="not_delivered_not_returned">Not Delivered / Not Returned</option>
+              <option value="cancel_return">Cancel Return (Move to Old Status)</option>
+            </optgroup>
           </select>
           
           <button
@@ -652,10 +897,24 @@ export function ReturnsClient({
           >
             {isBulkUpdating ? "Updating..." : "Apply"}
           </button>
+
+          <div className="h-6 w-px bg-zinc-800 hidden sm:block"></div>
+
+          {/* Dedicated CTA Button for Not Delivered / Not Returned */}
+          <button
+            onClick={markSelectedAsNotDeliveredNotReturned}
+            disabled={isBulkUpdating}
+            className="flex items-center gap-1.5 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 whitespace-nowrap shadow-sm"
+            title="Mark selected orders as Not Delivered & Not Returned"
+          >
+            <RotateCcw size={14} />
+            Not Delivered / Not Returned
+          </button>
           
           <button
             onClick={() => setSelected(new Set())}
             className="text-zinc-500 hover:text-zinc-300 p-1 transition-colors ml-1"
+            title="Deselect All"
           >
             <XCircle className="w-5 h-5" />
           </button>
@@ -681,22 +940,145 @@ export function ReturnsClient({
             
             <div className="p-4 overflow-y-auto space-y-4">
               {!previewData ? (
-                <div>
-                  <label className="block text-sm font-medium text-zinc-400 mb-2">
-                    Paste Consignment IDs or Order Names
-                  </label>
-                  <textarea
-                    value={bulkInputText}
-                    onChange={(e) => setBulkInputText(e.target.value)}
-                    placeholder="e.g. 1399&#10;1400&#10;P12345678"
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-sm text-zinc-200 focus:outline-none focus:border-indigo-500 h-64 font-mono placeholder:text-zinc-700"
-                  />
-                  <p className="text-xs text-zinc-500 mt-2">
-                    Paste one identifier per line. The system will find the matching orders and mark them as returned.
-                  </p>
+                <div className="space-y-4">
+                  {/* Return Classification Option */}
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-2">
+                      Return Classification
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBulkReturnClassification("normal");
+                          if (!bulkDeliveryFee) setBulkDeliveryFee("60");
+                        }}
+                        className={`flex flex-col p-3 rounded-xl border text-left transition-all ${
+                          bulkReturnClassification === "normal"
+                            ? "bg-rose-500/10 border-rose-500/40 text-rose-300 ring-1 ring-rose-500/30"
+                            : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <div className="flex items-center gap-2 font-semibold text-sm text-rose-300">
+                            <RotateCcw className="w-4 h-4 text-rose-400" />
+                            Normal Return
+                          </div>
+                          {bulkReturnClassification === "normal" && (
+                            <span className="w-2 h-2 rounded-full bg-rose-400"></span>
+                          )}
+                        </div>
+                        <span className="text-xs text-zinc-500 mt-1">
+                          Standard courier return with return delivery fee
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setBulkReturnClassification("paid")}
+                        className={`flex flex-col p-3 rounded-xl border text-left transition-all ${
+                          bulkReturnClassification === "paid"
+                            ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300 ring-1 ring-emerald-500/30"
+                            : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <div className="flex items-center gap-2 font-semibold text-sm text-emerald-300">
+                            <CheckCircle className="w-4 h-4 text-emerald-400" />
+                            Paid Return
+                          </div>
+                          {bulkReturnClassification === "paid" && (
+                            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                          )}
+                        </div>
+                        <span className="text-xs text-zinc-500 mt-1">
+                          Customer paid return (৳0 delivery fee loss)
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Return Delivery Fee (only for Normal Return) */}
+                  {bulkReturnClassification === "normal" && (
+                    <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 space-y-1.5 animate-in fade-in duration-150">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-medium text-zinc-300">
+                          Return Delivery Fee per Order (BDT)
+                        </label>
+                        <span className="text-[11px] text-zinc-500">Store loss deduction</span>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={bulkDeliveryFee}
+                        onChange={(e) => setBulkDeliveryFee(e.target.value)}
+                        placeholder="e.g. 60"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-rose-500/50 placeholder:text-zinc-600"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-2">
+                      Paste Consignment IDs or Order Names
+                    </label>
+                    <textarea
+                      value={bulkInputText}
+                      onChange={(e) => setBulkInputText(e.target.value)}
+                      placeholder="e.g. 1399&#10;1400&#10;P12345678"
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-sm text-zinc-200 focus:outline-none focus:border-indigo-500 h-48 font-mono placeholder:text-zinc-700"
+                    />
+                    <p className="text-xs text-zinc-500 mt-2">
+                      Paste one identifier per line. The system will find the matching orders and mark them as returned.
+                    </p>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4">
+                  {/* Classification Selector in Preview */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-zinc-950 border border-zinc-800 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-zinc-400">Classifying as:</span>
+                      {bulkReturnClassification === "paid" ? (
+                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5">
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          Paid Return (৳0 Fee)
+                        </span>
+                      ) : (
+                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center gap-1.5">
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          Normal Return (৳{bulkDeliveryFee || "0"} Fee)
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 p-1 rounded-lg">
+                      <button
+                        type="button"
+                        onClick={() => setBulkReturnClassification("normal")}
+                        className={`text-xs px-2.5 py-1 rounded-md font-medium transition-all ${
+                          bulkReturnClassification === "normal"
+                            ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                            : "text-zinc-400 hover:text-zinc-200"
+                        }`}
+                      >
+                        Normal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBulkReturnClassification("paid")}
+                        className={`text-xs px-2.5 py-1 rounded-md font-medium transition-all ${
+                          bulkReturnClassification === "paid"
+                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                            : "text-zinc-400 hover:text-zinc-200"
+                        }`}
+                      >
+                        Paid
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Matched Orders */}
                   <div>
                     <h3 className="text-sm font-semibold text-emerald-400 mb-2 flex items-center gap-2">
@@ -778,7 +1160,11 @@ export function ReturnsClient({
                   disabled={isBulkUpdating || previewData.matched.filter((m: any) => !m.has_existing_return).length === 0}
                   className="px-4 py-2 rounded-xl text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 transition-colors disabled:opacity-50"
                 >
-                  {isBulkUpdating ? "Processing..." : `Confirm ${previewData.matched.filter((m: any) => !m.has_existing_return).length} Returns`}
+                  {isBulkUpdating
+                    ? "Processing..."
+                    : `Confirm ${previewData.matched.filter((m: any) => !m.has_existing_return).length} ${
+                        bulkReturnClassification === "paid" ? "Paid" : "Normal"
+                      } Returns`}
                 </button>
               )}
             </div>

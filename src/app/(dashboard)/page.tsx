@@ -258,17 +258,21 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   liveStats.dispatched_period = dispatchedPeriodCount || 0;
 
-  // Fetch verified partial return deductions in this period
+  // Fetch partial return deductions in this period
   const { data: partialReturnsData } = await supabase
     .from("returns")
-    .select("refund_amount")
+    .select("refund_amount, order_total, returned_items")
     .eq("return_type", "partial")
-    .eq("is_verified", true)
     .gte("returned_at", startDateStr)
     .lte("returned_at", endDateStr);
 
   const partialDeductions = (partialReturnsData || []).reduce(
-    (acc: number, r: any) => acc + (Number(r.refund_amount) || 0), 0
+    (acc: number, r: any) => {
+      const val = Number(r.refund_amount) || 
+        (Array.isArray(r.returned_items) && r.returned_items.reduce((s: number, i: any) => s + (Number(i.price || 0) * Number(i.quantity || 1)), 0)) ||
+        (Number(r.order_total) || 0);
+      return acc + val;
+    }, 0
   );
   liveStats.returned_revenue += partialDeductions;
   returnedCOD += partialDeductions;

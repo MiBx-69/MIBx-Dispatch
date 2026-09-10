@@ -4,11 +4,16 @@ import { createServiceClient } from "@/lib/supabase/server";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { identifiers } = body; // Array of strings (order names or consignment IDs)
+    const { identifiers, is_paid_return, return_delivery_fee } = body; // Array of strings (order names or consignment IDs)
 
     if (!identifiers || !Array.isArray(identifiers) || identifiers.length === 0) {
       return NextResponse.json({ error: "identifiers is required (array)" }, { status: 400 });
     }
+
+    const isPaid = !!is_paid_return;
+    const deliveryFee = isPaid 
+      ? 0 
+      : (return_delivery_fee !== undefined && return_delivery_fee !== null ? Number(return_delivery_fee) : 0);
 
     const supabase = createServiceClient();
     
@@ -60,6 +65,8 @@ export async function POST(request: NextRequest) {
         return_type: "full",
         return_source: "manual",
         order_total: Number(order.total_price) || 0,
+        return_delivery_fee: deliveryFee,
+        is_paid_return: isPaid,
         status: "received",
         is_verified: true,
         returned_at: now,
@@ -71,6 +78,7 @@ export async function POST(request: NextRequest) {
         await supabase.from("orders").update({
           internal_status: "returned",
           returned_at: now,
+          return_delivery_fee: deliveryFee,
         }).eq("id", order.id);
         
         results.push({ identifier: order.shopify_order_name, success: true });

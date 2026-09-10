@@ -88,11 +88,15 @@ export function ReturnModal({ orders, onClose, onSuccess }: ReturnModalProps) {
         // Format returned items
         const itemsList = Object.entries(returnedItems)
           .filter(([_, qty]) => qty > 0)
-          .map(([id, quantity]) => {
-            const item = orders[0]?.line_items?.find((i: any) => String(i.id) === id || String(i.variant_id) === id);
+          .map(([key, quantity]) => {
+            const item = orders[0]?.line_items?.find((i: any, idx: number) => 
+              String(i.id) === key || String(i.variant_id) === key || String(idx) === key
+            );
             return {
-              id,
+              id: key,
               name: item?.name || item?.title || "Unknown Item",
+              variant_title: item?.variant_title || null,
+              price: Number(item?.price) || 0,
               quantity
             };
           });
@@ -103,6 +107,7 @@ export function ReturnModal({ orders, onClose, onSuccess }: ReturnModalProps) {
           return;
         }
         payload.returned_items = itemsList;
+        payload.returned_items_value = itemsList.reduce((sum, item) => sum + (item.price * item.quantity), 0);
       }
 
       const res = await fetch("/api/returns", {

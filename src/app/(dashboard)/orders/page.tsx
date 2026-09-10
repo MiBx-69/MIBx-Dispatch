@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { OrdersClient } from "./orders-client";
 import type { Metadata } from "next";
+import { getUnifiedReportMetrics, resolveDateRange } from "@/lib/reporting-engine";
 
 export const metadata: Metadata = { title: "Orders" };
 export const dynamic = "force-dynamic";
@@ -8,7 +9,14 @@ export const dynamic = "force-dynamic";
 export default async function OrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; search?: string; page?: string }>;
+  searchParams: Promise<{
+    status?: string;
+    search?: string;
+    page?: string;
+    dateFilter?: string;
+    startDate?: string;
+    endDate?: string;
+  }>;
 }) {
   const params = await searchParams;
   const supabase = createServiceClient();
@@ -22,6 +30,10 @@ export default async function OrdersPage({
     .select("*", { count: "exact" })
     .order("shopify_created_at", { ascending: false })
     .range(offset, offset + pageSize - 1);
+
+  // Date filtering calculation for delivered orders
+  const dateFilter = params.dateFilter || "all";
+  const { startDateStr, endDateStr } = resolveDateRange(dateFilter, params.startDate, params.endDate);
 
   if (params.status === "archived") {
     query = query.eq("is_archived", true);
@@ -40,6 +52,11 @@ export default async function OrdersPage({
     query = query.eq("is_archived", false)
                  .eq("fulfillment_status", "on_hold")
                  .neq("internal_status", "dispatched");
+  } else if (params.status === "delivered") {
+    query = query.eq("is_archived", false).eq("internal_status", "delivered");
+    if (startDateStr && endDateStr) {
+      query = query.gte("shopify_created_at", startDateStr).lte("shopify_created_at", endDateStr);
+    }
   } else if (!params.status || params.status === "all") {
     query = query.eq("is_archived", false)
                  .neq("internal_status", "dispatched")
@@ -53,6 +70,27 @@ export default async function OrdersPage({
     query = query.or(
       `customer_name.ilike.%${params.search}%,customer_phone.ilike.%${params.search}%,shopify_order_name.ilike.%${params.search}%,pathao_consignment_id.ilike.%${params.search}%`
     );
+  }
+
+  // If status is delivered, calculate full reporting metrics using the unified engine
+  let deliveredStats: any = null;
+  if (params.status === "delivered") {
+    const metrics = await getUnifiedReportMetrics({
+      dateFilter,
+      startDate: params.startDate,
+      endDate: params.endDate,
+      search: params.search,
+    });
+
+    deliveredStats = {
+      totalDeliveredCount: metrics.deliveredCount,
+      totalDeliveredAmount: metrics.deliveredRevenue,
+      deliveredAOV: metrics.deliveredAOV,
+      totalDeliveredItems: metrics.deliveredItems,
+      dateFilter,
+      startDate: params.startDate,
+      endDate: params.endDate,
+    };
   }
 
   const { data: orders, count } = await query;
@@ -100,6 +138,7 @@ export default async function OrdersPage({
       currentStatus={params.status}
       currentSearch={params.search}
       pathaoStoreId={settings?.pathao_store_id}
+      deliveredStats={deliveredStats}
     />
   );
 }

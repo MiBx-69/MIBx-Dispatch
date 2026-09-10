@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       // Fetch the order
       const { data: order, error: fetchErr } = await supabase
         .from("orders")
-        .select("id, internal_status, total_price, pathao_consignment_id, shopify_order_name")
+        .select("id, internal_status, total_price, pathao_consignment_id, shopify_order_name, line_items")
         .eq("id", orderId)
         .single();
 
@@ -105,7 +105,31 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
 
       const isPartial = return_type === "partial";
-      const initialStatus = isPartial ? "pending_verification" : "received";
+
+      let returnedItemsValue = 0;
+      let updatedLineItems = order.line_items;
+
+      if (isPartial) {
+        returnedItemsValue = Number(body.returned_items_value) || 
+          (Array.isArray(returned_items) ? returned_items.reduce((sum: number, item: any) => sum + (Number(item.price || 0) * Number(item.quantity || 1)), 0) : 0);
+
+        if (Array.isArray(order.line_items) && Array.isArray(returned_items)) {
+          updatedLineItems = order.line_items.map((item: any, idx: number) => {
+            const matchedReturn = returned_items.find((r: any) => 
+              (r.id && (String(r.id) === String(item.id) || String(r.id) === String(item.variant_id) || String(r.id) === String(idx))) ||
+              (r.name && (r.name === item.title || r.name === item.name))
+            );
+            if (!matchedReturn) return item;
+            const currentQty = typeof item.quantity === "number" ? item.quantity : (Number(item.quantity) || 1);
+            const retQty = Number(matchedReturn.quantity) || 0;
+            return {
+              ...item,
+              original_quantity: item.original_quantity !== undefined ? item.original_quantity : currentQty,
+              quantity: Math.max(0, currentQty - retQty),
+            };
+          });
+        }
+      }
 
       // Create return record
       const { error: insertErr } = await supabase.from("returns").insert({
@@ -115,11 +139,12 @@ export async function POST(request: NextRequest) {
         return_reason: return_reason || null,
         return_type,
         return_source: "manual",
-        order_total: Number(order.total_price) || 0,
+        order_total: returnedItemsValue > 0 ? returnedItemsValue : Number(order.total_price) || 0,
+        refund_amount: returnedItemsValue,
         return_delivery_fee: Number(return_delivery_fee) || 0,
         is_paid_return: !!body.is_paid_return,
-        status: initialStatus,
-        is_verified: !isPartial, // Partial needs admin verification
+        status: "received",
+        is_verified: true,
         returned_items: isPartial ? returned_items : null,
         notes: notes || null,
         returned_at: now,
@@ -130,13 +155,19 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Update order status ONLY for full returns
+      // Update order status ONLY for full returns, adjust total_price for partial
       if (!isPartial) {
         await supabase.from("orders").update({
           internal_status: "returned",
           returned_at: now,
           return_reason: return_reason || null,
           return_delivery_fee: Number(return_delivery_fee) || 0,
+        }).eq("id", orderId);
+      } else if (returnedItemsValue > 0) {
+        const currentTotal = Number(order.total_price) || 0;
+        await supabase.from("orders").update({
+          total_price: Math.max(0, currentTotal - returnedItemsValue),
+          line_items: updatedLineItems,
         }).eq("id", orderId);
       }
 

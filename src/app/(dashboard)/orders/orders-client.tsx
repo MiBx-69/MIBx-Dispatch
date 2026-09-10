@@ -17,6 +17,7 @@ import { ReportFraudModal } from "@/components/modals/report-fraud-modal";
 import { FraudDetailsModal } from "@/components/modals/fraud-details-modal";
 import { OrderTimelineModal } from "@/components/orders/order-timeline-modal";
 import { BulkImportDeliveriesModal } from "@/components/orders/bulk-import-deliveries-modal";
+import { DeliveredReportingHeader, DeliveredStats } from "@/components/orders/delivered-reporting-header";
 import type { Order, OrderStatus } from "@/types/database";
 
 const STATUS_FILTERS = [
@@ -47,6 +48,7 @@ interface OrdersClientProps {
   currentStatus?: string;
   currentSearch?: string;
   pathaoStoreId?: number | null;
+  deliveredStats?: DeliveredStats | null;
 }
 
 export function OrdersClient({
@@ -60,8 +62,11 @@ export function OrdersClient({
   currentStatus,
   currentSearch,
   pathaoStoreId,
+  deliveredStats,
 }: OrdersClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const effectiveStatus = searchParams?.get("status") || currentStatus;
   
   // State for Infinite Scroll
   const [ordersList, setOrdersList] = useState<Order[]>(orders);
@@ -78,6 +83,7 @@ export function OrdersClient({
   const [viewFraudOrder, setViewFraudOrder] = useState<Order | null>(null);
   const [timelineOrderId, setTimelineOrderId] = useState<string | null>(null);
   const [isCheckingFraud, setIsCheckingFraud] = useState(false);
+  const [isLoadingAllIds, setIsLoadingAllIds] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   // Reset list when server-provided orders change (e.g., search/filter changed)
@@ -100,8 +106,8 @@ export function OrdersClient({
             // Prevent duplicates
             if (prev.some((o) => o.id === newOrder.id)) return prev;
             
-            // Optionally filter by currentStatus
-            if (currentStatus && currentStatus !== "all" && newOrder.internal_status !== currentStatus) {
+            // Optionally filter by effectiveStatus
+            if (effectiveStatus && effectiveStatus !== "all" && newOrder.internal_status !== effectiveStatus) {
               return prev;
             }
             
@@ -121,7 +127,7 @@ export function OrdersClient({
         supabase.removeChannel(channel);
       };
     });
-  }, [currentStatus]);
+  }, [effectiveStatus]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
@@ -129,7 +135,7 @@ export function OrdersClient({
 
     try {
       const params = new URLSearchParams();
-      if (currentStatus && currentStatus !== "all") params.set("status", currentStatus);
+      if (effectiveStatus && effectiveStatus !== "all") params.set("status", effectiveStatus);
       if (currentSearch) params.set("search", currentSearch);
       params.set("page", (page + 1).toString());
       params.set("pageSize", pageSize.toString());
@@ -154,7 +160,7 @@ export function OrdersClient({
     } finally {
       setLoadingMore(false);
     }
-  }, [page, loadingMore, hasMore, currentStatus, currentSearch, pageSize]);
+  }, [page, loadingMore, hasMore, effectiveStatus, currentSearch, pageSize]);
 
   const loadMoreRef = useRef(loadMore);
   useEffect(() => {
@@ -179,7 +185,7 @@ export function OrdersClient({
     e.preventDefault();
     startTransition(() => {
       const params = new URLSearchParams();
-      if (currentStatus && currentStatus !== "all") params.set("status", currentStatus);
+      if (effectiveStatus && effectiveStatus !== "all") params.set("status", effectiveStatus);
       if (search) params.set("search", search);
       router.push(`/orders?${params.toString()}`);
     });
@@ -190,14 +196,14 @@ export function OrdersClient({
       if (search !== (currentSearch || "")) {
         startTransition(() => {
           const params = new URLSearchParams();
-          if (currentStatus && currentStatus !== "all") params.set("status", currentStatus);
+          if (effectiveStatus && effectiveStatus !== "all") params.set("status", effectiveStatus);
           if (search) params.set("search", search);
           router.push(`/orders?${params.toString()}`);
         });
       }
     }, 300);
     return () => clearTimeout(handler);
-  }, [search, currentStatus, currentSearch, router]);
+  }, [search, effectiveStatus, currentSearch, router]);
 
   const toggleSelect = (id: string) => {
     const next = new Set(selected);
@@ -206,11 +212,39 @@ export function OrdersClient({
     setSelected(next);
   };
 
-  const selectAll = () => {
-    if (selected.size === ordersList.length) {
+  const selectAll = async (forceSelectAll = false) => {
+    if (selected.size > 0 && !forceSelectAll) {
       setSelected(new Set());
-    } else {
+      return;
+    }
+
+    if (total <= ordersList.length && !forceSelectAll) {
+      if (selected.size === ordersList.length) {
+        setSelected(new Set());
+      } else {
+        setSelected(new Set(ordersList.map((o) => o.id)));
+      }
+      return;
+    }
+
+    setIsLoadingAllIds(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("idsOnly", "true");
+      if (effectiveStatus && effectiveStatus !== "all") params.set("status", effectiveStatus);
+      if (search) params.set("search", search);
+
+      const res = await fetch(`/api/orders?${params.toString()}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to fetch order IDs");
+
+      setSelected(new Set(data.ids));
+      toast.success(`Selected all ${data.total} orders`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to select all orders");
       setSelected(new Set(ordersList.map((o) => o.id)));
+    } finally {
+      setIsLoadingAllIds(false);
     }
   };
 
@@ -293,6 +327,66 @@ export function OrdersClient({
     }
   };
 
+  const cancelReturn = async (orderIds: string[]) => {
+    if (orderIds.length === 0) return;
+    const confirmMsg = orderIds.length === 1 
+      ? "Mark this order as Not Delivered & Not Returned? It will restore the order to its old status." 
+      : `Mark ${orderIds.length} orders as Not Delivered & Not Returned? It will restore the orders to their old status.`;
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      const res = await fetch("/api/returns/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderIds }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update orders");
+
+      toast.success(`Marked ${data.processed} order(s) as Not Delivered & Not Returned`);
+      setSelected(new Set());
+      router.refresh();
+      // Optimistically update status to dispatched if consignment/dispatch exists, else pending
+      setOrdersList(prev => prev.map(o => {
+        if (!orderIds.includes(o.id)) return o;
+        const oldStatus = o.pathao_consignment_id ? "dispatched" : "pending";
+        return { ...o, internal_status: oldStatus, return_delivery_fee: 0, returned_at: null, return_reason: null };
+      }));
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update orders");
+    }
+  };
+
+  const cancelDelivery = async (orderIds: string[]) => {
+    if (orderIds.length === 0) return;
+    const confirmMsg = orderIds.length === 1 
+      ? "Mark this order as Not Delivered & Not Returned? It will restore the order to its old status." 
+      : `Mark ${orderIds.length} orders as Not Delivered & Not Returned? It will restore the orders to their old status.`;
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      const res = await fetch("/api/deliveries/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderIds }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update orders");
+
+      toast.success(`Marked ${data.processed} order(s) as Not Delivered & Not Returned`);
+      setSelected(new Set());
+      router.refresh();
+      // Optimistically update status
+      setOrdersList(prev => prev.map(o => {
+        if (!orderIds.includes(o.id)) return o;
+        const oldStatus = o.pathao_consignment_id ? "dispatched" : "pending";
+        return { ...o, internal_status: oldStatus, delivered_at: null, pathao_delivery_status: null };
+      }));
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update orders");
+    }
+  };
+
   const manualFraudCheck = async (orderId: string) => {
     setIsCheckingFraud(true);
     const toastId = toast.loading("Checking FraudSpy...");
@@ -335,32 +429,39 @@ export function OrdersClient({
 
   return (
     <div className="space-y-4 animate-fade-in">
-      {/* Consolidated Orders Status Bar */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col justify-center items-center">
-          <div className="text-zinc-400 text-xs font-medium uppercase tracking-wider mb-1">Dispatched</div>
-          <div className="text-2xl font-semibold text-emerald-400">{dispatchedCount}</div>
+      {/* Delivered Reporting Header or Consolidated Status Bar */}
+      {effectiveStatus === "delivered" ? (
+        <DeliveredReportingHeader
+          stats={deliveredStats || null}
+          onOpenImportModal={() => setBulkImportDeliveriesOpen(true)}
+        />
+      ) : (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col justify-center items-center">
+            <div className="text-zinc-400 text-xs font-medium uppercase tracking-wider mb-1">Dispatched</div>
+            <div className="text-2xl font-semibold text-emerald-400">{dispatchedCount}</div>
+          </div>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col justify-center items-center">
+            <div className="text-zinc-400 text-xs font-medium uppercase tracking-wider mb-1">On Hold</div>
+            <div className="text-2xl font-semibold text-amber-400">{onHoldCount}</div>
+          </div>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col justify-center items-center">
+            <div className="text-zinc-400 text-xs font-medium uppercase tracking-wider mb-1">Cancelled</div>
+            <div className="text-2xl font-semibold text-rose-400">{cancelledCount}</div>
+          </div>
         </div>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col justify-center items-center">
-          <div className="text-zinc-400 text-xs font-medium uppercase tracking-wider mb-1">On Hold</div>
-          <div className="text-2xl font-semibold text-amber-400">{onHoldCount}</div>
-        </div>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col justify-center items-center">
-          <div className="text-zinc-400 text-xs font-medium uppercase tracking-wider mb-1">Cancelled</div>
-          <div className="text-2xl font-semibold text-rose-400">{cancelledCount}</div>
-        </div>
-      </div>
+      )}
 
       {/* Search + Filter */}
       <div className="space-y-3">
-        <div className="flex gap-2">
-          <form onSubmit={handleSearch} className="relative flex-1">
+        <div className="flex flex-col sm:flex-row gap-2">
+          <form onSubmit={handleSearch} className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search orders, customers, phones..."
-              className="w-full pl-9 pr-10 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm
+              className="w-full pl-9 pr-10 py-2 sm:py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm
                         text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500
                         focus:ring-1 focus:ring-indigo-500 transition-all"
             />
@@ -368,22 +469,48 @@ export function OrdersClient({
               <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 animate-spin" />
             )}
           </form>
+          <div className="flex items-center gap-2 shrink-0">
             <button 
               type="button" 
-              onClick={selectAll} 
-              className="px-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors whitespace-nowrap"
+              onClick={() => selectAll()} 
+              disabled={isLoadingAllIds}
+              className="flex-1 sm:flex-initial px-3.5 py-2 sm:py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs sm:text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors whitespace-nowrap flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              {selected.size === ordersList.length && ordersList.length > 0 ? "Deselect All" : "Select All"}
+              {isLoadingAllIds ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                  Selecting all {total}...
+                </>
+              ) : selected.size > 0 ? (
+                `Deselect All (${selected.size})`
+              ) : (
+                `Select All (${total})`
+              )}
             </button>
             <button
               type="button"
               onClick={() => setBulkImportDeliveriesOpen(true)}
-              className="px-4 py-2.5 bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-sm font-medium hover:bg-emerald-600/30 transition-colors whitespace-nowrap flex items-center gap-2"
+              className="flex-1 sm:flex-initial px-3.5 py-2 sm:py-2.5 bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs sm:text-sm font-medium hover:bg-emerald-600/30 transition-colors whitespace-nowrap flex items-center justify-center gap-1.5"
             >
-              <UploadCloud className="w-4 h-4" />
-              Import Deliveries
+              <UploadCloud className="w-4 h-4 shrink-0" />
+              <span>Import Deliveries</span>
             </button>
           </div>
+        </div>
+
+        {/* Helper Banner when only loaded orders were selected and more exist */}
+        {selected.size === ordersList.length && total > ordersList.length && (
+          <div className="bg-indigo-500/10 border border-indigo-500/25 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-indigo-300 animate-in fade-in">
+            <span>All <strong>{ordersList.length}</strong> loaded orders are selected.</span>
+            <button
+              onClick={() => selectAll(true)}
+              disabled={isLoadingAllIds}
+              className="underline hover:text-white font-semibold ml-2 disabled:opacity-50"
+            >
+              {isLoadingAllIds ? "Selecting..." : `Select all ${total} orders matching current filter`}
+            </button>
+          </div>
+        )}
 
         {/* Status filters */}
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
@@ -400,7 +527,7 @@ export function OrdersClient({
               }}
               className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
                 ${
-                  (currentStatus === f.value) || (!currentStatus && f.value === "all")
+                  (effectiveStatus === f.value) || (!effectiveStatus && f.value === "all")
                     ? "bg-indigo-500 text-white"
                     : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
                 }
@@ -515,6 +642,26 @@ export function OrdersClient({
                 <RotateCcw size={14} /> Return
               </button>
 
+              {Array.from(selected).some(id => ordersList.find(o => o.id === id)?.internal_status === "returned") && (
+                <button
+                  onClick={() => cancelReturn(Array.from(selected).filter(id => ordersList.find(o => o.id === id)?.internal_status === "returned"))}
+                  className="flex items-center gap-1 bg-rose-600/20 text-rose-300 hover:bg-rose-600/30 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors border border-rose-500/40 whitespace-nowrap shadow-sm"
+                  title="Mark as Not Delivered & Not Returned (moves to old status)"
+                >
+                  <RotateCcw size={13} /> Not Returned
+                </button>
+              )}
+
+              {Array.from(selected).some(id => ordersList.find(o => o.id === id)?.internal_status === "delivered") && (
+                <button
+                  onClick={() => cancelDelivery(Array.from(selected).filter(id => ordersList.find(o => o.id === id)?.internal_status === "delivered"))}
+                  className="flex items-center gap-1 bg-amber-600/20 text-amber-300 hover:bg-amber-600/30 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors border border-amber-500/40 whitespace-nowrap shadow-sm"
+                  title="Mark as Not Delivered & Not Returned (moves to old status)"
+                >
+                  <RotateCcw size={13} /> Not Delivered
+                </button>
+              )}
+
               <div className="w-px h-6 bg-zinc-700 mx-1 hidden sm:block"></div>
               
               <button onClick={() => bulkArchive(true)} className="flex items-center gap-1.5 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border border-zinc-700">
@@ -537,37 +684,37 @@ export function OrdersClient({
           return (
             <div
               key={order.id}
-              className={`bg-zinc-900 border rounded-2xl overflow-hidden transition-all duration-200
+              className={`bg-zinc-900 border rounded-2xl overflow-hidden transition-all duration-200 flex flex-col
                 ${isSelected ? "border-indigo-500 ring-1 ring-indigo-500" : "border-zinc-800 hover:border-zinc-700"}
               `}
             >
               {/* Header */}
-              <div className="p-2.5 px-3 border-b border-zinc-800/50 bg-zinc-900/50 flex items-center justify-between">
-                <div className="flex items-center gap-3">
+              <div className="p-2.5 px-3 border-b border-zinc-800/50 bg-zinc-900/50 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
                   <button
                     onClick={() => toggleSelect(order.id)}
-                    className={`w-5 h-5 rounded flex items-center justify-center transition-colors
-                      ${isSelected ? "bg-indigo-500 text-white" : "border-2 border-zinc-700 hover:border-zinc-500"}
+                    className={`w-5 h-5 rounded flex items-center justify-center transition-colors shrink-0
+                    ${isSelected ? "bg-indigo-500 text-white" : "border-2 border-zinc-700 hover:border-zinc-500"}
                     `}
                   >
                     {isSelected && <Check size={12} strokeWidth={3} />}
                   </button>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-zinc-100">{order.shopify_order_name}</h3>
-                      <StatusBadge status={order.internal_status as OrderStatus} />
-                    </div>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h3 className="font-bold text-zinc-100 text-sm truncate">{order.shopify_order_name}</h3>
+                    <StatusBadge status={order.internal_status as OrderStatus} />
                   </div>
                 </div>
                 
-                {/* Dispatch Button for individual order */}
+                {/* Actions for individual order */}
                 {!order.is_archived && (
-                  <button
-                    onClick={() => setDispatchOrder(order)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-colors"
-                  >
-                    <Truck size={12} /> {isDispatchedOrCancelled ? "Re-dispatch" : "Dispatch"}
-                  </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => setDispatchOrder(order)}
+                      className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25 border border-indigo-500/25 transition-colors whitespace-nowrap"
+                    >
+                      <Truck size={12} /> {isDispatchedOrCancelled ? "Re-dispatch" : "Dispatch"}
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -666,7 +813,7 @@ export function OrdersClient({
               </div>
 
               {/* CTA Buttons */}
-              <div className="flex flex-wrap items-center gap-1 px-3 pb-2.5 border-t border-zinc-800/50 pt-2 mt-auto">
+              <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2.5 border-t border-zinc-800/50 pt-2 mt-auto">
                 {order.customer_phone && !order.is_archived && !isDispatchedOrCancelled && (
                   <button onClick={() => {
                     const d = order.customer_phone!.replace(/[^0-9]/g, '');
@@ -677,26 +824,47 @@ export function OrdersClient({
                     if (ua.includes('android')) window.location.href = `intent://send/?phone=${formattedPhone}&text=${encodedText}#Intent;scheme=whatsapp;package=com.whatsapp.w4b;end`;
                     else if (/ipad|iphone|ipod/.test(ua) && !(window as any).MSStream) window.location.href = `whatsapp://send?phone=${formattedPhone}&text=${encodedText}`;
                     else window.open(`https://web.whatsapp.com/send?phone=${formattedPhone}&text=${encodedText}`, '_blank');
-                  }} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md bg-green-600/15 text-green-400 border border-green-600/20 hover:bg-green-600/25 transition-colors mr-1">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.888-.788-1.487-1.761-1.66-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg> WhatsApp
+                  }} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md bg-green-600/15 text-green-400 border border-green-600/25 hover:bg-green-600/25 transition-colors whitespace-nowrap">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.888-.788-1.487-1.761-1.66-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>
+                    WhatsApp
                   </button>
                 )}
 
                 {order.customer_phone && !order.is_archived && (
-                  <button onClick={() => setSmsOrder(order)} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md bg-orange-600/15 text-orange-400 border border-orange-600/20 hover:bg-orange-600/25 transition-colors mr-1">
+                  <button onClick={() => setSmsOrder(order)} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md bg-orange-600/15 text-orange-400 border border-orange-600/25 hover:bg-orange-600/25 transition-colors whitespace-nowrap">
                     <MessageSquare size={11} /> SMS
                   </button>
                 )}
 
                 {order.customer_phone && !order.is_archived && (
-                  <button onClick={() => setFraudOrder(order)} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md bg-red-600/15 text-red-400 border border-red-600/20 hover:bg-red-600/25 transition-colors mr-1">
+                  <button onClick={() => setFraudOrder(order)} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md bg-red-600/15 text-red-400 border border-red-600/25 hover:bg-red-600/25 transition-colors whitespace-nowrap">
                     <AlertCircle size={11} /> Report
                   </button>
                 )}
 
                 {order.customer_phone && !order.is_archived && (
-                  <button onClick={() => setViewFraudOrder(order)} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700 transition-colors mr-1">
+                  <button onClick={() => setViewFraudOrder(order)} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700 hover:text-white transition-colors whitespace-nowrap">
                     <ShieldCheck size={11} /> Check
+                  </button>
+                )}
+
+                {order.internal_status === "returned" && (
+                  <button 
+                    onClick={() => cancelReturn([order.id])}
+                    className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded-md bg-rose-600/20 text-rose-300 border border-rose-500/35 hover:bg-rose-600/30 transition-colors whitespace-nowrap ml-auto"
+                    title="Mark order as Not Returned (moves back to old status)"
+                  >
+                    <RotateCcw size={11} /> Not Returned
+                  </button>
+                )}
+
+                {order.internal_status === "delivered" && (
+                  <button 
+                    onClick={() => cancelDelivery([order.id])}
+                    className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded-md bg-amber-600/20 text-amber-300 border border-amber-500/35 hover:bg-amber-600/30 transition-colors whitespace-nowrap ml-auto"
+                    title="Mark order as Not Delivered (moves back to old status)"
+                  >
+                    <RotateCcw size={11} /> Not Delivered
                   </button>
                 )}
               </div>

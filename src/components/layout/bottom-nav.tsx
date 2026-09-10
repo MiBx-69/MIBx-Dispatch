@@ -34,7 +34,7 @@ export function BottomNav() {
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-zinc-900/95 backdrop-blur-lg
                     border-t border-zinc-800 mobile-safe-bottom">
-      <div className="flex items-stretch justify-around px-2 pt-2">
+      <div className="flex items-stretch justify-start sm:justify-around overflow-x-auto scrollbar-hide px-1 pt-1.5 pb-1">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           let isActive = false;
           if (href === "/orders?status=delivered") {
@@ -49,11 +49,11 @@ export function BottomNav() {
             <Link
               key={href}
               href={href}
-              className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl
-                         transition-all duration-150 min-w-0 flex-1 ${
+              className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl
+                         transition-all duration-150 min-w-[56px] shrink-0 sm:shrink sm:min-w-0 sm:flex-1 ${
                            isActive
                              ? "text-indigo-400"
-                             : "text-zinc-600 active:text-zinc-400"
+                             : "text-zinc-500 active:text-zinc-300"
                          }`}
             >
               <div className={`p-1.5 rounded-lg transition-colors ${

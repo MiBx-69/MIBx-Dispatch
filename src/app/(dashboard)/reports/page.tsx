@@ -52,7 +52,7 @@ export default async function ReportsPage({
   // 3. Fetch Returns in date range (from returns table for accurate fee tracking)
   const { data: returnsData } = await supabase
     .from("returns")
-    .select("id, order_total, return_delivery_fee, returned_at, return_reason, return_source, return_type, is_verified, refund_amount")
+    .select("id, order_total, return_delivery_fee, returned_at, return_reason, return_source, return_type, is_verified, refund_amount, returned_items")
     .gte("returned_at", startDateStr)
     .lte("returned_at", endDateStr);
 
@@ -164,10 +164,15 @@ export default async function ReportsPage({
   // Return delivery fees from the returns table (more accurate than order-level)
   const totalReturnDeliveryFees = returns.reduce((acc: number, r: any) => acc + (Number(r.return_delivery_fee) || 0), 0);
 
-  // Partial return deductions: sum of refund_amount from verified partial returns
+  // Partial return deductions: sum of refund_amount / returned items from partial returns
   const partialReturnDeductions = returns
-    .filter((r: any) => r.return_type === 'partial' && r.is_verified && r.refund_amount)
-    .reduce((acc: number, r: any) => acc + (Number(r.refund_amount) || 0), 0);
+    .filter((r: any) => r.return_type === 'partial')
+    .reduce((acc: number, r: any) => {
+      const val = Number(r.refund_amount) || 
+        (Array.isArray(r.returned_items) && r.returned_items.reduce((s: number, i: any) => s + (Number(i.price || 0) * Number(i.quantity || 1)), 0)) ||
+        (Number(r.order_total) || 0);
+      return acc + val;
+    }, 0);
 
   // Total returned = full returns (from order status) + partial return deductions
   const totalReturnedRevenue = returnedRevenue + partialReturnDeductions;

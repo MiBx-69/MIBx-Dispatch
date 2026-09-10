@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       // Fetch the order
       const { data: order, error: fetchErr } = await supabase
         .from("orders")
-        .select("id, internal_status, total_price, pathao_consignment_id, shopify_order_name")
+        .select("id, internal_status, total_price, pathao_consignment_id, shopify_order_name, line_items")
         .eq("id", orderId)
         .single();
 
@@ -44,7 +44,31 @@ export async function POST(request: NextRequest) {
       const now = new Date().toISOString();
       const isPartial = delivery_type === "partial";
 
+      let returnedItemsValue = 0;
+      let updatedLineItems = order.line_items;
+
       if (isPartial) {
+        // Calculate returned items value
+        returnedItemsValue = Number(body.returned_items_value) || 
+          (Array.isArray(returned_items) ? returned_items.reduce((sum: number, item: any) => sum + (Number(item.price || 0) * Number(item.quantity || 1)), 0) : 0);
+
+        if (Array.isArray(order.line_items) && Array.isArray(returned_items)) {
+          updatedLineItems = order.line_items.map((item: any, idx: number) => {
+            const matchedReturn = returned_items.find((r: any) => 
+              (r.id && (String(r.id) === String(item.id) || String(r.id) === String(item.variant_id) || String(r.id) === String(idx))) ||
+              (r.name && (r.name === item.title || r.name === item.name))
+            );
+            if (!matchedReturn) return item;
+            const currentQty = typeof item.quantity === "number" ? item.quantity : (Number(item.quantity) || 1);
+            const retQty = Number(matchedReturn.quantity) || 0;
+            return {
+              ...item,
+              original_quantity: item.original_quantity !== undefined ? item.original_quantity : currentQty,
+              quantity: Math.max(0, currentQty - retQty),
+            };
+          });
+        }
+
         // Find the dispatch record if any
         const { data: dispatch } = await supabase
           .from("dispatches")
@@ -69,11 +93,12 @@ export async function POST(request: NextRequest) {
             return_reason: return_reason || "Partial Delivery",
             return_type: "partial",
             return_source: "manual",
-            order_total: Number(order.total_price) || 0,
+            order_total: returnedItemsValue > 0 ? returnedItemsValue : Number(order.total_price) || 0,
+            refund_amount: returnedItemsValue,
             return_delivery_fee: Number(return_delivery_fee) || 0,
             is_paid_return: !!is_paid_return,
-            status: "pending_verification", // Partial returns need admin verification
-            is_verified: false,
+            status: "received",
+            is_verified: true,
             returned_items: returned_items,
             notes: notes || null,
             returned_at: now,
@@ -86,11 +111,19 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Mark the order as delivered
-      const { error: updateErr } = await supabase.from("orders").update({
+      // Mark the order as delivered and adjust total_price for partial delivery
+      const orderUpdates: any = {
         internal_status: "delivered",
         delivered_at: now,
-      }).eq("id", orderId);
+      };
+
+      if (isPartial && returnedItemsValue > 0) {
+        const currentTotal = Number(order.total_price) || 0;
+        orderUpdates.total_price = Math.max(0, currentTotal - returnedItemsValue);
+        orderUpdates.line_items = updatedLineItems;
+      }
+
+      const { error: updateErr } = await supabase.from("orders").update(orderUpdates).eq("id", orderId);
 
       if (updateErr) {
         errors.push({ orderId, error: `Failed to update order status: ${updateErr.message}` });

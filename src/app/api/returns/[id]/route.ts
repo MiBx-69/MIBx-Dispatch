@@ -133,12 +133,30 @@ export async function DELETE(
 
     // Only reset order status for full returns (partials never changed the order status)
     if (!isPartial) {
+      const { data: dispatch } = await supabase
+        .from("dispatches")
+        .select("id")
+        .eq("order_id", returnRecord.order_id)
+        .eq("is_cancelled", false)
+        .maybeSingle();
+
+      const { data: order } = await supabase
+        .from("orders")
+        .select("pathao_consignment_id")
+        .eq("id", returnRecord.order_id)
+        .single();
+
+      const oldStatus = (dispatch || order?.pathao_consignment_id) ? "dispatched" : "pending";
+
       await supabase.from("orders").update({
-        internal_status: "dispatched",
+        internal_status: oldStatus,
         returned_at: null,
         return_reason: null,
         return_delivery_fee: 0,
       }).eq("id", returnRecord.order_id);
+
+      const { logOrderEvent } = await import("@/lib/audit");
+      await logOrderEvent(returnRecord.order_id, "RETURN_CANCELLED", `Return cancelled. Moved order back to ${oldStatus}.`);
     }
 
     return NextResponse.json({ success: true });

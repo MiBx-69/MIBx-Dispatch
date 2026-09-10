@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { DispatchesClient } from "./dispatches-client";
 import { Metadata } from "next";
+import { getUnifiedReportMetrics, resolveDateRange } from "@/lib/reporting-engine";
 
 export const metadata: Metadata = { title: "Dispatches" };
 export const dynamic = "force-dynamic";
@@ -15,6 +16,7 @@ export default async function DispatchesPage({
   const page = parseInt(params.page || "1");
   const pageSize = 50;
   const offset = (page - 1) * pageSize;
+  const dateFilter = params.dateFilter || "all";
 
   let query = supabase
     .from("dispatches")
@@ -22,11 +24,6 @@ export default async function DispatchesPage({
     .neq("orders.internal_status", "cancelled")
     .order("dispatched_at", { ascending: false })
     .range(offset, offset + pageSize - 1);
-
-  let statsQuery = supabase
-    .from("dispatches")
-    .select("amount_to_collect, orders!inner(internal_status)")
-    .neq("orders.internal_status", "cancelled");
 
   const STATUS_MAP: Record<string, string[]> = {
     "Pending": ["Pending", "order.assigned_for_pickup", "order.pickup_cancelled"],
@@ -43,48 +40,31 @@ export default async function DispatchesPage({
   if (params.status) {
     const mapped = STATUS_MAP[params.status] || [params.status];
     query = query.in("pathao_order_status", mapped);
-    statsQuery = statsQuery.in("pathao_order_status", mapped);
   }
 
   if (params.search) {
     const s = params.search;
     query = query.or(`consignment_id.ilike.%${s}%,recipient_phone.ilike.%${s}%,shopify_order_name.ilike.%${s}%`);
-    statsQuery = statsQuery.or(`consignment_id.ilike.%${s}%,recipient_phone.ilike.%${s}%,shopify_order_name.ilike.%${s}%`);
   }
 
-  // Date Filtering
-  const dateFilter = params.dateFilter || "all";
-  let startDateStr = "";
-  let endDateStr = "";
-
-  const now = new Date();
-  
-  if (dateFilter === "today") {
-    startDateStr = new Date(now.setHours(0, 0, 0, 0)).toISOString();
-    endDateStr = new Date(now.setHours(23, 59, 59, 999)).toISOString();
-  } else if (dateFilter === "yesterday") {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    startDateStr = new Date(yesterday.setHours(0, 0, 0, 0)).toISOString();
-    endDateStr = new Date(yesterday.setHours(23, 59, 59, 999)).toISOString();
-  } else if (dateFilter === "this_month") {
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-    startDateStr = new Date(firstDay.setHours(0, 0, 0, 0)).toISOString();
-    endDateStr = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
-  } else if (dateFilter === "custom" && params.startDate && params.endDate) {
-    startDateStr = new Date(params.startDate).toISOString();
-    const end = new Date(params.endDate);
-    endDateStr = new Date(end.setHours(23, 59, 59, 999)).toISOString();
-  }
-
+  const { startDateStr, endDateStr } = resolveDateRange(dateFilter, params.startDate, params.endDate);
   if (startDateStr && endDateStr) {
     query = query.gte("dispatched_at", startDateStr).lte("dispatched_at", endDateStr);
-    statsQuery = statsQuery.gte("dispatched_at", startDateStr).lte("dispatched_at", endDateStr);
   }
 
-  const [{ data: rawDispatches, count }, { data: statsData }] = await Promise.all([
+  const [
+    { data: rawDispatches, count },
+    metrics,
+    { data: settings },
+  ] = await Promise.all([
     query,
-    statsQuery
+    getUnifiedReportMetrics({
+      dateFilter,
+      startDate: params.startDate,
+      endDate: params.endDate,
+      search: params.search,
+    }),
+    supabase.from("app_settings").select("pathao_store_id").single(),
   ]);
   
   const dispatches = rawDispatches?.sort((a: any, b: any) => {
@@ -93,10 +73,17 @@ export default async function DispatchesPage({
     return numB - numA;
   });
 
-  const totalAmount = statsData?.reduce((sum: number, d: any) => sum + Number(d.amount_to_collect || 0), 0) || 0;
-  const totalQuantity = statsData?.length || 0;
-
-  const { data: settings } = await supabase.from("app_settings").select("pathao_store_id").single();
+  const dispatchStats = {
+    totalQuantity: metrics.dispatchedCount,
+    totalAmount: metrics.amountToCollect,
+    deliveredCount: metrics.deliveredCount,
+    deliveredAmount: metrics.deliveredRevenue,
+    returnedCount: metrics.returnedCount,
+    returnedAmount: metrics.returnedValue,
+    dateFilter,
+    startDate: params.startDate,
+    endDate: params.endDate,
+  };
 
   return (
     <DispatchesClient
@@ -108,8 +95,9 @@ export default async function DispatchesPage({
       dateFilter={dateFilter}
       startDate={params.startDate}
       endDate={params.endDate}
-      totalAmount={totalAmount}
-      totalQuantity={totalQuantity}
+      totalAmount={metrics.amountToCollect}
+      totalQuantity={metrics.dispatchedCount}
+      stats={dispatchStats}
       page={page}
       pageSize={pageSize}
     />

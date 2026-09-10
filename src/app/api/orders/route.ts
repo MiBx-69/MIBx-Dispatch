@@ -10,13 +10,18 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search") || "";
 
     const offset = (page - 1) * pageSize;
+    const idsOnly = searchParams.get("idsOnly") === "true";
     const supabase = createServiceClient();
 
-    let query = supabase
-      .from("orders")
-      .select("*", { count: "exact" })
-      .order("shopify_created_at", { ascending: false })
-      .range(offset, offset + pageSize - 1);
+    let query = supabase.from("orders");
+    if (idsOnly) {
+      query = query.select("id").order("shopify_created_at", { ascending: false });
+    } else {
+      query = query
+        .select("*", { count: "exact" })
+        .order("shopify_created_at", { ascending: false })
+        .range(offset, offset + pageSize - 1);
+    }
 
     if (status === "archived") {
       query = query.eq("is_archived", true);
@@ -57,6 +62,11 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ orders: [], total: count || 0 });
       }
       throw error;
+    }
+
+    if (idsOnly) {
+      const ids = (orders || []).map((o: any) => o.id);
+      return NextResponse.json({ ids, total: ids.length });
     }
 
     return NextResponse.json({ orders, total: count });

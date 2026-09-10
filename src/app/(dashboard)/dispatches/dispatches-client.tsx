@@ -10,6 +10,7 @@ import { ReturnModal } from "@/components/orders/return-modal";
 import { DeliverModal } from "@/components/orders/deliver-modal";
 import { FraudDetailsModal } from "@/components/modals/fraud-details-modal";
 import { BulkImportDeliveriesModal } from "@/components/orders/bulk-import-deliveries-modal";
+import { DispatchesReportingHeader, DispatchStats } from "@/components/dispatches/dispatches-reporting-header";
 
 const PATHAO_STATUS_COLORS: Record<string, string> = {
   "Pending": "bg-zinc-800 text-zinc-400 border-zinc-700",
@@ -39,6 +40,7 @@ export function DispatchesClient({
   endDate,
   totalAmount = 0,
   totalQuantity = 0,
+  stats,
   page = 1,
   pageSize = 50,
 }: {
@@ -52,6 +54,7 @@ export function DispatchesClient({
   endDate?: string;
   totalAmount?: number;
   totalQuantity?: number;
+  stats?: DispatchStats | null;
   page?: number;
   pageSize?: number;
 }) {
@@ -153,100 +156,50 @@ export function DispatchesClient({
     }
   };
 
-  const handleDateFilterChange = (newFilter: string) => {
-    const params = new URLSearchParams(window.location.search);
-    params.set("dateFilter", newFilter);
-    params.delete("page"); // Reset pagination
-    router.push(`/dispatches?${params.toString()}`);
-  };
-
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header & Stats */}
-      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-zinc-100">Dispatches</h2>
-          <p className="text-sm text-zinc-500 mt-1">{count || 0} total records found</p>
+    <div className="space-y-3 animate-fade-in">
+      {/* Small, Sleek Dispatches Reporting Header */}
+      <DispatchesReportingHeader
+        stats={stats || null}
+        onOpenImportModal={() => setBulkImportDeliveriesOpen(true)}
+      />
+
+      {/* Search & Select All Bar (Mobile-First) */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+        <div className="relative flex-1 min-w-0 sm:max-w-xs">
+          <input
+            type="text"
+            placeholder="Search phone, order, consignment..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs sm:text-sm rounded-xl pl-8 pr-8 py-2 w-full outline-none focus:border-indigo-500 transition-colors"
+          />
+          <Search className="w-4 h-4 text-zinc-500 absolute left-2.5 top-2.5" />
+          {isPending && (
+            <Loader2 className="absolute right-2.5 top-2.5 w-4 h-4 text-zinc-400 animate-spin" />
+          )}
         </div>
 
-        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4">
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <div className="relative w-full sm:w-auto">
-              <input
-                type="text"
-                placeholder="Search phone, order, cons..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-zinc-900 border border-zinc-700 text-zinc-200 text-sm rounded-lg pl-8 pr-8 py-2 w-full sm:w-56 outline-none focus:border-indigo-500 transition-colors"
-              />
-              <Search className="w-4 h-4 text-zinc-500 absolute left-2.5 top-2.5" />
-              {isPending && (
-                <Loader2 className="absolute right-2.5 top-2.5 w-4 h-4 text-zinc-400 animate-spin" />
-              )}
-            </div>
-
-            <select 
-              value={dateFilter}
-              onChange={(e) => handleDateFilterChange(e.target.value)}
-              className="bg-zinc-900 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 outline-none focus:border-indigo-500 transition-colors"
-            >
-              <option value="all">All Time</option>
-              <option value="today">Today</option>
-              <option value="yesterday">Yesterday</option>
-              <option value="this_month">This Month</option>
-            </select>
-            
-            <button 
-              onClick={() => {
-                const params = new URLSearchParams(window.location.search);
-                window.open(`/api/dispatches/export?${params.toString()}`, '_blank');
-              }}
-              title="Export Current Dispatches as CSV"
-              className="flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 rounded-lg h-[38px] px-3 transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-            </button>
-
-            <button
-              onClick={() => setBulkImportDeliveriesOpen(true)}
-              className="flex items-center justify-center bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 rounded-lg h-[38px] px-3 transition-colors whitespace-nowrap gap-2 text-sm font-medium"
-            >
-              <UploadCloud className="w-4 h-4" />
-              Import Deliveries
-            </button>
-          </div>
-          
-          <div className="flex gap-4 bg-zinc-900 border border-zinc-800 rounded-xl p-3 px-5 shadow-sm">
-            <div>
-              <p className="text-[10px] text-zinc-500 uppercase font-semibold tracking-wider">Total Value</p>
-              <p className="text-lg font-bold text-emerald-400">৳{totalAmount.toLocaleString()}</p>
-            </div>
-            <div className="w-px bg-zinc-800"></div>
-            <div>
-              <p className="text-[10px] text-zinc-500 uppercase font-semibold tracking-wider">Total Qty</p>
-              <p className="text-lg font-bold text-indigo-400">{totalQuantity.toLocaleString()}</p>
-            </div>
-          </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={selectAll}
+            className="px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap border border-zinc-800 bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-all"
+          >
+            {selected.size === (dispatches?.length || 0) && (dispatches?.length || 0) > 0 ? "Deselect All" : `Select All (${dispatches?.length || 0})`}
+          </button>
         </div>
       </div>
 
       {/* Status filters */}
-      <div className="flex gap-2 overflow-x-auto pb-1 items-center">
-        <button
-          onClick={selectAll}
-          className="px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-all shrink-0"
-        >
-          {selected.size === (dispatches?.length || 0) && (dispatches?.length || 0) > 0 ? "Deselect All" : "Select All"}
-        </button>
-        <div className="w-px h-4 bg-zinc-800 shrink-0 mx-1"></div>
+      <div className="flex gap-1.5 overflow-x-auto pb-1 items-center scrollbar-hide">
         {statusFilters.map((s) => (
           <Link
             key={s}
             href={s === "All" ? "/dispatches" : `/dispatches?status=${encodeURIComponent(s)}`}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition-all ${
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap border transition-all ${
               (s === "All" && !currentStatus) || currentStatus === s
-                ? "bg-indigo-600 border-indigo-500 text-white"
-                : "border-zinc-800 text-zinc-500 hover:text-zinc-300 bg-zinc-900"
+                ? "bg-indigo-600 border-indigo-500 text-white shadow-sm"
+                : "border-zinc-800/80 text-zinc-400 hover:text-zinc-200 bg-zinc-900/80 hover:bg-zinc-800/80"
             }`}
           >
             {s}
