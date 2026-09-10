@@ -32,7 +32,7 @@ export async function processAutoDeliveredOrders() {
 
     if (!oldDispatches || oldDispatches.length === 0) return;
 
-    const orderIdsToCheck = oldDispatches.map(d => d.order_id);
+    const orderIdsToCheck = oldDispatches.map((d: any) => d.order_id);
 
     // Filter orders to only those that are currently "dispatched" or "hold"
     const { data: ordersToUpdate, error: orderErr } = await supabase
@@ -51,7 +51,7 @@ export async function processAutoDeliveredOrders() {
     console.log(`[Auto-Deliver] Found ${ordersToUpdate.length} orders to mark as delivered automatically.`);
 
     // 4. Mark them as delivered
-    const orderIds = ordersToUpdate.map(o => o.id);
+    const orderIds = ordersToUpdate.map((o: any) => o.id);
     const now = new Date().toISOString();
 
     await supabase

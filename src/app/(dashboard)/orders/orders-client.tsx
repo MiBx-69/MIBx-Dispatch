@@ -16,7 +16,6 @@ import { DeliverModal } from "@/components/orders/deliver-modal";
 import { ReportFraudModal } from "@/components/modals/report-fraud-modal";
 import { FraudDetailsModal } from "@/components/modals/fraud-details-modal";
 import { OrderTimelineModal } from "@/components/orders/order-timeline-modal";
-import { FraudWarningModal } from "@/components/orders/fraud-warning-modal";
 import { BulkImportDeliveriesModal } from "@/components/orders/bulk-import-deliveries-modal";
 import type { Order, OrderStatus } from "@/types/database";
 

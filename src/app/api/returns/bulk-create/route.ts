@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     const { data: orders, error: fetchErr } = await supabase
       .from("orders")
       .select("id, shopify_order_name, pathao_consignment_id, total_price")
-      .or(`shopify_order_name.in.(${identifiers.map(i => `"${i}"`).join(",")}),pathao_consignment_id.in.(${identifiers.map(i => `"${i}"`).join(",")})`);
+      .or(`shopify_order_name.in.(${identifiers.map((i: string) => `"${i}"`).join(",")}),pathao_consignment_id.in.(${identifiers.map((i: string) => `"${i}"`).join(",")})`);
 
     if (fetchErr) throw fetchErr;
 
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No matching orders found for provided identifiers" }, { status: 404 });
     }
 
-    const orderIds = orders.map(o => o.id);
+    const orderIds = orders.map((o: any) => o.id);
     const now = new Date().toISOString();
     
     const results: any[] = [];

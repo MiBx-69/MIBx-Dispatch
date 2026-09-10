@@ -23,9 +23,9 @@ export async function POST(request: NextRequest) {
     const matchedOrders = [];
     const existingReturns = new Set();
     if (orders && orders.length > 0) {
-       const orderIds = orders.map(o => o.id);
+       const orderIds = orders.map((o: any) => o.id);
        const { data: returns } = await supabase.from("returns").select("order_id").in("order_id", orderIds);
-       returns?.forEach(r => existingReturns.add(r.order_id));
+       returns?.forEach((r: any) => existingReturns.add(r.order_id));
 
        for (const order of orders) {
            matchedOrders.push({
@@ -36,8 +36,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Find unmatched identifiers
-    const matchedNames = new Set(orders?.map(o => o.shopify_order_name));
-    const matchedConsignments = new Set(orders?.map(o => o.pathao_consignment_id));
+    const matchedNames = new Set(orders?.map((o: any) => o.shopify_order_name));
+    const matchedConsignments = new Set(orders?.map((o: any) => o.pathao_consignment_id));
     
     const unmatched = identifiers.filter((id: string) => !matchedNames.has(id) && !matchedConsignments.has(id));
 
