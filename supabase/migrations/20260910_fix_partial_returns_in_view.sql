@@ -1,6 +1,6 @@
 -- Update dashboard_stats view to include partial return deductions
 -- Partial returns don't change orders.internal_status, so we need to query the returns table
-CREATE OR REPLACE VIEW public.dashboard_stats AS
+CREATE OR REPLACE VIEW public.dashboard_stats WITH (security_invoker = true) AS
 SELECT
   COUNT(*) FILTER (WHERE internal_status = 'pending') AS pending_orders,
   COUNT(*) FILTER (WHERE internal_status = 'preparing') AS preparing_orders,

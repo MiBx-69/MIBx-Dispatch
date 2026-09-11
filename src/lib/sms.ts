@@ -14,6 +14,13 @@ export async function sendSMS(
       const acquired = await redis.set(key, "1", { ex: 86400 * 7, nx: true });
       if (!acquired) {
         console.warn(`[SMS Idempotency] Duplicate SMS prevented for key: ${idempotencyKey}`);
+        const supabase = createServiceClient();
+        supabase.from("webhook_logs").insert({
+          source: "sms",
+          topic: "sms/duplicate_blocked",
+          payload: { to, idempotencyKey, reason: "Duplicate prevented by idempotency lock" },
+          processed: true,
+        }).then(() => {}).catch(() => {});
         return { success: true, message: "Duplicate SMS prevented by idempotency check" };
       }
     } catch (err) {
@@ -39,6 +46,13 @@ export async function sendSMS(
   }
   
   if (formattedPhone.length < 13) {
+    supabase.from("webhook_logs").insert({
+      source: "sms",
+      topic: "sms/invalid_phone",
+      payload: { originalPhone: to, formattedPhone, msg, idempotencyKey },
+      processed: false,
+      error: "Invalid phone number format",
+    }).then(() => {}).catch(() => {});
     return { success: false, message: "Invalid phone number format" };
   }
 
@@ -63,13 +77,33 @@ export async function sendSMS(
     const result = await response.json();
 
     if (result.error === 0) {
+      supabase.from("webhook_logs").insert({
+        source: "sms",
+        topic: "sms/sent",
+        payload: { to: formattedPhone, msg, requestId: result.data?.request_id, idempotencyKey },
+        processed: true,
+      }).then(() => {}).catch(() => {});
       return { success: true, requestId: result.data?.request_id };
     } else {
       console.error("[SMS Provider Error]", result);
+      supabase.from("webhook_logs").insert({
+        source: "sms",
+        topic: "sms/failed",
+        payload: { to: formattedPhone, msg, idempotencyKey, providerResponse: result },
+        processed: false,
+        error: result.msg || "Unknown SMS error",
+      }).then(() => {}).catch(() => {});
       return { success: false, message: result.msg || "Unknown SMS error" };
     }
   } catch (err: any) {
     console.error("[SMS Error]", err);
+    supabase.from("webhook_logs").insert({
+      source: "sms",
+      topic: "sms/error",
+      payload: { to: formattedPhone, msg, idempotencyKey },
+      processed: false,
+      error: err.message || "Failed to send SMS",
+    }).then(() => {}).catch(() => {});
     return { success: false, message: err.message || "Failed to send SMS" };
   }
 }

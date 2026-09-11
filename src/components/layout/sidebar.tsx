@@ -16,7 +16,8 @@ import {
   Wallet,
   ChevronLeft,
   ChevronRight,
-  BarChart
+  BarChart,
+  Activity
 } from "lucide-react";
 import type { Profile } from "@/types/database";
 
@@ -29,6 +30,7 @@ const NAV_ITEMS = [
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/finances", label: "Finances", icon: Wallet },
   { href: "/reports", label: "Reports", icon: BarChart },
+  { href: "/logs", label: "Log Analytics", icon: Activity },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
