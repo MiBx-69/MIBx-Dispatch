@@ -37,36 +37,63 @@ export function resolveDateRange(dateFilter?: string, customStart?: string, cust
   }
 
   const now = new Date();
-  let start: Date;
-  let end: Date = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Dhaka",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  });
+  const parts = dtf.formatToParts(now);
+  const year = parseInt(parts.find((p) => p.type === "year")!.value);
+  const month = parseInt(parts.find((p) => p.type === "month")!.value); // 1-indexed
+  const day = parseInt(parts.find((p) => p.type === "day")!.value);
+
+  const getBstIso = (y: number, m: number, d: number, endOfDay = false) => {
+    const pad = (n: number) => n.toString().padStart(2, "0");
+    const timeStr = endOfDay ? "23:59:59.999+06:00" : "00:00:00.000+06:00";
+    return new Date(`${y}-${pad(m)}-${pad(d)}T${timeStr}`).toISOString();
+  };
+
+  let startDateStr: string | null = null;
+  let endDateStr: string | null = null;
 
   if (dateFilter === "today") {
-    start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    startDateStr = getBstIso(year, month, day, false);
+    endDateStr = getBstIso(year, month, day, true);
   } else if (dateFilter === "yesterday") {
-    start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0);
-    end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999);
+    const yDate = new Date(Date.UTC(year, month - 1, day - 1));
+    startDateStr = getBstIso(yDate.getUTCFullYear(), yDate.getUTCMonth() + 1, yDate.getUTCDate(), false);
+    endDateStr = getBstIso(yDate.getUTCFullYear(), yDate.getUTCMonth() + 1, yDate.getUTCDate(), true);
   } else if (dateFilter === "last_7_days") {
-    start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7, 0, 0, 0, 0);
+    const sDate = new Date(Date.UTC(year, month - 1, day - 6));
+    startDateStr = getBstIso(sDate.getUTCFullYear(), sDate.getUTCMonth() + 1, sDate.getUTCDate(), false);
+    endDateStr = getBstIso(year, month, day, true);
   } else if (dateFilter === "last_30_days") {
-    start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30, 0, 0, 0, 0);
+    const sDate = new Date(Date.UTC(year, month - 1, day - 29));
+    startDateStr = getBstIso(sDate.getUTCFullYear(), sDate.getUTCMonth() + 1, sDate.getUTCDate(), false);
+    endDateStr = getBstIso(year, month, day, true);
   } else if (dateFilter === "this_month") {
-    start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-    end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    startDateStr = getBstIso(year, month, 1, false);
+    endDateStr = getBstIso(year, month, day, true);
   } else if (dateFilter === "last_month") {
-    start = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
-    end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+    const lastMonthDate = new Date(Date.UTC(year, month - 2, 1));
+    const lmYear = lastMonthDate.getUTCFullYear();
+    const lmMonth = lastMonthDate.getUTCMonth() + 1;
+    const lastDayOfLm = new Date(Date.UTC(lmYear, lmMonth, 0)).getUTCDate();
+    startDateStr = getBstIso(lmYear, lmMonth, 1, false);
+    endDateStr = getBstIso(lmYear, lmMonth, lastDayOfLm, true);
   } else if (dateFilter === "custom" && customStart && customEnd) {
-    start = new Date(customStart);
-    start.setHours(0, 0, 0, 0);
-    end = new Date(customEnd);
+    startDateStr = new Date(customStart).toISOString();
+    const end = new Date(customEnd);
     end.setHours(23, 59, 59, 999);
+    endDateStr = end.toISOString();
   } else {
     return { startDateStr: null, endDateStr: null };
   }
 
   return {
-    startDateStr: start.toISOString(),
-    endDateStr: end.toISOString(),
+    startDateStr,
+    endDateStr,
   };
 }
 
@@ -90,17 +117,19 @@ export async function getUnifiedReportMetrics(params: {
     return time >= startMs && time <= endMs;
   }
 
-  // 1. Fetch Orders
+  // 1. Fetch Orders (exclude archived/removed)
   const ordersQuery = supabase
     .from("orders")
     .select("id, shopify_order_name, customer_name, customer_phone, pathao_consignment_id, total_price, internal_status, line_items, shopify_created_at, delivered_at, returned_at")
     .eq("is_archived", false);
 
-  // 2. Fetch Dispatches (non-cancelled)
+  // 2. Fetch Dispatches (non-cancelled and non-archived)
   const dispatchesQuery = supabase
     .from("dispatches")
-    .select("id, order_id, shopify_order_name, recipient_name, recipient_phone, consignment_id, amount_to_collect, is_cancelled, dispatched_at, orders!inner(internal_status)")
-    .neq("orders.internal_status", "cancelled");
+    .select("id, order_id, shopify_order_name, recipient_name, recipient_phone, consignment_id, amount_to_collect, is_cancelled, pathao_order_status, dispatched_at, orders!inner(internal_status, is_archived)")
+    .eq("is_cancelled", false)
+    .neq("orders.internal_status", "cancelled")
+    .eq("orders.is_archived", false);
 
   // 3. Fetch Returns
   const returnsQuery = supabase
@@ -118,7 +147,13 @@ export async function getUnifiedReportMetrics(params: {
   ]);
 
   let allOrders: any[] = ordersData || [];
-  let allDispatches: any[] = dispatchesData || [];
+  let allDispatches: any[] = (dispatchesData || []).filter((d: any) => {
+    if (d.is_cancelled) return false;
+    if (d.pathao_order_status && d.pathao_order_status.toLowerCase().includes("cancel")) return false;
+    if (d.orders?.internal_status === "cancelled") return false;
+    if (d.orders?.is_archived) return false;
+    return true;
+  });
   let allReturns: any[] = returnsData || [];
 
   // Search filtering

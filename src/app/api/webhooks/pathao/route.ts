@@ -119,12 +119,20 @@ async function processPathaoWebhook(payload: any, storedSecret: string) {
         note: payload.reason || null,
       });
 
+      const isCancelled = newEvent.toLowerCase().includes("cancel");
+      const dispatchUpdate: any = {
+        pathao_order_status: newEvent,
+        tracking_history: history,
+      };
+      if (isCancelled) {
+        dispatchUpdate.is_cancelled = true;
+        dispatchUpdate.cancelled_at = payload.updated_at || new Date().toISOString();
+        dispatchUpdate.cancel_reason = payload.reason || "Cancelled by courier";
+      }
+
       await supabase
         .from("dispatches")
-        .update({
-          pathao_order_status: newEvent,
-          tracking_history: history,
-        })
+        .update(dispatchUpdate)
         .eq("consignment_id", consignmentId);
         
       if (!order && dispatch.order_id) {

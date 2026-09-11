@@ -46,24 +46,29 @@ export async function GET(request: NextRequest) {
         .lte("shopify_created_at", queryEnd)
         .order("shopify_created_at", { ascending: false }),
 
-      // 2. All Dispatches in range (non-cancelled)
+      // 2. All Dispatches in range (non-cancelled and non-archived)
       supabase
         .from("dispatches")
         .select(`
           dispatched_at,
           amount_to_collect,
+          is_cancelled,
+          pathao_order_status,
           orders!inner(
             shopify_order_name,
             customer_name,
             customer_phone,
             line_items,
             pathao_consignment_id,
-            internal_status
+            internal_status,
+            is_archived
           )
         `)
         .gte("dispatched_at", queryStart)
         .lte("dispatched_at", queryEnd)
+        .eq("is_cancelled", false)
         .neq("orders.internal_status", "cancelled")
+        .eq("orders.is_archived", false)
         .order("dispatched_at", { ascending: false }),
 
       // 3. All Returns in range
@@ -102,7 +107,13 @@ export async function GET(request: NextRequest) {
     if (returnsResult.error) throw returnsResult.error;
 
     const orders = ordersResult.data || [];
-    const dispatches = dispatchesResult.data || [];
+    const dispatches = (dispatchesResult.data || []).filter((d: any) => {
+      if (d.is_cancelled) return false;
+      if (d.pathao_order_status && d.pathao_order_status.toLowerCase().includes("cancel")) return false;
+      if (d.orders?.internal_status === "cancelled") return false;
+      if (d.orders?.is_archived) return false;
+      return true;
+    });
     const returns = returnsResult.data || [];
 
     if (orders.length === 0 && dispatches.length === 0 && returns.length === 0) {

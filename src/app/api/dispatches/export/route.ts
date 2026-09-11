@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { resolveDateRange } from "@/lib/reporting-engine";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -13,7 +14,6 @@ export async function GET(request: Request) {
   let query = supabase
     .from("dispatches")
     .select("*, orders!inner(*)")
-    .neq("orders.internal_status", "cancelled")
     .order("dispatched_at", { ascending: false });
 
   const STATUS_MAP: Record<string, string[]> = {
@@ -28,34 +28,22 @@ export async function GET(request: Request) {
     "Cancelled": ["Cancelled", "order.cancelled"],
   };
 
-  if (status) {
-    const mapped = STATUS_MAP[status] || [status];
-    query = query.in("pathao_order_status", mapped);
+  if (status === "Cancelled") {
+    query = query.or("is_cancelled.eq.true,pathao_order_status.in.(Cancelled,order.cancelled),orders.internal_status.eq.cancelled");
+  } else {
+    query = query
+      .eq("is_cancelled", false)
+      .neq("orders.internal_status", "cancelled")
+      .eq("orders.is_archived", false);
+
+    if (status) {
+      const mapped = STATUS_MAP[status] || [status];
+      query = query.in("pathao_order_status", mapped);
+    }
   }
 
   // Date Filtering
-  let startDateStr = "";
-  let endDateStr = "";
-
-  const now = new Date();
-  
-  if (dateFilter === "today") {
-    startDateStr = new Date(now.setHours(0, 0, 0, 0)).toISOString();
-    endDateStr = new Date(now.setHours(23, 59, 59, 999)).toISOString();
-  } else if (dateFilter === "yesterday") {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    startDateStr = new Date(yesterday.setHours(0, 0, 0, 0)).toISOString();
-    endDateStr = new Date(yesterday.setHours(23, 59, 59, 999)).toISOString();
-  } else if (dateFilter === "this_month") {
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-    startDateStr = new Date(firstDay.setHours(0, 0, 0, 0)).toISOString();
-    endDateStr = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
-  } else if (dateFilter === "custom" && startDate && endDate) {
-    startDateStr = new Date(startDate).toISOString();
-    const end = new Date(endDate);
-    endDateStr = new Date(end.setHours(23, 59, 59, 999)).toISOString();
-  }
+  const { startDateStr, endDateStr } = resolveDateRange(dateFilter || undefined, startDate || undefined, endDate || undefined);
 
   if (startDateStr && endDateStr) {
     query = query.gte("dispatched_at", startDateStr).lte("dispatched_at", endDateStr);

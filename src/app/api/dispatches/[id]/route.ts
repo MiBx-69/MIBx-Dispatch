@@ -44,6 +44,7 @@ export async function DELETE(
       .update({
         internal_status: "pending",
         is_archived: true,
+        pathao_consignment_id: null,
       })
       .eq("id", dispatch.order_id);
 

@@ -13,7 +13,7 @@ import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { FraudWidget } from "@/components/dashboard/fraud-widget";
 import { DispatchedProductsToday } from "@/components/dashboard/dispatched-today";
 import type { Order } from "@/types/database";
-import { getUnifiedReportMetrics } from "@/lib/reporting-engine";
+import { getUnifiedReportMetrics, resolveDateRange } from "@/lib/reporting-engine";
 
 export const metadata = { title: "Dashboard" };
 export const dynamic = "force-dynamic";
@@ -27,33 +27,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     dateFilter,
   });
 
-  const now = new Date();
-  let startDateStr = "";
-  let endDateStr = now.toISOString();
+  const { startDateStr: resolvedStart, endDateStr: resolvedEnd } = resolveDateRange(dateFilter);
+  let startDateStr = resolvedStart || subDays(new Date(), 30).toISOString();
+  let endDateStr = resolvedEnd || new Date().toISOString();
 
   const MIN_DATE = new Date("2026-08-31T18:00:00.000Z");
-
-  if (dateFilter === "today") {
-    startDateStr = new Date(now.setHours(0, 0, 0, 0)).toISOString();
-    endDateStr = new Date(now.setHours(23, 59, 59, 999)).toISOString();
-  } else if (dateFilter === "yesterday") {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    startDateStr = new Date(yesterday.setHours(0, 0, 0, 0)).toISOString();
-    endDateStr = new Date(yesterday.setHours(23, 59, 59, 999)).toISOString();
-  } else if (dateFilter === "last_7_days") {
-    startDateStr = subDays(new Date(), 7).toISOString();
-    endDateStr = new Date(now.setHours(23, 59, 59, 999)).toISOString();
-  } else if (dateFilter === "this_month") {
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-    startDateStr = new Date(firstDay.setHours(0, 0, 0, 0)).toISOString();
-    endDateStr = new Date(now.setHours(23, 59, 59, 999)).toISOString();
-  } else {
-    // last_30_days (default)
-    startDateStr = subDays(new Date(), 30).toISOString();
-    endDateStr = new Date(now.setHours(23, 59, 59, 999)).toISOString();
-  }
-
   // Clamp startDateStr to MIN_DATE
   if (new Date(startDateStr) < MIN_DATE) {
     startDateStr = MIN_DATE.toISOString();
@@ -141,14 +119,20 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // 2b. Dispatched Products in Period
   const { data: dispatchesInPeriod } = await supabase
     .from("dispatches")
-    .select("dispatched_at, is_cancelled, orders(line_items)")
+    .select("dispatched_at, is_cancelled, pathao_order_status, orders!inner(line_items, internal_status, is_archived)")
     .gte("dispatched_at", startDateStr)
     .lte("dispatched_at", endDateStr)
-    .eq("is_cancelled", false);
+    .eq("is_cancelled", false)
+    .neq("orders.internal_status", "cancelled")
+    .eq("orders.is_archived", false);
 
   const dispatchedPeriodMap = new Map<string, { id: string, title: string, variant: string, qty: number }>();
   if (dispatchesInPeriod) {
     dispatchesInPeriod.forEach((d: any) => {
+      if (d.is_cancelled) return;
+      if (d.pathao_order_status && d.pathao_order_status.toLowerCase().includes("cancel")) return;
+      if (d.orders?.internal_status === "cancelled") return;
+      if (d.orders?.is_archived) return;
       const items = d.orders?.line_items;
       if (Array.isArray(items)) {
         items.forEach((item: any) => {
@@ -257,13 +241,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     }
   });
 
-  const { count: dispatchedPeriodCount } = await supabase
-    .from("dispatches")
-    .select("id", { count: 'exact' })
-    .gte("dispatched_at", startDateStr)
-    .lte("dispatched_at", endDateStr);
-
-  liveStats.dispatched_period = dispatchedPeriodCount || 0;
+  liveStats.dispatched_period = unifiedMetrics.dispatchedCount;
 
   // Fetch partial return deductions in this period
   const { data: partialReturnsData } = await supabase

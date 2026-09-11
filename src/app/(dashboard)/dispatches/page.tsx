@@ -21,7 +21,6 @@ export default async function DispatchesPage({
   let query = supabase
     .from("dispatches")
     .select("*, orders!inner(*, returns(id, return_type, status))", { count: "exact" })
-    .neq("orders.internal_status", "cancelled")
     .order("dispatched_at", { ascending: false })
     .range(offset, offset + pageSize - 1);
 
@@ -37,9 +36,18 @@ export default async function DispatchesPage({
     "Cancelled": ["Cancelled", "order.cancelled"],
   };
 
-  if (params.status) {
-    const mapped = STATUS_MAP[params.status] || [params.status];
-    query = query.in("pathao_order_status", mapped);
+  if (params.status === "Cancelled") {
+    query = query.or("is_cancelled.eq.true,pathao_order_status.in.(Cancelled,order.cancelled),orders.internal_status.eq.cancelled");
+  } else {
+    query = query
+      .eq("is_cancelled", false)
+      .neq("orders.internal_status", "cancelled")
+      .eq("orders.is_archived", false);
+
+    if (params.status) {
+      const mapped = STATUS_MAP[params.status] || [params.status];
+      query = query.in("pathao_order_status", mapped);
+    }
   }
 
   if (params.search) {

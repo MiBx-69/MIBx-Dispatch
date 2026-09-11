@@ -27,6 +27,28 @@ export async function PATCH(
 
     if (error) throw error;
 
+    if (is_archived) {
+      await supabase
+        .from("dispatches")
+        .update({
+          is_cancelled: true,
+          cancelled_at: new Date().toISOString(),
+          cancel_reason: "Order removed/archived",
+        })
+        .eq("order_id", id);
+    } else {
+      if (data?.internal_status !== "cancelled") {
+        await supabase
+          .from("dispatches")
+          .update({
+            is_cancelled: false,
+            cancelled_at: null,
+            cancel_reason: null,
+          })
+          .eq("order_id", id);
+      }
+    }
+
     return NextResponse.json(data);
   } catch (error: any) {
     console.error("Archive order error:", error);

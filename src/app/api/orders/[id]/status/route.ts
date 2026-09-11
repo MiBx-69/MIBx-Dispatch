@@ -32,6 +32,17 @@ export async function PATCH(
   const { logOrderEvent } = await import("@/lib/audit");
   await logOrderEvent(id, "STATUS_CHANGE", `Internal status updated to: ${status}`);
 
+  if (status === "cancelled") {
+    await supabase
+      .from("dispatches")
+      .update({
+        is_cancelled: true,
+        cancelled_at: new Date().toISOString(),
+        cancel_reason: "Order marked as cancelled in ERP",
+      })
+      .eq("order_id", id);
+  }
+
   // Handle automated SMS
   try {
     if (status === "dispatched" || status === "delivered") {

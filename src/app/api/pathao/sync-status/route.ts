@@ -126,7 +126,25 @@ export async function POST(request: NextRequest) {
           }
           updatedCount++;
         }
-        // 4. In Transit / Hub / other
+        // 4. Cancelled
+        else if (newStatus.includes("cancel") || newStatus.includes("cancelled")) {
+          await supabase.from("dispatches").update({
+            pathao_order_status: "Cancelled",
+            is_cancelled: true,
+            cancelled_at: now,
+            cancel_reason: "Cancelled via Pathao Auto-Sync",
+            updated_at: now,
+          }).eq("id", d.id);
+
+          if (orderId) {
+            await supabase.from("orders").update({
+              internal_status: "cancelled",
+              cancel_reason: "Cancelled via Pathao Courier",
+            }).eq("id", orderId);
+          }
+          updatedCount++;
+        }
+        // 5. In Transit / Hub / other
         else {
           await supabase.from("dispatches").update({
             pathao_order_status: data.order_status,

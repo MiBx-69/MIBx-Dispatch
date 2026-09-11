@@ -300,6 +300,11 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
     // Ensure cancelled order has no returns table records
     if (upsertedOrder?.id) {
       await supabase.from("returns").delete().eq("order_id", upsertedOrder.id);
+      await supabase.from("dispatches").update({
+        is_cancelled: true,
+        cancelled_at: shopifyOrder.cancelledAt,
+        cancel_reason: shopifyOrder.cancelReason || "Cancelled on Shopify",
+      }).eq("order_id", upsertedOrder.id);
     }
   } else {
     const finStatus = (orderPayload.financial_status || "").toLowerCase();

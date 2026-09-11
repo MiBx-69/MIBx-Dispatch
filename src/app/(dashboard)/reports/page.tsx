@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { format, parseISO, differenceInDays, subDays } from "date-fns";
 import { ReportsClient } from "./reports-client";
-import { getUnifiedReportMetrics } from "@/lib/reporting-engine";
+import { getUnifiedReportMetrics, resolveDateRange } from "@/lib/reporting-engine";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Reports" };
@@ -18,9 +18,9 @@ export default async function ReportsPage({
   const now = new Date();
   const MIN_DATE = new Date("2026-08-31T18:00:00.000Z"); // Sept 1st 00:00 BST
   
-  // Default to Last 30 Days if no dates provided
-  let startDateStr = params.startDate || subDays(now, 30).toISOString();
-  let endDateStr = params.endDate || now.toISOString();
+  const { startDateStr: resStart, endDateStr: resEnd } = resolveDateRange(params.filterType, params.startDate, params.endDate);
+  let startDateStr = resStart || params.startDate || subDays(now, 30).toISOString();
+  let endDateStr = resEnd || params.endDate || now.toISOString();
 
   // Enforce minimum date of September 1, 2026 for accurate reporting
   if (new Date(startDateStr) < MIN_DATE) {
@@ -30,25 +30,34 @@ export default async function ReportsPage({
     endDateStr = MIN_DATE.toISOString();
   }
 
-  // 1. Fetch Orders in date range
+  // 1. Fetch Orders in date range (exclude archived)
   const { data: ordersData } = await supabase
     .from("orders")
     .select("total_price, subtotal_price, shopify_created_at, created_at, line_items, financial_status, fulfillment_status, internal_status, fraud_status, returned_at, return_reason, return_delivery_fee")
+    .eq("is_archived", false)
     .gte("shopify_created_at", startDateStr)
     .lte("shopify_created_at", endDateStr)
     .order("shopify_created_at", { ascending: false });
 
   const orders = ordersData || [];
 
-  // 2. Fetch Dispatches in date range
+  // 2. Fetch Dispatches in date range (exclude cancelled & archived)
   const { data: dispatchesData } = await supabase
     .from("dispatches")
-    .select("dispatched_at, is_cancelled, orders(line_items, total_price)")
+    .select("dispatched_at, is_cancelled, pathao_order_status, orders!inner(line_items, total_price, internal_status, is_archived)")
     .gte("dispatched_at", startDateStr)
     .lte("dispatched_at", endDateStr)
-    .eq("is_cancelled", false);
+    .eq("is_cancelled", false)
+    .neq("orders.internal_status", "cancelled")
+    .eq("orders.is_archived", false);
     
-  const dispatches = dispatchesData || [];
+  const dispatches = (dispatchesData || []).filter((d: any) => {
+    if (d.is_cancelled) return false;
+    if (d.pathao_order_status && d.pathao_order_status.toLowerCase().includes("cancel")) return false;
+    if (d.orders?.internal_status === "cancelled") return false;
+    if (d.orders?.is_archived) return false;
+    return true;
+  });
 
   // 3. Fetch Returns in date range (from returns table for accurate fee tracking)
   const { data: returnsData } = await supabase

@@ -186,6 +186,11 @@ async function processShopifyWebhook(
         
         if (cancelledOrd) {
           await supabase.from("returns").delete().eq("order_id", cancelledOrd.id);
+          await supabase.from("dispatches").update({
+            is_cancelled: true,
+            cancelled_at: payload.cancelled_at || new Date().toISOString(),
+            cancel_reason: payload.cancel_reason || "Cancelled via Shopify webhook",
+          }).eq("order_id", cancelledOrd.id);
         }
         
         // Await the SMS so it doesn't get cancelled by serverless termination

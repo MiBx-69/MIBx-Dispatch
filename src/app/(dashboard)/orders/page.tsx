@@ -54,7 +54,10 @@ export default async function OrdersPage({
       .neq("internal_status", "cancelled")
       .is("pathao_consignment_id", null);
   } else if (params.status === "dispatched") {
-    query = query.eq("is_archived", false).or("internal_status.eq.dispatched,fulfillment_status.eq.fulfilled");
+    query = query
+      .eq("is_archived", false)
+      .neq("internal_status", "cancelled")
+      .or("internal_status.eq.dispatched,fulfillment_status.eq.fulfilled");
   } else if (params.status === "delivered") {
     query = query.eq("is_archived", false).eq("internal_status", "delivered");
     if (startDateStr && endDateStr) {
@@ -127,6 +130,7 @@ export default async function OrdersPage({
     .from("orders")
     .select("*", { count: "exact", head: true })
     .eq("is_archived", false)
+    .neq("internal_status", "cancelled")
     .or("internal_status.eq.dispatched,fulfillment_status.eq.fulfilled");
 
   // Accurate count of on hold orders (combines Shopify on_hold and local hold)

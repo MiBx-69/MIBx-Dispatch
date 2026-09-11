@@ -18,11 +18,13 @@ export async function GET(request: NextRequest) {
 
     const supabase = createServiceClient();
 
-    // Fetch all dispatches in the range
-    const { data: dispatches, error } = await supabase
+    // Fetch all dispatches in the range (excluding cancelled and archived)
+    const { data: dispatchesData, error } = await supabase
       .from("dispatches")
       .select(`
         dispatched_at,
+        is_cancelled,
+        pathao_order_status,
         orders!inner(
           shopify_order_name,
           customer_name,
@@ -30,15 +32,25 @@ export async function GET(request: NextRequest) {
           shipping_address,
           line_items,
           pathao_consignment_id,
-          internal_status
+          internal_status,
+          is_archived
         )
       `)
       .gte("dispatched_at", queryStart)
       .lte("dispatched_at", queryEnd)
+      .eq("is_cancelled", false)
       .neq("orders.internal_status", "cancelled")
+      .eq("orders.is_archived", false)
       .order("dispatched_at", { ascending: false });
 
     if (error) throw error;
+    const dispatches = (dispatchesData || []).filter((d: any) => {
+      if (d.is_cancelled) return false;
+      if (d.pathao_order_status && d.pathao_order_status.toLowerCase().includes("cancel")) return false;
+      if (d.orders?.internal_status === "cancelled") return false;
+      if (d.orders?.is_archived) return false;
+      return true;
+    });
     if (!dispatches || dispatches.length === 0) {
       return new NextResponse("No data found for this period", { status: 404 });
     }
