@@ -294,9 +294,22 @@ async function getShopifyFulfillmentOrders(orderId: string) {
   );
 
   const data = await res.json();
-  return data.data?.order?.fulfillmentOrders?.edges
-    ?.filter((e: any) => e.node.status === "OPEN")
-    ?.map((e: any) => e.node) || [];
+  const nodes = data.data?.order?.fulfillmentOrders?.edges?.map((e: any) => e.node) || [];
+  const openOrHeld = nodes.filter((n: any) => n.status === "OPEN" || n.status === "ON_HOLD");
+
+  for (const fo of openOrHeld) {
+    if (fo.status === "ON_HOLD") {
+      try {
+        const { releaseShopifyFulfillmentOrderHold } = await import("@/lib/shopify/client");
+        await releaseShopifyFulfillmentOrderHold(fo.id);
+        fo.status = "OPEN";
+      } catch (releaseErr) {
+        console.error(`[Dispatch] Failed to release hold on FO ${fo.id}:`, releaseErr);
+      }
+    }
+  }
+
+  return openOrHeld.filter((n: any) => n.status === "OPEN");
 }
 
 // Bulk dispatch

@@ -39,28 +39,46 @@ export default async function OrdersPage({
     query = query.eq("is_archived", true);
   } else if (params.status === "everything") {
     query = query.eq("is_archived", false);
-  } else if (params.status === "in_progress") {
-    query = query.eq("is_archived", false).eq("fulfillment_status", "in_progress").neq("internal_status", "dispatched");
+  } else if (params.status === "in_progress" || params.status === "preparing") {
+    query = query
+      .eq("is_archived", false)
+      .or("internal_status.in.(preparing,in_progress),fulfillment_status.in.(in_progress,partial)")
+      .neq("internal_status", "dispatched")
+      .neq("internal_status", "cancelled")
+      .is("pathao_consignment_id", null);
+  } else if (params.status === "on_hold" || params.status === "hold") {
+    query = query
+      .eq("is_archived", false)
+      .or("internal_status.in.(hold,on_hold),fulfillment_status.in.(on_hold,hold)")
+      .neq("internal_status", "dispatched")
+      .neq("internal_status", "cancelled")
+      .is("pathao_consignment_id", null);
   } else if (params.status === "dispatched") {
     query = query.eq("is_archived", false).or("internal_status.eq.dispatched,fulfillment_status.eq.fulfilled");
-  } else if (params.status === "unfulfilled") {
-    query = query.eq("is_archived", false)
-                 .or("fulfillment_status.eq.unfulfilled,fulfillment_status.is.null")
-                 .neq("internal_status", "dispatched")
-                 .neq("internal_status", "cancelled");
-  } else if (params.status === "on_hold") {
-    query = query.eq("is_archived", false)
-                 .eq("fulfillment_status", "on_hold")
-                 .neq("internal_status", "dispatched");
   } else if (params.status === "delivered") {
     query = query.eq("is_archived", false).eq("internal_status", "delivered");
     if (startDateStr && endDateStr) {
       query = query.gte("shopify_created_at", startDateStr).lte("shopify_created_at", endDateStr);
     }
+  } else if (params.status === "pending") {
+    query = query
+      .eq("is_archived", false)
+      .eq("internal_status", "pending")
+      .not("fulfillment_status", "in", '("on_hold","in_progress","partial")')
+      .neq("internal_status", "dispatched")
+      .neq("internal_status", "cancelled")
+      .is("pathao_consignment_id", null);
+  } else if (params.status === "unfulfilled") {
+    query = query.eq("is_archived", false)
+                 .or("fulfillment_status.eq.unfulfilled,fulfillment_status.is.null")
+                 .neq("internal_status", "dispatched")
+                 .neq("internal_status", "cancelled")
+                 .is("pathao_consignment_id", null);
   } else if (!params.status || params.status === "all") {
     query = query.eq("is_archived", false)
                  .neq("internal_status", "dispatched")
                  .neq("internal_status", "cancelled")
+                 .is("pathao_consignment_id", null)
                  .or("fulfillment_status.neq.fulfilled,fulfillment_status.is.null");
   } else {
     query = query.eq("is_archived", false).eq("internal_status", params.status);
@@ -95,13 +113,15 @@ export default async function OrdersPage({
 
   const { data: orders, count } = await query;
 
-  // Get count of in_progress orders
-  const { count: inProgressCount } = await supabase
+  // Accurate count of preparing orders (combines Shopify in_progress/partial and local preparing)
+  const { count: preparingCount } = await supabase
     .from("orders")
     .select("*", { count: "exact", head: true })
     .eq("is_archived", false)
-    .eq("fulfillment_status", "in_progress")
-    .neq("internal_status", "dispatched");
+    .or("internal_status.in.(preparing,in_progress),fulfillment_status.in.(in_progress,partial)")
+    .neq("internal_status", "dispatched")
+    .neq("internal_status", "cancelled")
+    .is("pathao_consignment_id", null);
 
   const { count: dispatchedCount } = await supabase
     .from("orders")
@@ -109,12 +129,15 @@ export default async function OrdersPage({
     .eq("is_archived", false)
     .or("internal_status.eq.dispatched,fulfillment_status.eq.fulfilled");
 
+  // Accurate count of on hold orders (combines Shopify on_hold and local hold)
   const { count: onHoldCount } = await supabase
     .from("orders")
     .select("*", { count: "exact", head: true })
     .eq("is_archived", false)
-    .eq("fulfillment_status", "on_hold")
-    .neq("internal_status", "dispatched");
+    .or("internal_status.in.(hold,on_hold),fulfillment_status.in.(on_hold,hold)")
+    .neq("internal_status", "dispatched")
+    .neq("internal_status", "cancelled")
+    .is("pathao_consignment_id", null);
 
   const { count: cancelledCount } = await supabase
     .from("orders")
@@ -129,7 +152,8 @@ export default async function OrdersPage({
     <OrdersClient
       orders={orders || []}
       total={count || 0}
-      inProgressCount={inProgressCount || 0}
+      inProgressCount={preparingCount || 0}
+      preparingCount={preparingCount || 0}
       dispatchedCount={dispatchedCount || 0}
       onHoldCount={onHoldCount || 0}
       cancelledCount={cancelledCount || 0}

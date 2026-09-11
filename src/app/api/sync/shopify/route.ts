@@ -178,16 +178,31 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
     synced_at: new Date().toISOString(),
   };
 
+  const { data: existingOrder } = await supabase
+    .from("orders")
+    .select("id, internal_status, pathao_consignment_id")
+    .eq("shopify_order_id", orderPayload.shopify_order_id)
+    .maybeSingle();
+
   if (shopifyOrder.cancelledAt) {
     orderPayload.internal_status = "cancelled";
     orderPayload.cancel_reason = shopifyOrder.cancelReason || "Cancelled via Shopify";
+  } else if (
+    !existingOrder ||
+    (!["dispatched", "delivered", "returned", "cancelled"].includes(existingOrder.internal_status) &&
+      !existingOrder.pathao_consignment_id)
+  ) {
+    const fs = (orderPayload.fulfillment_status || "").toLowerCase();
+    if (fs === "on_hold" || fs === "hold") {
+      orderPayload.internal_status = "hold";
+    } else if (fs === "in_progress" || fs === "partial" || fs === "partially_fulfilled") {
+      orderPayload.internal_status = "preparing";
+    } else if (fs === "fulfilled") {
+      orderPayload.internal_status = "dispatched";
+    } else if (!existingOrder) {
+      orderPayload.internal_status = "pending";
+    }
   }
-
-  const { data: existingOrder } = await supabase
-    .from("orders")
-    .select("id")
-    .eq("shopify_order_id", orderPayload.shopify_order_id)
-    .maybeSingle();
 
   if (!existingOrder) {
     if (!settings) {
@@ -280,21 +295,28 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
     await logOrderEvent(upsertedOrder.id, "SYNCED", "Order synced manually from Shopify");
   }
 
-  // Check if order has been returned/refunded on Shopify
-  const finStatus = (orderPayload.financial_status || "").toLowerCase();
-  if (finStatus === "refunded" || finStatus === "partially_refunded") {
-    try {
-      const { handleShopifyRefundOrReturn } = await import("@/lib/shopify-returns");
-      await handleShopifyRefundOrReturn({
-        shopifyOrderId: orderPayload.shopify_order_id,
-        refundData: {
-          financial_status: finStatus,
-          note: orderPayload.note,
-        },
-        topic: "sync/orders",
-      });
-    } catch (refundErr) {
-      console.error("[Sync] Error syncing return for order:", refundErr);
+  // Check if order has been returned/refunded on Shopify (only for non-cancelled orders)
+  if (shopifyOrder.cancelledAt) {
+    // Ensure cancelled order has no returns table records
+    if (upsertedOrder?.id) {
+      await supabase.from("returns").delete().eq("order_id", upsertedOrder.id);
+    }
+  } else {
+    const finStatus = (orderPayload.financial_status || "").toLowerCase();
+    if (finStatus === "refunded" || finStatus === "partially_refunded") {
+      try {
+        const { handleShopifyRefundOrReturn } = await import("@/lib/shopify-returns");
+        await handleShopifyRefundOrReturn({
+          shopifyOrderId: orderPayload.shopify_order_id,
+          refundData: {
+            financial_status: finStatus,
+            note: orderPayload.note,
+          },
+          topic: "sync/orders",
+        });
+      } catch (refundErr) {
+        console.error("[Sync] Error syncing return for order:", refundErr);
+      }
     }
   }
 }

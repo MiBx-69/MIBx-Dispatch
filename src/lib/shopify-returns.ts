@@ -17,7 +17,7 @@ export async function handleShopifyRefundOrReturn({
   // 1. Fetch order from Supabase
   const { data: order, error: orderErr } = await supabase
     .from("orders")
-    .select("id, shopify_order_name, total_price, line_items, pathao_consignment_id, internal_status, created_at")
+    .select("id, shopify_order_name, total_price, line_items, pathao_consignment_id, internal_status, cancel_reason, fulfillment_status, created_at")
     .eq("shopify_order_id", numOrderId)
     .maybeSingle();
 
@@ -42,6 +42,71 @@ export async function handleShopifyRefundOrReturn({
   let refundLineItems: any[] = [];
   let refundTotalAmount = 0;
   let refundNote = refundData.note || "Refunded via Shopify";
+
+  const noteLower = (refundNote || "").toLowerCase();
+  const isCancelled =
+    order.internal_status === "cancelled" ||
+    Boolean(order.cancel_reason) ||
+    Boolean(refundData.cancelled_at) ||
+    Boolean(refundData.cancel_reason) ||
+    noteLower.includes("order canceled") ||
+    noteLower.includes("order cancelled") ||
+    refundData.financial_status === "voided";
+
+  if (isCancelled) {
+    console.log(`[Shopify Return] Order ${order.shopify_order_name} is cancelled (${refundNote}). Ensuring internal_status is cancelled, NOT returned.`);
+    // Clean up any stale return record
+    await supabase.from("returns").delete().eq("order_id", order.id);
+
+    await supabase
+      .from("orders")
+      .update({
+        internal_status: "cancelled",
+        cancel_reason: order.cancel_reason || refundData.cancel_reason || refundNote || "Cancelled via Shopify",
+        returned_at: null,
+        return_reason: null,
+        return_delivery_fee: 0,
+      })
+      .eq("id", order.id);
+
+    return {
+      success: true,
+      type: "cancelled",
+      status: "cancelled",
+      message: "Order is cancelled. Kept status as cancelled.",
+    };
+  }
+
+  // Check if order was never dispatched or fulfilled
+  const hasEverDispatched = Boolean(
+    consignmentId || 
+    dispatch || 
+    order.fulfillment_status === "fulfilled" || 
+    order.internal_status === "dispatched" || 
+    order.internal_status === "delivered"
+  );
+
+  if (!hasEverDispatched && (refundData.financial_status === "refunded" || refundData.financial_status === "voided" || noteLower.includes("cancel"))) {
+    console.log(`[Shopify Return] Order ${order.shopify_order_name} was never dispatched/fulfilled. A refund on an undispatched order is a cancellation/void, not a parcel return.`);
+    await supabase.from("returns").delete().eq("order_id", order.id);
+    await supabase
+      .from("orders")
+      .update({
+        internal_status: "cancelled",
+        cancel_reason: order.cancel_reason || refundData.cancel_reason || refundNote || "Refunded before dispatch",
+        returned_at: null,
+        return_reason: null,
+        return_delivery_fee: 0,
+      })
+      .eq("id", order.id);
+
+    return {
+      success: true,
+      type: "cancelled",
+      status: "cancelled",
+      message: "Undispatched order refunded. Marked as cancelled.",
+    };
+  }
 
   if (Array.isArray(refundData.refund_line_items) && refundData.refund_line_items.length > 0) {
     // Direct from refunds/create payload

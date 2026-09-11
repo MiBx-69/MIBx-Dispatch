@@ -87,6 +87,27 @@ async function processShopifyWebhook(
 
       case "refunds/create": {
         if (effectiveOrderId) {
+          const p = payload as any;
+          const noteStr = (p.note || "").toLowerCase();
+          if (p.cancelled_at || noteStr.includes("cancel")) {
+            const { data: ord } = await supabase
+              .from("orders")
+              .update({
+                internal_status: "cancelled",
+                cancel_reason: p.cancel_reason || p.note || "Cancelled via Shopify",
+                returned_at: null,
+                return_reason: null,
+              })
+              .eq("shopify_order_id", effectiveOrderId)
+              .select("id")
+              .maybeSingle();
+
+            if (ord) {
+              await supabase.from("returns").delete().eq("order_id", ord.id);
+            }
+            break;
+          }
+
           await handleShopifyRefundOrReturn({
             shopifyOrderId: effectiveOrderId,
             refundData: payload,
@@ -113,8 +134,28 @@ async function processShopifyWebhook(
       case "orders/paid": {
         await upsertOrder(supabase, payload);
 
-        // Check if this update represents a return/refund on Shopify
         const p = payload as any;
+        // If the order is cancelled, ensure it stays cancelled and delete any return record
+        if (p.cancelled_at) {
+          const { data: ord } = await supabase
+            .from("orders")
+            .update({
+              internal_status: "cancelled",
+              cancel_reason: p.cancel_reason || "Cancelled via Shopify",
+              returned_at: null,
+              return_reason: null,
+            })
+            .eq("shopify_order_id", payload.id)
+            .select("id")
+            .maybeSingle();
+
+          if (ord) {
+            await supabase.from("returns").delete().eq("order_id", ord.id);
+          }
+          break;
+        }
+
+        // Check if this update represents a return/refund on Shopify
         if (
           p.financial_status === "refunded" ||
           p.financial_status === "partially_refunded" ||
@@ -131,13 +172,21 @@ async function processShopifyWebhook(
 
       case "orders/cancelled":
         await upsertOrder(supabase, payload);
-        await supabase
+        const { data: cancelledOrd } = await supabase
           .from("orders")
           .update({
             internal_status: "cancelled",
             cancel_reason: payload.cancel_reason || "Cancelled via Shopify",
+            returned_at: null,
+            return_reason: null,
           })
-          .eq("shopify_order_id", payload.id);
+          .eq("shopify_order_id", payload.id)
+          .select("id")
+          .maybeSingle();
+        
+        if (cancelledOrd) {
+          await supabase.from("returns").delete().eq("order_id", cancelledOrd.id);
+        }
         
         // Await the SMS so it doesn't get cancelled by serverless termination
         await sendOrderCancelledSMS(supabase, payload).catch(e => console.error("Order Cancelled SMS Error:", e));
@@ -171,7 +220,7 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload): 
   // Check if it already exists to detect new orders
   const { data: existingOrder } = await supabase
     .from("orders")
-    .select("id")
+    .select("id, internal_status, pathao_consignment_id")
     .eq("shopify_order_id", payload.id)
     .maybeSingle();
 
@@ -285,6 +334,21 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload): 
   if (payload.cancelled_at) {
     orderPayload.internal_status = "cancelled";
     orderPayload.cancel_reason = payload.cancel_reason || "Cancelled via Shopify";
+  } else if (
+    !existingOrder ||
+    (!["dispatched", "delivered", "returned", "cancelled"].includes(existingOrder.internal_status) &&
+      !existingOrder.pathao_consignment_id)
+  ) {
+    const fs = (trueFulfillmentStatus || "").toLowerCase();
+    if (fs === "on_hold" || fs === "hold") {
+      orderPayload.internal_status = "hold";
+    } else if (fs === "in_progress" || fs === "partial" || fs === "partially_fulfilled") {
+      orderPayload.internal_status = "preparing";
+    } else if (fs === "fulfilled") {
+      orderPayload.internal_status = "dispatched";
+    } else if (isNew) {
+      orderPayload.internal_status = "pending";
+    }
   }
 
   // Perform fraud check if this is a new order

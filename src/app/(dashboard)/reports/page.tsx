@@ -169,7 +169,8 @@ export default async function ReportsPage({
   const totalReturnedRevenue = unifiedMetrics.returnedValue;
   const totalReturnDeliveryFees = unifiedMetrics.returnFees;
   const partialReturnDeductions = Math.max(0, unifiedMetrics.returnedValue - returnedOrders.reduce((acc: number, o: any) => acc + (Number(o.total_price) || 0), 0));
-  const netCollectibleRevenue = unifiedMetrics.netRevenue;
+  const totalDeductions = totalReturnedRevenue + cancelledRevenue;
+  const netCollectibleRevenue = Math.max(0, totalGross - totalDeductions);
 
   // Success rate = Delivered / (Delivered + Returned) * 100
   const totalFinalizedOrders = unifiedMetrics.deliveredCount + unifiedMetrics.returnedCount;

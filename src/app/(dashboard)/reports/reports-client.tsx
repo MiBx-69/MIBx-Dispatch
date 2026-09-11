@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format, subDays, startOfMonth } from "date-fns";
-import { Download, Calendar, BarChart, ShoppingCart, Truck, CheckCircle, XCircle, RotateCcw, TrendingUp, Award } from "lucide-react";
+import { Download, Calendar, BarChart, ShoppingCart, Truck, CheckCircle, XCircle, RotateCcw, TrendingUp, Award, FileSpreadsheet } from "lucide-react";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
 import { TopProducts } from "@/components/dashboard/top-products";
 import { DispatchedProductsToday } from "@/components/dashboard/dispatched-today";
@@ -163,6 +163,39 @@ export function ReportsClient({
   };
 
   const [isExportingReturns, setIsExportingReturns] = useState(false);
+  const [isExportingAll, setIsExportingAll] = useState(false);
+
+  const handleExportAll = async () => {
+    try {
+      setIsExportingAll(true);
+      const startIso = new Date(`${startDate}T00:00:00`).toISOString();
+      const endIso = new Date(`${endDate}T23:59:59.999`).toISOString();
+      
+      const res = await fetch(`/api/reports/export-all?startDate=${startIso}&endDate=${endIso}`);
+      if (!res.ok) {
+        if (res.status === 404) {
+          alert("No data found for the selected period.");
+          return;
+        }
+        throw new Error("Failed to generate All-in-One Report");
+      }
+      
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `MiBx-All-In-One-Report-${startDate}-to-${endDate}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to export All-in-One Report.");
+    } finally {
+      setIsExportingAll(false);
+    }
+  };
 
   const handleExportReturns = async () => {
     try {
@@ -191,23 +224,23 @@ export function ReportsClient({
   };
 
   return (
-    <div className="space-y-6 animate-fade-in pb-20">
+    <div className="space-y-4 animate-fade-in pb-12">
       {/* Header and Controls */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-zinc-900 border border-zinc-800 p-5 rounded-2xl">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <BarChart className="w-6 h-6 text-indigo-400" />
+          <h1 className="text-xl font-bold text-white flex items-center gap-2">
+            <BarChart className="w-5 h-5 text-indigo-400" />
             Reports & Analytics
           </h1>
-          <p className="text-sm text-zinc-400 mt-1">Generate custom reports and export data</p>
+          <p className="text-xs text-zinc-400 mt-0.5">Generate custom reports and export data</p>
         </div>
         
-        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
           {/* Quick Filters */}
           <select 
             value={filterType}
             onChange={(e) => applyFilter(e.target.value)}
-            className="bg-zinc-800 border border-zinc-700 text-white text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:border-indigo-500"
+            className="bg-zinc-800 border border-zinc-700 text-white text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500"
             disabled={isPending}
           >
             <option value="today">Today</option>
@@ -220,145 +253,194 @@ export function ReportsClient({
 
           {/* Custom Date Inputs */}
           {filterType === "custom" && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <input 
                 type="date"
                 value={startDate}
                 min="2026-09-01"
                 onChange={(e) => applyFilter("custom", e.target.value, endDate)}
-                className="bg-zinc-800 border border-zinc-700 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500"
+                className="bg-zinc-800 border border-zinc-700 text-white text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-indigo-500"
               />
-              <span className="text-zinc-500">to</span>
+              <span className="text-zinc-500 text-xs">to</span>
               <input 
                 type="date"
                 value={endDate}
                 min="2026-09-01"
                 onChange={(e) => applyFilter("custom", startDate, e.target.value)}
-                className="bg-zinc-800 border border-zinc-700 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500"
+                className="bg-zinc-800 border border-zinc-700 text-white text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-indigo-500"
               />
             </div>
           )}
 
+          {/* All-in-One Master Report Export */}
+          <button
+            onClick={handleExportAll}
+            disabled={isExportingAll || isPending}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 hover:from-indigo-600 hover:via-purple-600 hover:to-pink-600 text-white text-xs font-semibold rounded-lg shadow-md shadow-indigo-500/20 transition-all disabled:opacity-50 hover:scale-[1.02] active:scale-[0.98]"
+            title="Export Complete All-in-One Report (Executive KPIs, Orders, Dispatches & Returns)"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            {isExportingAll ? "Exporting Master..." : "All-in-One Report"}
+          </button>
+
+          <div className="h-5 w-px bg-zinc-700/60 hidden sm:block mx-0.5" />
+
+          {/* Section-by-Section Exports */}
           <button
             onClick={handleExport}
             disabled={isExporting || isPending}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
-            title="Export Orders"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 hover:text-white border border-indigo-500/30 text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
+            title="Export Orders CSV"
           >
-            <Download className="w-4 h-4" />
+            <Download className="w-3.5 h-3.5" />
             {isExporting ? "Exporting..." : "Orders CSV"}
           </button>
           
           <button
             onClick={handleExportDispatched}
             disabled={isExportingDispatched || isPending}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
-            title="Export Dispatched Products"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 hover:text-white border border-emerald-500/30 text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
+            title="Export Dispatched Products CSV"
           >
-            <Truck className="w-4 h-4" />
+            <Truck className="w-3.5 h-3.5" />
             {isExportingDispatched ? "Exporting..." : "Products CSV"}
           </button>
 
           <button
             onClick={handleExportReturns}
             disabled={isExportingReturns || isPending}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-rose-500 hover:bg-rose-600 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
-            title="Export Returns"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 hover:text-white border border-rose-500/30 text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
+            title="Export Returns CSV"
           >
-            <RotateCcw className="w-4 h-4" />
+            <RotateCcw className="w-3.5 h-3.5" />
             {isExportingReturns ? "Exporting..." : "Returns CSV"}
           </button>
         </div>
       </div>
 
+      {/* Primary Order KPI Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
+        {/* Total Orders */}
+        <div className="bg-zinc-900 border border-indigo-500/25 hover:border-indigo-500/40 p-3.5 rounded-xl flex flex-col justify-between transition-all group shadow-sm">
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Total Orders</span>
+            <div className="w-6 h-6 rounded-lg bg-indigo-500/15 flex items-center justify-center text-indigo-400">
+              <ShoppingCart className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+            {orderStats.totalOrders}
+          </div>
+          <span className="text-[10px] text-zinc-500 mt-1">Total period volume</span>
+        </div>
+
+        {/* Dispatched */}
+        <div className="bg-zinc-900 border border-sky-500/25 hover:border-sky-500/40 p-3.5 rounded-xl flex flex-col justify-between transition-all group shadow-sm">
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Dispatched</span>
+            <div className="w-6 h-6 rounded-lg bg-sky-500/15 flex items-center justify-center text-sky-400">
+              <Truck className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl font-bold text-sky-400 tracking-tight">
+            {orderStats.dispatchedOrders}
+          </div>
+          <span className="text-[10px] text-sky-400/80 mt-1 truncate" title={`৳${Number(totalDispatchedAmount).toLocaleString()}`}>
+            ৳{Number(totalDispatchedAmount).toLocaleString()} Value
+          </span>
+        </div>
+
+        {/* Delivered */}
+        <div className="bg-zinc-900 border border-emerald-500/25 hover:border-emerald-500/40 p-3.5 rounded-xl flex flex-col justify-between transition-all group shadow-sm">
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Delivered</span>
+            <div className="w-6 h-6 rounded-lg bg-emerald-500/15 flex items-center justify-center text-emerald-400">
+              <CheckCircle className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl font-bold text-emerald-400 tracking-tight">
+            {orderStats.deliveredOrders}
+          </div>
+          <span className="text-[10px] text-emerald-400/80 mt-1 truncate" title={`৳${Number(deliveredRevenue).toLocaleString()}`}>
+            ৳{Number(deliveredRevenue).toLocaleString()}
+          </span>
+        </div>
+
+        {/* Returned */}
+        <div className="bg-zinc-900 border border-rose-500/25 hover:border-rose-500/40 p-3.5 rounded-xl flex flex-col justify-between transition-all group shadow-sm">
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Returned</span>
+            <div className="w-6 h-6 rounded-lg bg-rose-500/15 flex items-center justify-center text-rose-400">
+              <RotateCcw className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl font-bold text-rose-400 tracking-tight">
+            {orderStats.returnedOrders}
+          </div>
+          <span className="text-[10px] text-rose-400/80 mt-1 truncate" title={`৳${Number(returnedRevenue).toLocaleString()} lost`}>
+            ৳{Number(returnedRevenue).toLocaleString()} lost
+          </span>
+        </div>
+
+        {/* Cancelled */}
+        <div className="bg-zinc-900 border border-zinc-700/50 hover:border-zinc-600 p-3.5 rounded-xl flex flex-col justify-between transition-all group shadow-sm">
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Cancelled</span>
+            <div className="w-6 h-6 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-400">
+              <XCircle className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl font-bold text-zinc-300 tracking-tight">
+            {orderStats.cancelledOrders}
+          </div>
+          <span className="text-[10px] text-zinc-500 mt-1 truncate" title={`৳${Number(cancelledRevenue).toLocaleString()}`}>
+            ৳{Number(cancelledRevenue).toLocaleString()}
+          </span>
+        </div>
+      </div>
+
       {/* Primary Financial Summary — The accurate month-end numbers */}
-      <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-2xl">
-        <h2 className="text-sm font-semibold text-zinc-300 mb-4 flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-emerald-400" />
+      <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
+        <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+          <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
           Financial Summary
         </h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
-          <div className="bg-zinc-950/50 border border-zinc-800/50 p-4 lg:p-5 rounded-xl flex flex-col justify-center">
-            <p className="text-xs lg:text-sm font-medium text-zinc-400 mb-1">Gross Revenue</p>
-            <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-white truncate" title={`৳${Number(totalGross).toLocaleString()}`}>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+          <div className="bg-zinc-950/50 border border-zinc-800/50 p-3.5 rounded-xl flex flex-col justify-center">
+            <p className="text-xs font-medium text-zinc-400 mb-0.5">Gross Revenue</p>
+            <p className="text-xl lg:text-2xl font-bold text-white truncate" title={`৳${Number(totalGross).toLocaleString()}`}>
               ৳{Number(totalGross).toLocaleString()}
             </p>
-            <p className="text-[10px] lg:text-xs text-zinc-500 mt-1 leading-tight">All orders (with delivery)</p>
+            <p className="text-[10px] text-zinc-500 mt-0.5 leading-tight">All orders (with delivery)</p>
           </div>
-          <div className="bg-rose-500/5 border border-rose-500/20 p-4 lg:p-5 rounded-xl flex flex-col justify-center">
-            <p className="text-xs lg:text-sm font-medium text-rose-400/80 mb-1">Deductions</p>
-            <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-rose-400 truncate" title={`-৳${Number(returnedRevenue + cancelledRevenue).toLocaleString()}`}>
+          <div className="bg-rose-500/5 border border-rose-500/20 p-3.5 rounded-xl flex flex-col justify-center">
+            <p className="text-xs font-medium text-rose-400/80 mb-0.5">Deductions</p>
+            <p className="text-xl lg:text-2xl font-bold text-rose-400 truncate" title={`-৳${Number(returnedRevenue + cancelledRevenue).toLocaleString()}`}>
               -৳{Number(returnedRevenue + cancelledRevenue).toLocaleString()}
             </p>
-            <p className="text-[10px] lg:text-xs text-rose-400/60 mt-1 leading-tight">
+            <p className="text-[10px] text-rose-400/60 mt-0.5 leading-tight truncate">
               Returned: ৳{Number(returnedRevenue).toLocaleString()}
               {partialReturnDeductions > 0 && ` (incl. ৳${partialReturnDeductions.toLocaleString()} partial)`}
               {' '}• Cancelled: ৳{Number(cancelledRevenue).toLocaleString()}
             </p>
           </div>
-          <div className="bg-emerald-500/5 border border-emerald-500/20 p-4 lg:p-5 rounded-xl flex flex-col justify-center">
-            <p className="text-xs lg:text-sm font-medium text-emerald-400/80 mb-1">Net Collectible</p>
-            <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-emerald-400 truncate" title={`৳${Number(netCollectibleRevenue).toLocaleString()}`}>
+          <div className="bg-emerald-500/5 border border-emerald-500/20 p-3.5 rounded-xl flex flex-col justify-center">
+            <p className="text-xs font-medium text-emerald-400/80 mb-0.5">Net Collectible</p>
+            <p className="text-xl lg:text-2xl font-bold text-emerald-400 truncate" title={`৳${Number(netCollectibleRevenue).toLocaleString()}`}>
               ৳{Number(netCollectibleRevenue).toLocaleString()}
             </p>
-            <p className="text-[10px] lg:text-xs text-emerald-400/60 mt-1 leading-tight">Gross − Returns − Cancelled</p>
+            <p className="text-[10px] text-emerald-400/60 mt-0.5 leading-tight">Gross − Returns − Cancelled</p>
           </div>
-          <div className="bg-indigo-500/5 border border-indigo-500/20 p-4 lg:p-5 rounded-xl flex flex-col justify-center">
-            <p className="text-xs lg:text-sm font-medium text-indigo-400/80 mb-1">Success Rate</p>
-            <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-indigo-400 flex items-center gap-2 truncate">
-              <Award className="w-5 h-5 lg:w-6 lg:h-6 shrink-0" />
+          <div className="bg-indigo-500/5 border border-indigo-500/20 p-3.5 rounded-xl flex flex-col justify-center">
+            <p className="text-xs font-medium text-indigo-400/80 mb-0.5">Success Rate</p>
+            <p className="text-xl lg:text-2xl font-bold text-indigo-400 flex items-center gap-1.5 truncate">
+              <Award className="w-5 h-5 shrink-0" />
               {successRate}%
             </p>
-            <p className="text-[10px] lg:text-xs text-indigo-400/60 mt-1 leading-tight">
+            <p className="text-[10px] text-indigo-400/60 mt-0.5 leading-tight">
               {orderStats.deliveredOrders} delivered / {orderStats.deliveredOrders + orderStats.returnedOrders} finalized
             </p>
           </div>
-        </div>
-      </div>
-
-      {/* Order & Return Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4">
-        <div className="bg-zinc-900 border border-zinc-800 p-4 lg:p-5 rounded-2xl flex flex-col justify-center">
-          <p className="text-xs lg:text-sm font-medium text-zinc-400 mb-1">Total Orders</p>
-          <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-white flex items-center gap-2 truncate">
-            <ShoppingCart className="w-4 h-4 lg:w-5 lg:h-5 text-zinc-500 shrink-0" />
-            {orderStats.totalOrders}
-          </p>
-        </div>
-        <div className="bg-zinc-900 border border-zinc-800 p-4 lg:p-5 rounded-2xl flex flex-col justify-center">
-          <p className="text-xs lg:text-sm font-medium text-zinc-400 mb-1">Dispatched</p>
-          <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-white flex items-center gap-2 truncate">
-            <Truck className="w-4 h-4 lg:w-5 lg:h-5 text-indigo-400 shrink-0" />
-            {orderStats.dispatchedOrders}
-          </p>
-          <p className="text-[10px] lg:text-xs text-indigo-400 mt-1 leading-tight">৳{Number(totalDispatchedAmount).toLocaleString()} Value</p>
-        </div>
-        <div className="bg-zinc-900 border border-zinc-800 p-4 lg:p-5 rounded-2xl flex flex-col justify-center">
-          <p className="text-xs lg:text-sm font-medium text-zinc-400 mb-1">Delivered</p>
-          <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-emerald-400 flex items-center gap-2 truncate">
-            <CheckCircle className="w-4 h-4 lg:w-5 lg:h-5 shrink-0" />
-            {orderStats.deliveredOrders}
-          </p>
-          <p className="text-[10px] lg:text-xs text-emerald-400/80 mt-1 leading-tight">৳{Number(deliveredRevenue).toLocaleString()}</p>
-        </div>
-        <div className="bg-zinc-900 border border-zinc-800 p-4 lg:p-5 rounded-2xl flex flex-col justify-center">
-          <p className="text-xs lg:text-sm font-medium text-zinc-400 mb-1">Returned</p>
-          <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-rose-400 flex items-center gap-2 truncate">
-            <RotateCcw className="w-4 h-4 lg:w-5 lg:h-5 shrink-0" />
-            {orderStats.returnedOrders}
-          </p>
-          <p className="text-[10px] lg:text-xs text-rose-400/80 mt-1 leading-tight">
-            ৳{Number(returnedRevenue).toLocaleString()} lost
-            {totalReturnDeliveryFees > 0 && ` + ৳${Number(totalReturnDeliveryFees).toLocaleString()} fees`}
-          </p>
-        </div>
-        <div className="bg-zinc-900 border border-zinc-800 p-4 lg:p-5 rounded-2xl flex flex-col justify-center">
-          <p className="text-xs lg:text-sm font-medium text-zinc-400 mb-1">Cancelled</p>
-          <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-zinc-400 flex items-center gap-2 truncate">
-            <XCircle className="w-4 h-4 lg:w-5 lg:h-5 shrink-0" />
-            {orderStats.cancelledOrders}
-          </p>
-          <p className="text-[10px] lg:text-xs text-zinc-500 mt-1 leading-tight">৳{Number(cancelledRevenue).toLocaleString()}</p>
         </div>
       </div>
 

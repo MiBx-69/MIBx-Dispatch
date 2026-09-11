@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { Package, Truck, CheckCircle, Clock, AlertCircle, TrendingUp, Zap, XCircle } from "lucide-react";
 import Link from "next/link";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { getOrderDisplayStatus } from "@/lib/order-status";
 import { subDays, format, parseISO, differenceInDays } from "date-fns";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
 import { TopProducts } from "@/components/dashboard/top-products";
@@ -218,11 +219,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     else if (o.fraud_status === 'fraud') fraudStats.fraud++;
 
     // Status counts
-    if (o.internal_status === 'pending') liveStats.pending_orders++;
-    else if (o.internal_status === 'preparing') liveStats.preparing_orders++;
-    else if (o.internal_status === 'dispatched') liveStats.dispatched_orders++;
-    else if (o.internal_status === 'delivered') liveStats.delivered_orders++;
-    else if (o.internal_status === 'hold') liveStats.hold_orders++;
+    const effectiveStatus = getOrderDisplayStatus(o);
+    if (effectiveStatus === 'pending') liveStats.pending_orders++;
+    else if (effectiveStatus === 'preparing') liveStats.preparing_orders++;
+    else if (effectiveStatus === 'dispatched') liveStats.dispatched_orders++;
+    else if (effectiveStatus === 'delivered') liveStats.delivered_orders++;
+    else if (effectiveStatus === 'hold') liveStats.hold_orders++;
 
     // Period counts (all orders in this array fall within the selected date period)
     liveStats.orders_period++;
@@ -429,7 +431,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                     <span className="text-sm font-semibold text-zinc-200">
                       {order.shopify_order_name}
                     </span>
-                    <StatusBadge status={order.internal_status} />
+                    <StatusBadge status={getOrderDisplayStatus(order)} />
                   </div>
                   <p className="text-xs text-zinc-500 mt-0.5 truncate">
                     {order.customer_name}

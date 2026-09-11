@@ -75,11 +75,13 @@ export async function POST(request: NextRequest) {
 
           const { data: order } = await supabase
             .from("orders")
-            .select("pathao_consignment_id")
+            .select("pathao_consignment_id, cancel_reason")
             .eq("id", orderId)
             .single();
 
-          const oldStatus = (dispatch || order?.pathao_consignment_id) ? "dispatched" : "pending";
+          const oldStatus = order?.cancel_reason
+            ? "cancelled"
+            : (dispatch || order?.pathao_consignment_id) ? "dispatched" : "pending";
 
           const { error: updateErr } = await supabase
             .from("orders")

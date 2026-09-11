@@ -197,6 +197,34 @@ export async function createShopifyFulfillment(params: {
   return fulfillment;
 }
 
+// ─── Release Fulfillment Order Hold ──────────────────────────────────────────
+const RELEASE_HOLD_MUTATION = `
+  mutation ReleaseFulfillmentOrderHold($id: ID!) {
+    fulfillmentOrderReleaseHold(id: $id) {
+      fulfillmentOrder {
+        id
+        status
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;
+
+export async function releaseShopifyFulfillmentOrderHold(fulfillmentOrderId: string) {
+  const result = await shopifyFetch(RELEASE_HOLD_MUTATION, {
+    id: fulfillmentOrderId,
+  });
+
+  const { fulfillmentOrder, userErrors } = result.data.fulfillmentOrderReleaseHold;
+  if (userErrors?.length) {
+    throw new Error(userErrors.map((e: any) => e.message).join(", "));
+  }
+  return fulfillmentOrder;
+}
+
 // ─── Update Fulfillment Tracking ──────────────────────────────────────────────
 const UPDATE_TRACKING_MUTATION = `
   mutation UpdateFulfillmentTracking(

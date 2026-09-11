@@ -27,23 +27,41 @@ export async function GET(request: NextRequest) {
       query = query.eq("is_archived", true);
     } else if (status === "everything") {
       query = query.eq("is_archived", false);
-    } else if (status === "in_progress") {
-      query = query.eq("is_archived", false).eq("fulfillment_status", "in_progress").neq("internal_status", "dispatched");
+    } else if (status === "in_progress" || status === "preparing") {
+      query = query
+        .eq("is_archived", false)
+        .or("internal_status.in.(preparing,in_progress),fulfillment_status.in.(in_progress,partial)")
+        .neq("internal_status", "dispatched")
+        .neq("internal_status", "cancelled")
+        .is("pathao_consignment_id", null);
+    } else if (status === "on_hold" || status === "hold") {
+      query = query
+        .eq("is_archived", false)
+        .or("internal_status.in.(hold,on_hold),fulfillment_status.in.(on_hold,hold)")
+        .neq("internal_status", "dispatched")
+        .neq("internal_status", "cancelled")
+        .is("pathao_consignment_id", null);
     } else if (status === "dispatched") {
       query = query.eq("is_archived", false).or("internal_status.eq.dispatched,fulfillment_status.eq.fulfilled");
+    } else if (status === "pending") {
+      query = query
+        .eq("is_archived", false)
+        .eq("internal_status", "pending")
+        .not("fulfillment_status", "in", '("on_hold","in_progress","partial")')
+        .neq("internal_status", "dispatched")
+        .neq("internal_status", "cancelled")
+        .is("pathao_consignment_id", null);
     } else if (status === "unfulfilled") {
       query = query.eq("is_archived", false)
                    .or("fulfillment_status.eq.unfulfilled,fulfillment_status.is.null")
                    .neq("internal_status", "dispatched")
-                   .neq("internal_status", "cancelled");
-    } else if (status === "on_hold") {
-      query = query.eq("is_archived", false)
-                   .eq("fulfillment_status", "on_hold")
-                   .neq("internal_status", "dispatched");
+                   .neq("internal_status", "cancelled")
+                   .is("pathao_consignment_id", null);
     } else if (status === "all") {
       query = query.eq("is_archived", false)
                    .neq("internal_status", "dispatched")
                    .neq("internal_status", "cancelled")
+                   .is("pathao_consignment_id", null)
                    .or("fulfillment_status.neq.fulfilled,fulfillment_status.is.null");
     } else {
       query = query.eq("is_archived", false).eq("internal_status", status);

@@ -2,27 +2,40 @@
 
 import type { OrderStatus } from "@/types/database";
 
-const STATUS_STYLES: Record<OrderStatus, string> = {
+const STATUS_STYLES: Record<string, string> = {
   pending: "status-pending",
   preparing: "status-preparing",
+  in_progress: "status-preparing",
+  partial: "status-preparing",
+  partially_fulfilled: "status-preparing",
   dispatched: "status-dispatched",
+  fulfilled: "status-dispatched",
   delivered: "status-delivered",
   hold: "status-hold",
+  on_hold: "status-hold",
   cancelled: "status-cancelled",
   delayed: "status-delayed",
   returned: "status-returned",
 };
 
-const STATUS_LABELS: Record<OrderStatus, string> = {
+const STATUS_LABELS: Record<string, string> = {
   pending: "Pending",
   preparing: "Preparing",
+  in_progress: "Preparing",
+  partial: "Preparing",
+  partially_fulfilled: "Preparing",
   dispatched: "Dispatched",
+  fulfilled: "Dispatched",
   delivered: "Delivered",
-  hold: "Hold",
+  hold: "On Hold",
+  on_hold: "On Hold",
   cancelled: "Cancelled",
   delayed: "Delayed",
   returned: "Returned",
 };
+
+import { getOrderDisplayStatus } from "@/lib/order-status";
+export { getOrderDisplayStatus };
 
 interface StatusBadgeProps {
   status: OrderStatus | string;
@@ -30,8 +43,9 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status, size = "sm" }: StatusBadgeProps) {
-  const style = STATUS_STYLES[status as OrderStatus] || "status-pending";
-  const label = STATUS_LABELS[status as OrderStatus] || status;
+  const normalizedStatus = (status || "pending").toLowerCase();
+  const style = STATUS_STYLES[normalizedStatus] || "status-pending";
+  const label = STATUS_LABELS[normalizedStatus] || status || "Pending";
 
   return (
     <span
@@ -78,10 +92,19 @@ export function ShopifyFinancialBadge({ status }: { status: string }) {
   );
 }
 
-export function ShopifyFulfillmentBadge({ status }: { status: string }) {
+export function ShopifyFulfillmentBadge({
+  status,
+  currentStatus,
+}: {
+  status: string;
+  currentStatus?: string;
+}) {
   if (!status) return null;
   const s = status.toLowerCase();
-  
+  const cs = (currentStatus || "").toLowerCase();
+
+  const isTerminalOrDispatched = ["dispatched", "delivered", "returned", "cancelled"].includes(cs);
+
   let bg = "bg-zinc-800/50";
   let text = "text-zinc-300";
   let dot = "bg-zinc-500";
@@ -93,20 +116,34 @@ export function ShopifyFulfillmentBadge({ status }: { status: string }) {
     dot = "bg-yellow-500";
     label = "Unfulfilled";
   } else if (s === "in_progress" || s === "partial" || s === "partially_fulfilled") {
-    bg = "bg-amber-500/15";
-    text = "text-amber-500";
-    dot = "bg-amber-500";
-    label = "Preparing";
+    if (isTerminalOrDispatched) {
+      bg = "bg-zinc-800/50";
+      text = "text-zinc-400";
+      dot = "bg-zinc-500";
+      label = "Shopify: In progress";
+    } else {
+      bg = "bg-amber-500/15";
+      text = "text-amber-500";
+      dot = "bg-amber-500";
+      label = "Preparing";
+    }
   } else if (s === "fulfilled") {
     bg = "bg-zinc-500/15";
     text = "text-zinc-400";
     dot = "bg-zinc-500";
     label = "Fulfilled";
   } else if (s === "on_hold" || s === "hold") {
-    bg = "bg-amber-500/15";
-    text = "text-amber-500";
-    dot = "bg-amber-500";
-    label = "On hold";
+    if (isTerminalOrDispatched) {
+      bg = "bg-zinc-800/50";
+      text = "text-zinc-400";
+      dot = "bg-zinc-500";
+      label = "Shopify: On hold";
+    } else {
+      bg = "bg-orange-500/15";
+      text = "text-orange-400";
+      dot = "bg-orange-500";
+      label = "On hold";
+    }
   } else if (s === "not_required") {
     bg = "bg-zinc-500/15";
     text = "text-zinc-400";

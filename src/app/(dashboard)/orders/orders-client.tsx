@@ -8,6 +8,7 @@ import {
   Truck, Package, X, CheckCircle, PauseCircle, AlertCircle, Archive, ArchiveRestore, Copy, Check, MessageSquare, ShieldCheck, List, Loader2, RotateCcw, UploadCloud
 } from "lucide-react";
 import { StatusBadge, ShopifyFinancialBadge, ShopifyFulfillmentBadge } from "@/components/ui/status-badge";
+import { getOrderDisplayStatus } from "@/lib/order-status";
 import { DispatchModal } from "@/components/orders/dispatch-modal";
 import { BulkDispatchModal } from "@/components/orders/bulk-dispatch-modal";
 import { SendSMSModal } from "@/components/orders/send-sms-modal";
@@ -22,18 +23,17 @@ import type { Order, OrderStatus } from "@/types/database";
 import { analyzeCustomerRisk } from "@/lib/risk-analytics";
 
 const STATUS_FILTERS = [
-  { value: "everything", label: "Everything" },
   { value: "all", label: "Pending Actions" },
-  { value: "unfulfilled", label: "Unfulfilled" },
-  { value: "in_progress", label: "Preparing (Shopify)" },
-  { value: "on_hold", label: "On Hold (Shopify)" },
-  { value: "pending", label: "Pending" },
-  { value: "preparing", label: "Preparing (Manual)" },
+  { value: "preparing", label: "Preparing" },
+  { value: "hold", label: "On Hold" },
   { value: "dispatched", label: "Dispatched" },
   { value: "delivered", label: "Delivered" },
+  { value: "pending", label: "Pending" },
+  { value: "unfulfilled", label: "Unfulfilled" },
   { value: "cancelled", label: "Cancelled" },
   { value: "delayed", label: "Delayed" },
   { value: "returned", label: "Returned" },
+  { value: "everything", label: "Everything" },
   { value: "archived", label: "Removed" },
 ];
 
@@ -41,6 +41,7 @@ interface OrdersClientProps {
   orders: Order[];
   total: number;
   inProgressCount?: number;
+  preparingCount?: number;
   dispatchedCount?: number;
   onHoldCount?: number;
   cancelledCount?: number;
@@ -56,6 +57,7 @@ export function OrdersClient({
   orders,
   total,
   inProgressCount = 0,
+  preparingCount = 0,
   dispatchedCount = 0,
   onHoldCount = 0,
   cancelledCount = 0,
@@ -108,7 +110,17 @@ export function OrdersClient({
             if (prev.some((o) => o.id === newOrder.id)) return prev;
             
             // Optionally filter by effectiveStatus
-            if (effectiveStatus && effectiveStatus !== "all" && newOrder.internal_status !== effectiveStatus) {
+            const resolvedNewStatus = getOrderDisplayStatus(newOrder);
+            const matchesFilter =
+              !effectiveStatus ||
+              effectiveStatus === "all" ||
+              resolvedNewStatus === effectiveStatus ||
+              (effectiveStatus === "hold" && resolvedNewStatus === "hold") ||
+              (effectiveStatus === "on_hold" && resolvedNewStatus === "hold") ||
+              (effectiveStatus === "preparing" && resolvedNewStatus === "preparing") ||
+              (effectiveStatus === "in_progress" && resolvedNewStatus === "preparing");
+
+            if (!matchesFilter) {
               return prev;
             }
             
@@ -437,18 +449,22 @@ export function OrdersClient({
           onOpenImportModal={() => setBulkImportDeliveriesOpen(true)}
         />
       ) : (
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col justify-center items-center">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 sm:p-4 flex flex-col justify-center items-center">
             <div className="text-zinc-400 text-xs font-medium uppercase tracking-wider mb-1">Dispatched</div>
-            <div className="text-2xl font-semibold text-emerald-400">{dispatchedCount}</div>
+            <div className="text-xl sm:text-2xl font-semibold text-indigo-400">{dispatchedCount}</div>
           </div>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col justify-center items-center">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 sm:p-4 flex flex-col justify-center items-center">
+            <div className="text-zinc-400 text-xs font-medium uppercase tracking-wider mb-1">Preparing</div>
+            <div className="text-xl sm:text-2xl font-semibold text-amber-400">{preparingCount || inProgressCount}</div>
+          </div>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 sm:p-4 flex flex-col justify-center items-center">
             <div className="text-zinc-400 text-xs font-medium uppercase tracking-wider mb-1">On Hold</div>
-            <div className="text-2xl font-semibold text-amber-400">{onHoldCount}</div>
+            <div className="text-xl sm:text-2xl font-semibold text-orange-400">{onHoldCount}</div>
           </div>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col justify-center items-center">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 sm:p-4 flex flex-col justify-center items-center">
             <div className="text-zinc-400 text-xs font-medium uppercase tracking-wider mb-1">Cancelled</div>
-            <div className="text-2xl font-semibold text-rose-400">{cancelledCount}</div>
+            <div className="text-xl sm:text-2xl font-semibold text-rose-400">{cancelledCount}</div>
           </div>
         </div>
       )}
@@ -515,31 +531,42 @@ export function OrdersClient({
 
         {/* Status filters */}
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-          {STATUS_FILTERS.map((f) => (
-            <button
-              key={f.value}
-              onClick={() => {
-                startTransition(() => {
-                  const params = new URLSearchParams();
-                  if (f.value !== "all") params.set("status", f.value);
-                  if (search) params.set("search", search);
-                  router.push(`/orders?${params.toString()}`);
-                });
-              }}
-              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
-                ${
-                  (effectiveStatus === f.value) || (!effectiveStatus && f.value === "all")
-                    ? "bg-indigo-500 text-white"
-                    : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
-                }
-              `}
-            >
-              {f.label}
-              {f.value === "in_progress" && (
-                <span className="ml-1 opacity-70 text-xs">({inProgressCount})</span>
-              )}
-            </button>
-          ))}
+          {STATUS_FILTERS.map((f) => {
+            const isSelected =
+              (f.value === "all" && (!effectiveStatus || effectiveStatus === "all")) ||
+              (f.value === "preparing" && (effectiveStatus === "preparing" || effectiveStatus === "in_progress")) ||
+              (f.value === "hold" && (effectiveStatus === "hold" || effectiveStatus === "on_hold")) ||
+              (effectiveStatus === f.value);
+
+            return (
+              <button
+                key={f.value}
+                onClick={() => {
+                  startTransition(() => {
+                    const params = new URLSearchParams();
+                    if (f.value !== "all") params.set("status", f.value);
+                    if (search) params.set("search", search);
+                    router.push(`/orders?${params.toString()}`);
+                  });
+                }}
+                className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
+                  ${
+                    isSelected
+                      ? "bg-indigo-500 text-white"
+                      : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                  }
+                `}
+              >
+                {f.label}
+                {f.value === "preparing" && (preparingCount > 0 || inProgressCount > 0) && (
+                  <span className="ml-1 opacity-70 text-xs">({preparingCount || inProgressCount})</span>
+                )}
+                {f.value === "hold" && onHoldCount > 0 && (
+                  <span className="ml-1 opacity-70 text-xs">({onHoldCount})</span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -702,7 +729,7 @@ export function OrdersClient({
                   </button>
                   <div className="flex items-center gap-2 min-w-0 flex-wrap">
                     <h3 className="font-bold text-zinc-100 text-sm truncate">{order.shopify_order_name}</h3>
-                    <StatusBadge status={order.internal_status as OrderStatus} />
+                    <StatusBadge status={getOrderDisplayStatus(order)} />
                     {(order as any).returns?.some((r: any) => r.return_type === "partial" && !r.is_verified) && (
                       <a
                         href="/returns?filter=pending_verification"
@@ -803,7 +830,10 @@ export function OrdersClient({
                     {order.financial_status && (
                       <ShopifyFinancialBadge status={order.financial_status} />
                     )}
-                    <ShopifyFulfillmentBadge status={order.fulfillment_status || "unfulfilled"} />
+                    <ShopifyFulfillmentBadge
+                      status={order.fulfillment_status || "unfulfilled"}
+                      currentStatus={getOrderDisplayStatus(order)}
+                    />
                   </div>
 
                   {/* Line Items */}
