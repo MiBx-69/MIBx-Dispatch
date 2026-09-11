@@ -39,8 +39,17 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Public routes that don't need auth
-  const publicPaths = ["/login", "/api/auth", "/api/webhooks/shopify", "/api/webhooks/pathao"];
-  const isPublic = publicPaths.some((p) => pathname.startsWith(p));
+  const publicPaths = [
+    "/login",
+    "/api/auth",
+    "/api/webhooks/shopify",
+    "/api/webhooks/pathao",
+    "/site.webmanifest",
+    "/manifest.json",
+    "/robots.txt",
+    "/favicon.ico",
+  ];
+  const isPublic = publicPaths.some((p) => pathname === p || pathname.startsWith(p));
 
   // Redirect unauthenticated users to login
   if (!user && !isPublic) {
@@ -74,8 +83,9 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization)
      * - favicon.ico
-     * - public folder
+     * - site.webmanifest, manifest.json, robots.txt, sitemap.xml
+     * - media and font files
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|site\\.webmanifest|manifest\\.json|robots\\.txt|sitemap\\.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|otf)$).*)",
   ],
 };

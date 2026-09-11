@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { ReturnsClient } from "./returns-client";
 import type { Metadata } from "next";
-import { getUnifiedReportMetrics } from "@/lib/reporting-engine";
+import { getReturnsPageMetrics } from "@/lib/reporting-engine";
 
 export const metadata: Metadata = { title: "Returns" };
 export const dynamic = "force-dynamic";
@@ -40,7 +40,11 @@ export default async function ReturnsPage({
     .range(offset, offset + pageSize - 1);
 
   if (params.filter && params.filter !== "all") {
-    query = query.eq("status", params.filter);
+    if (params.filter === "pending_verification") {
+      query = query.or("status.eq.pending_verification,and(return_type.eq.partial,is_verified.eq.false)");
+    } else {
+      query = query.eq("status", params.filter);
+    }
   }
 
   if (params.search) {
@@ -53,9 +57,7 @@ export default async function ReturnsPage({
     metrics,
   ] = await Promise.all([
     query,
-    getUnifiedReportMetrics({
-      search: params.search,
-    }),
+    getReturnsPageMetrics(params.search),
   ]);
 
   const returns = returnsData || [];

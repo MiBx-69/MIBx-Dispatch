@@ -310,15 +310,19 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
     const finStatus = (orderPayload.financial_status || "").toLowerCase();
     if (finStatus === "refunded" || finStatus === "partially_refunded") {
       try {
-        const { handleShopifyRefundOrReturn } = await import("@/lib/shopify-returns");
-        await handleShopifyRefundOrReturn({
-          shopifyOrderId: orderPayload.shopify_order_id,
-          refundData: {
-            financial_status: finStatus,
-            note: orderPayload.note,
-          },
-          topic: "sync/orders",
-        });
+        const { handleShopifyRefundOrReturn, isShopifyExchange } = await import("@/lib/shopify-returns");
+        if (isShopifyExchange({ order: orderPayload, payload: shopifyOrder })) {
+          console.log(`[Sync] Order ${orderPayload.shopify_order_name} is an exchange. Skipping return creation.`);
+        } else {
+          await handleShopifyRefundOrReturn({
+            shopifyOrderId: orderPayload.shopify_order_id,
+            refundData: {
+              financial_status: finStatus,
+              note: orderPayload.note,
+            },
+            topic: "sync/orders",
+          });
+        }
       } catch (refundErr) {
         console.error("[Sync] Error syncing return for order:", refundErr);
       }

@@ -6,6 +6,83 @@ interface HandleShopifyReturnOptions {
   topic: string;
 }
 
+export function isShopifyExchange(data: {
+  order?: any;
+  refundData?: any;
+  payload?: any;
+}): boolean {
+  const sources = [data.refundData, data.payload, data.order].filter(Boolean);
+
+  for (const src of sources) {
+    // 1. Check for exchange_line_items in any return/refund/order payload
+    if (Array.isArray(src.exchange_line_items) && src.exchange_line_items.length > 0) return true;
+    if (Array.isArray(src.exchangeLineItems) && src.exchangeLineItems.length > 0) return true;
+
+    // Nested in returns array (e.g. order.returns)
+    if (Array.isArray(src.returns)) {
+      for (const ret of src.returns) {
+        if (Array.isArray(ret.exchange_line_items) && ret.exchange_line_items.length > 0) return true;
+        if (Array.isArray(ret.exchangeLineItems) && ret.exchangeLineItems.length > 0) return true;
+        if (typeof ret.note === "string" && ret.note.toLowerCase().includes("exchange")) return true;
+      }
+    }
+
+    // Nested in return object
+    if (src.return) {
+      if (Array.isArray(src.return.exchange_line_items) && src.return.exchange_line_items.length > 0) return true;
+      if (Array.isArray(src.return.exchangeLineItems) && src.return.exchangeLineItems.length > 0) return true;
+      if (typeof src.return.note === "string" && src.return.note.toLowerCase().includes("exchange")) return true;
+    }
+
+    // 2. Check return line items return_reason or note
+    const returnItems = src.return_line_items || src.refund_line_items || [];
+    if (Array.isArray(returnItems)) {
+      for (const item of returnItems) {
+        const reason = (item.return_reason || item.reason || "").toString().toLowerCase();
+        if (reason === "exchange" || reason.includes("exchange")) return true;
+        const rNote = (item.return_reason_note || item.note || "").toString().toLowerCase();
+        if (rNote.includes("exchange")) return true;
+      }
+    }
+
+    // 3. Check tags
+    if (src.shopify_tags) {
+      const tags = Array.isArray(src.shopify_tags) ? src.shopify_tags : [src.shopify_tags];
+      if (tags.some((t: any) => typeof t === "string" && t.toLowerCase().includes("exchange"))) return true;
+    }
+    if (typeof src.tags === "string" && src.tags.toLowerCase().includes("exchange")) return true;
+    if (Array.isArray(src.tags) && src.tags.some((t: any) => typeof t === "string" && t.toLowerCase().includes("exchange"))) return true;
+
+    // 4. Check notes
+    if (typeof src.note === "string" && src.note.toLowerCase().includes("exchange")) return true;
+    if (typeof src.notes === "string" && src.notes.toLowerCase().includes("exchange")) return true;
+
+    // Check nested refunds notes
+    if (Array.isArray(src.refunds)) {
+      for (const ref of src.refunds) {
+        if (typeof ref.note === "string" && ref.note.toLowerCase().includes("exchange")) return true;
+        if (Array.isArray(ref.refund_line_items)) {
+          for (const item of ref.refund_line_items) {
+            const reason = (item.reason || item.return_reason || "").toString().toLowerCase();
+            if (reason.includes("exchange")) return true;
+          }
+        }
+      }
+    }
+
+    // 5. Check note_attributes
+    if (Array.isArray(src.note_attributes)) {
+      for (const attr of src.note_attributes) {
+        const n = (attr.name || "").toString().toLowerCase();
+        const v = (attr.value || "").toString().toLowerCase();
+        if (n.includes("exchange") || v.includes("exchange")) return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 export async function handleShopifyRefundOrReturn({
   shopifyOrderId,
   refundData,
@@ -17,13 +94,44 @@ export async function handleShopifyRefundOrReturn({
   // 1. Fetch order from Supabase
   const { data: order, error: orderErr } = await supabase
     .from("orders")
-    .select("id, shopify_order_name, total_price, line_items, pathao_consignment_id, internal_status, cancel_reason, fulfillment_status, created_at")
+    .select("id, shopify_order_name, total_price, line_items, pathao_consignment_id, internal_status, cancel_reason, fulfillment_status, created_at, shopify_tags, note")
     .eq("shopify_order_id", numOrderId)
     .maybeSingle();
 
   if (orderErr || !order) {
     console.warn(`[Shopify Return Sync] Order not found in database for Shopify Order ID: ${shopifyOrderId}`);
     return { success: false, reason: "Order not found" };
+  }
+
+  // 1b. Check if this is an EXCHANGE (never treat exchanges as returns)
+  if (isShopifyExchange({ order, refundData, payload: refundData })) {
+    console.log(`[Shopify Return] Order ${order.shopify_order_name} is an EXCHANGE, not a return. Skipping return processing.`);
+    // Ensure no return entry exists in the returns table for this order
+    await supabase.from("returns").delete().eq("order_id", order.id);
+
+    // If order was mistakenly marked returned, restore it to dispatched or pending
+    if (order.internal_status === "returned") {
+      const restoredStatus = order.fulfillment_status === "fulfilled" || order.pathao_consignment_id ? "dispatched" : "pending";
+      await supabase.from("orders").update({
+        internal_status: restoredStatus,
+        returned_at: null,
+        return_reason: null,
+      }).eq("id", order.id);
+    }
+
+    const { logOrderEvent } = await import("@/lib/audit");
+    await logOrderEvent(
+      order.id,
+      "EXCHANGE_IGNORED",
+      `Shopify webhook reported an exchange for order ${order.shopify_order_name}. Skipped return creation (exchanges are not returns).`
+    );
+
+    return {
+      success: true,
+      type: "exchange",
+      status: "ignored",
+      message: "Exchange detected. Not taken as return.",
+    };
   }
 
   // 2. Fetch associated dispatch if any

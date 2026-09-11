@@ -134,7 +134,7 @@ export async function getUnifiedReportMetrics(params: {
   // 3. Fetch Returns
   const returnsQuery = supabase
     .from("returns")
-    .select("id, order_id, consignment_id, order_total, refund_amount, return_type, returned_items, return_delivery_fee, status, returned_at, orders!inner(shopify_order_name, customer_name, customer_phone, shopify_created_at)");
+    .select("id, order_id, consignment_id, order_total, refund_amount, return_type, returned_items, return_delivery_fee, status, is_verified, returned_at, orders!inner(shopify_order_name, customer_name, customer_phone, shopify_created_at)");
 
   const [
     { data: ordersData },
@@ -230,7 +230,7 @@ export async function getUnifiedReportMetrics(params: {
   ).length;
 
   const needsAttentionCount = filteredReturns.filter((r: any) => 
-    r.status === "pending_verification" || (r.return_type === "partial" && !r.is_verified)
+    r.status === "pending_verification" || (r.return_type === "partial" && r.is_verified === false)
   ).length;
 
   // Dispatches Calculations
@@ -265,5 +265,74 @@ export async function getUnifiedReportMetrics(params: {
     dateFilter,
     startDateStr,
     endDateStr,
+  };
+}
+
+export interface ReturnsPageMetrics {
+  returnedCount: number;
+  returnedValue: number;
+  returnFees: number;
+  pendingReturnsCount: number;
+  processedReturnsCount: number;
+  needsAttentionCount: number;
+}
+
+/**
+ * Lightweight, fast metrics query specifically for the Returns dashboard page.
+ * Queries ONLY the returns table instead of loading all orders and dispatches.
+ */
+export async function getReturnsPageMetrics(search?: string): Promise<ReturnsPageMetrics> {
+  const supabase = createServiceClient();
+  let q = supabase
+    .from("returns")
+    .select("order_total, refund_amount, return_type, returned_items, return_delivery_fee, status, is_verified, orders!inner(shopify_order_name, customer_name, customer_phone)");
+
+  if (search) {
+    const s = search.trim();
+    q = q.or(`consignment_id.ilike.%${s}%,return_reason.ilike.%${s}%,orders.shopify_order_name.ilike.%${s}%,orders.customer_name.ilike.%${s}%,orders.customer_phone.ilike.%${s}%`);
+  }
+
+  const { data: returnsData } = await q;
+  const list = returnsData || [];
+
+  const returnedCount = list.length;
+  let returnedValue = 0;
+  let returnFees = 0;
+  let pendingReturnsCount = 0;
+  let processedReturnsCount = 0;
+  let needsAttentionCount = 0;
+
+  for (const r of list as any[]) {
+    if (r.return_type === "partial") {
+      if (Number(r.refund_amount) > 0) {
+        returnedValue += Number(r.refund_amount);
+      } else if (Array.isArray(r.returned_items) && r.returned_items.length > 0) {
+        const itemsSum = r.returned_items.reduce((s: number, i: any) => s + (Number(i.price || 0) * Number(i.quantity || 1)), 0);
+        if (itemsSum > 0) returnedValue += itemsSum;
+      }
+    } else {
+      returnedValue += Number(r.order_total) || 0;
+    }
+
+    returnFees += Number(r.return_delivery_fee) || 0;
+
+    if (["in_transit", "received", "pending_verification"].includes(r.status)) {
+      pendingReturnsCount++;
+    }
+    if (["inspected", "restocked", "damaged"].includes(r.status)) {
+      processedReturnsCount++;
+    }
+    if (r.status === "pending_verification" || (r.return_type === "partial" && r.is_verified === false)) {
+      needsAttentionCount++;
+    }
+  }
+
+  return {
+    returnedCount,
+    returnedValue: Math.round(returnedValue),
+    returnFees: Math.round(returnFees),
+    pendingReturnsCount,
+    processedReturnsCount,
+    needsAttentionCount,
   };
 }

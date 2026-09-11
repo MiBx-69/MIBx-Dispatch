@@ -517,7 +517,7 @@ export function ReturnsClient({
           className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:border-zinc-700"
         >
           <option value="all">All Statuses</option>
-          <option value="pending_verification">⚠️ Needs Admin Attention ({needsAttentionCount})</option>
+          <option value="pending_verification">{needsAttentionCount > 0 ? `⚠️ Needs Admin Attention (${needsAttentionCount})` : "Needs Admin Attention"}</option>
           <option value="in_transit">In Transit</option>
           <option value="received">Received</option>
           <option value="inspected">Inspected</option>

@@ -141,7 +141,7 @@ function normalizeSyncLog(row: any): UnifiedLogEntry {
 }
 
 /**
- * Fetches unified logs with search, filtering, and pagination
+ * Fetches unified logs with search, filtering, and database pagination
  */
 export async function getUnifiedLogs(params: LogQueryParams): Promise<{
   logs: UnifiedLogEntry[];
@@ -153,6 +153,7 @@ export async function getUnifiedLogs(params: LogQueryParams): Promise<{
   const supabase = createServiceClient();
   const page = Math.max(1, Number(params.page) || 1);
   const pageSize = Math.min(100, Math.max(10, Number(params.pageSize) || 50));
+  const offset = (page - 1) * pageSize;
   const dateFilter = params.dateFilter || "all";
   const { startDateStr, endDateStr } = resolveDateRange(dateFilter, params.startDate, params.endDate);
 
@@ -160,9 +161,127 @@ export async function getUnifiedLogs(params: LogQueryParams): Promise<{
   const selectedStatus = params.status || "all";
   const search = params.search?.trim().toLowerCase();
 
+  // -------------------------------------------------------------
+  // Fast Path 1: Single Webhook Source (shopify, pathao, sms)
+  // Direct SQL range pagination and exact count — ultra fast!
+  // -------------------------------------------------------------
+  if (["shopify", "pathao", "sms"].includes(selectedSource) && !search) {
+    let q = supabase
+      .from("webhook_logs")
+      .select("*", { count: "exact" })
+      .eq("source", selectedSource)
+      .order("received_at", { ascending: false })
+      .range(offset, offset + pageSize - 1);
+
+    if (startDateStr && endDateStr) {
+      q = q.gte("received_at", startDateStr).lte("received_at", endDateStr);
+    }
+    if (selectedStatus === "error") {
+      q = q.not("error", "is", null);
+    } else if (selectedStatus === "success") {
+      q = q.is("error", null);
+    }
+
+    const { data, count } = await q;
+    const totalCount = count || 0;
+    return {
+      logs: (data || []).map(normalizeWebhookLog),
+      totalCount,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(totalCount / pageSize)),
+    };
+  }
+
+  // -------------------------------------------------------------
+  // Fast Path 2: Single Source: Errors Only (from webhook_logs)
+  // -------------------------------------------------------------
+  if (selectedSource === "error" && !search) {
+    let q = supabase
+      .from("webhook_logs")
+      .select("*", { count: "exact" })
+      .not("error", "is", null)
+      .order("received_at", { ascending: false })
+      .range(offset, offset + pageSize - 1);
+
+    if (startDateStr && endDateStr) {
+      q = q.gte("received_at", startDateStr).lte("received_at", endDateStr);
+    }
+
+    const { data, count } = await q;
+    const totalCount = count || 0;
+    return {
+      logs: (data || []).map(normalizeWebhookLog),
+      totalCount,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(totalCount / pageSize)),
+    };
+  }
+
+  // -------------------------------------------------------------
+  // Fast Path 3: Single Source: Order Events
+  // -------------------------------------------------------------
+  if (selectedSource === "order" && !search) {
+    let q = supabase
+      .from("order_events")
+      .select("*, orders(shopify_order_name, shopify_order_number, customer_name, total_price, internal_status)", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(offset, offset + pageSize - 1);
+
+    if (startDateStr && endDateStr) {
+      q = q.gte("created_at", startDateStr).lte("created_at", endDateStr);
+    }
+
+    const { data, count } = await q;
+    const totalCount = count || 0;
+    return {
+      logs: (data || []).map(normalizeOrderEvent),
+      totalCount,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(totalCount / pageSize)),
+    };
+  }
+
+  // -------------------------------------------------------------
+  // Fast Path 4: Single Source: Sync Logs
+  // -------------------------------------------------------------
+  if (selectedSource === "sync" && !search) {
+    let q = supabase
+      .from("sync_logs")
+      .select("*", { count: "exact" })
+      .order("started_at", { ascending: false })
+      .range(offset, offset + pageSize - 1);
+
+    if (startDateStr && endDateStr) {
+      q = q.gte("started_at", startDateStr).lte("started_at", endDateStr);
+    }
+    if (selectedStatus === "error") {
+      q = q.or("status.eq.failed,errors.gt.0");
+    }
+
+    const { data, count } = await q;
+    const totalCount = count || 0;
+    return {
+      logs: (data || []).map(normalizeSyncLog),
+      totalCount,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(totalCount / pageSize)),
+    };
+  }
+
+  // -------------------------------------------------------------
+  // Path 5: Multi-source ("all") or Search mode
+  // Controlled query size to avoid transferring massive JSON
+  // -------------------------------------------------------------
   const fetchWebhookLogs = ["all", "shopify", "pathao", "sms", "error"].includes(selectedSource);
   const fetchOrderEvents = ["all", "order"].includes(selectedSource) && selectedStatus !== "error";
   const fetchSyncLogs = ["all", "sync", "error"].includes(selectedSource);
+
+  // Controlled fetch limit proportional to page size rather than unbounded 500/1000
+  const fetchLimit = search ? 150 : Math.min(100, page * pageSize + 20);
 
   const promises: Promise<any>[] = [];
 
@@ -172,7 +291,7 @@ export async function getUnifiedLogs(params: LogQueryParams): Promise<{
       .from("webhook_logs")
       .select("*")
       .order("received_at", { ascending: false })
-      .limit(500);
+      .limit(fetchLimit);
 
     if (startDateStr && endDateStr) {
       q = q.gte("received_at", startDateStr).lte("received_at", endDateStr);
@@ -192,6 +311,10 @@ export async function getUnifiedLogs(params: LogQueryParams): Promise<{
       q = q.is("error", null);
     }
 
+    if (search) {
+      q = q.or(`topic.ilike.%${search}%,error.ilike.%${search}%,pathao_consignment_id.ilike.%${search}%`);
+    }
+
     promises.push(q);
   } else {
     promises.push(Promise.resolve({ data: [] }));
@@ -203,10 +326,14 @@ export async function getUnifiedLogs(params: LogQueryParams): Promise<{
       .from("order_events")
       .select("*, orders(shopify_order_name, shopify_order_number, customer_name, total_price, internal_status)")
       .order("created_at", { ascending: false })
-      .limit(300);
+      .limit(Math.min(50, fetchLimit));
 
     if (startDateStr && endDateStr) {
       q = q.gte("created_at", startDateStr).lte("created_at", endDateStr);
+    }
+
+    if (search) {
+      q = q.or(`event_type.ilike.%${search}%,description.ilike.%${search}%`);
     }
 
     promises.push(q);
@@ -220,7 +347,7 @@ export async function getUnifiedLogs(params: LogQueryParams): Promise<{
       .from("sync_logs")
       .select("*")
       .order("started_at", { ascending: false })
-      .limit(100);
+      .limit(30);
 
     if (startDateStr && endDateStr) {
       q = q.gte("started_at", startDateStr).lte("started_at", endDateStr);
@@ -243,7 +370,7 @@ export async function getUnifiedLogs(params: LogQueryParams): Promise<{
     ...(syncRes.data || []).map(normalizeSyncLog),
   ];
 
-  // Search filtering in memory across normalized entries
+  // Secondary in-memory search match for nested payload fields if search present
   if (search) {
     combinedLogs = combinedLogs.filter((l) => {
       const matchTopic = l.topic?.toLowerCase().includes(search);
@@ -260,7 +387,6 @@ export async function getUnifiedLogs(params: LogQueryParams): Promise<{
 
   const totalCount = combinedLogs.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-  const offset = (page - 1) * pageSize;
   const paginatedLogs = combinedLogs.slice(offset, offset + pageSize);
 
   return {
@@ -273,7 +399,8 @@ export async function getUnifiedLogs(params: LogQueryParams): Promise<{
 }
 
 /**
- * Computes high-level analytics for log monitoring dashboard
+ * Computes high-level analytics for log monitoring dashboard.
+ * Uses exact head counts from database metadata instead of downloading all rows!
  */
 export async function getLogAnalytics(params: {
   dateFilter?: string;
@@ -284,48 +411,53 @@ export async function getLogAnalytics(params: {
   const dateFilter = params.dateFilter || "all";
   const { startDateStr, endDateStr } = resolveDateRange(dateFilter, params.startDate, params.endDate);
 
-  // Queries for stats
-  let wQuery = supabase.from("webhook_logs").select("id, source, error, received_at");
-  let oQuery = supabase.from("order_events").select("id, created_at");
-  let sQuery = supabase.from("sync_logs").select("id, status, errors, started_at");
+  const applyDate = (q: any, col: string) => {
+    if (startDateStr && endDateStr) {
+      return q.gte(col, startDateStr).lte(col, endDateStr);
+    }
+    return q;
+  };
 
-  if (startDateStr && endDateStr) {
-    wQuery = wQuery.gte("received_at", startDateStr).lte("received_at", endDateStr);
-    oQuery = oQuery.gte("created_at", startDateStr).lte("created_at", endDateStr);
-    sQuery = sQuery.gte("started_at", startDateStr).lte("started_at", endDateStr);
-  }
-
-  const [wRes, oRes, sRes, recentErrorsRes] = await Promise.all([
-    wQuery,
-    oQuery,
-    sQuery,
-    supabase
-      .from("webhook_logs")
-      .select("*")
-      .not("error", "is", null)
-      .order("received_at", { ascending: false })
-      .limit(5),
+  const [
+    wTotalRes,
+    shopifyRes,
+    pathaoRes,
+    smsRes,
+    wErrorsRes,
+    oTotalRes,
+    sTotalRes,
+    sErrorsRes,
+    recentErrorsRes,
+  ] = await Promise.all([
+    applyDate(supabase.from("webhook_logs").select("id", { count: "exact", head: true }), "received_at"),
+    applyDate(supabase.from("webhook_logs").select("id", { count: "exact", head: true }).eq("source", "shopify"), "received_at"),
+    applyDate(supabase.from("webhook_logs").select("id", { count: "exact", head: true }).eq("source", "pathao"), "received_at"),
+    applyDate(supabase.from("webhook_logs").select("id", { count: "exact", head: true }).eq("source", "sms"), "received_at"),
+    applyDate(supabase.from("webhook_logs").select("id", { count: "exact", head: true }).not("error", "is", null), "received_at"),
+    applyDate(supabase.from("order_events").select("id", { count: "exact", head: true }), "created_at"),
+    applyDate(supabase.from("sync_logs").select("id", { count: "exact", head: true }), "started_at"),
+    applyDate(supabase.from("sync_logs").select("id", { count: "exact", head: true }).or("status.eq.failed,errors.gt.0"), "started_at"),
+    applyDate(
+      supabase
+        .from("webhook_logs")
+        .select("id, source, topic, shopify_order_id, pathao_consignment_id, payload, processed, error, received_at")
+        .not("error", "is", null)
+        .order("received_at", { ascending: false })
+        .limit(5),
+      "received_at"
+    ),
   ]);
 
-  const webhooks = wRes.data || [];
-  const orderEvents = oRes.data || [];
-  const syncs = sRes.data || [];
+  const totalWebhooks = wTotalRes.count || 0;
+  const shopifyCount = shopifyRes.count || 0;
+  const pathaoCount = pathaoRes.count || 0;
+  const smsCount = smsRes.count || 0;
+  const webhookErrors = wErrorsRes.count || 0;
+  const orderAuditCount = oTotalRes.count || 0;
+  const syncCount = sTotalRes.count || 0;
+  const syncErrors = sErrorsRes.count || 0;
 
-  let shopifyCount = 0;
-  let pathaoCount = 0;
-  let smsCount = 0;
-  let webhookErrors = 0;
-
-  for (const w of (webhooks as any[])) {
-    if (w.source === "shopify") shopifyCount++;
-    else if (w.source === "pathao") pathaoCount++;
-    else if (w.source === "sms") smsCount++;
-
-    if (w.error) webhookErrors++;
-  }
-
-  const syncErrors = (syncs as any[]).filter((s: any) => s.status === "failed" || (s.errors && s.errors > 0)).length;
-  const totalLogs = webhooks.length + orderEvents.length + syncs.length;
+  const totalLogs = totalWebhooks + orderAuditCount + syncCount;
   const errorCount = webhookErrors + syncErrors;
   const successCount = Math.max(0, totalLogs - errorCount);
   const successRate = totalLogs > 0 ? Number(((successCount / totalLogs) * 100).toFixed(1)) : 100;
@@ -338,8 +470,8 @@ export async function getLogAnalytics(params: {
     shopifyCount,
     pathaoCount,
     smsCount,
-    orderAuditCount: orderEvents.length,
-    syncCount: syncs.length,
+    orderAuditCount,
+    syncCount,
     recentErrors: (recentErrorsRes.data || []).map(normalizeWebhookLog),
   };
 }

@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
 }
 
 import { performFraudCheck } from "@/lib/fraud-checker";
-import { handleShopifyRefundOrReturn } from "@/lib/shopify-returns";
+import { handleShopifyRefundOrReturn, isShopifyExchange } from "@/lib/shopify-returns";
 
 async function processShopifyWebhook(
   topic: string,
@@ -102,6 +102,24 @@ async function processShopifyWebhook(
             break;
           }
 
+          // Check if this refund is for an exchange (never treat exchanges as returns)
+          if (isShopifyExchange({ payload, refundData: payload })) {
+            console.log(`[Shopify Webhook] refunds/create: Exchange detected for order ${effectiveOrderId}. Skipping return creation.`);
+            const { data: ord } = await supabase.from("orders").select("id, internal_status, fulfillment_status, pathao_consignment_id").eq("shopify_order_id", effectiveOrderId).maybeSingle();
+            if (ord) {
+              await supabase.from("returns").delete().eq("order_id", ord.id);
+              if (ord.internal_status === "returned") {
+                const restoredStatus = ord.fulfillment_status === "fulfilled" || ord.pathao_consignment_id ? "dispatched" : "pending";
+                await supabase.from("orders").update({
+                  internal_status: restoredStatus,
+                  returned_at: null,
+                  return_reason: null,
+                }).eq("id", ord.id);
+              }
+            }
+            break;
+          }
+
           await handleShopifyRefundOrReturn({
             shopifyOrderId: effectiveOrderId,
             refundData: payload,
@@ -115,6 +133,24 @@ async function processShopifyWebhook(
       case "returns/create":
       case "returns/close": {
         if (effectiveOrderId) {
+          // Check if this return is an exchange (never treat exchanges as returns)
+          if (isShopifyExchange({ payload, refundData: payload })) {
+            console.log(`[Shopify Webhook] ${topic}: Exchange detected for order ${effectiveOrderId}. Skipping return creation.`);
+            const { data: ord } = await supabase.from("orders").select("id, internal_status, fulfillment_status, pathao_consignment_id").eq("shopify_order_id", effectiveOrderId).maybeSingle();
+            if (ord) {
+              await supabase.from("returns").delete().eq("order_id", ord.id);
+              if (ord.internal_status === "returned") {
+                const restoredStatus = ord.fulfillment_status === "fulfilled" || ord.pathao_consignment_id ? "dispatched" : "pending";
+                await supabase.from("orders").update({
+                  internal_status: restoredStatus,
+                  returned_at: null,
+                  return_reason: null,
+                }).eq("id", ord.id);
+              }
+            }
+            break;
+          }
+
           await handleShopifyRefundOrReturn({
             shopifyOrderId: effectiveOrderId,
             refundData: payload,
@@ -155,11 +191,27 @@ async function processShopifyWebhook(
           p.financial_status === "partially_refunded" ||
           (Array.isArray(p.refunds) && p.refunds.length > 0)
         ) {
-          await handleShopifyRefundOrReturn({
-            shopifyOrderId: payload.id,
-            refundData: payload,
-            topic,
-          });
+          if (isShopifyExchange({ payload: p, refundData: p })) {
+            console.log(`[Shopify Webhook] orders/updated: Exchange detected for order ${payload.id}. Skipping return creation.`);
+            const { data: ord } = await supabase.from("orders").select("id, internal_status, fulfillment_status, pathao_consignment_id").eq("shopify_order_id", payload.id).maybeSingle();
+            if (ord) {
+              await supabase.from("returns").delete().eq("order_id", ord.id);
+              if (ord.internal_status === "returned") {
+                const restoredStatus = ord.fulfillment_status === "fulfilled" || ord.pathao_consignment_id ? "dispatched" : "pending";
+                await supabase.from("orders").update({
+                  internal_status: restoredStatus,
+                  returned_at: null,
+                  return_reason: null,
+                }).eq("id", ord.id);
+              }
+            }
+          } else {
+            await handleShopifyRefundOrReturn({
+              shopifyOrderId: payload.id,
+              refundData: payload,
+              topic,
+            });
+          }
         }
         break;
       }
