@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
-import { X, Truck, MapPin, Package, DollarSign, Weight, AlertTriangle } from "lucide-react";
+import { X, Truck, MapPin, Package, DollarSign, Weight, AlertTriangle, CheckCircle2 } from "lucide-react";
 import type { Order } from "@/types/database";
+import { analyzeCustomerRisk } from "@/lib/risk-analytics";
 
 interface City { city_id: number; city_name: string; }
 interface Zone { zone_id: number; zone_name: string; }
@@ -76,10 +77,17 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
       .then((d) => setAreas(d.areas || []));
   }, [form.recipient_zone]);
 
-  const fraudData = order.fraud_data as any;
-  const returnedCount = fraudData?.overall?.returned || 0;
-  const successRatio = fraudData?.overall?.success_ratio;
-  const isHighRisk = order.fraud_status === "fraud" || order.fraud_status === "risky" || returnedCount > 1;
+  const riskAnalysis = useMemo(() => {
+    return analyzeCustomerRisk({
+      fraud_data: order.fraud_data,
+      fraud_status: order.fraud_status,
+      fraud_score: order.fraud_score,
+    });
+  }, [order.fraud_data, order.fraud_status, order.fraud_score]);
+
+  const isHighRisk = riskAnalysis.isHighRisk;
+  const isMediumRisk = riskAnalysis.isMediumRisk;
+  const isReliableCustomer = riskAnalysis.isSafe && (riskAnalysis.delivered >= 3 || riskAnalysis.total >= 3);
   const [confirmedRisk, setConfirmedRisk] = useState(false);
 
   const set = (field: string, value: string) =>
@@ -166,17 +174,15 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
           </div>
         </div>
 
-        {/* High Risk Warning Banner */}
+        {/* Risk & Reputation Banner */}
         {isHighRisk && (
           <div className="mx-4 mt-3 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-300 space-y-1.5">
             <div className="flex items-center gap-1.5 font-semibold text-red-200">
               <AlertTriangle size={15} className="text-red-400 shrink-0" />
-              High Return Risk Warning
+              High Return Risk Warning ({riskAnalysis.ratingLabel})
             </div>
             <p className="text-[11px] text-red-300/90 leading-relaxed">
-              This customer is flagged with <strong>{returnedCount > 0 ? `${returnedCount} recorded returns` : "high return risk"}</strong>
-              {successRatio !== undefined ? ` (${successRatio}% courier delivery success rate)` : ""}.
-              Dispatching without customer confirmation or advance delivery charge may cause courier loss.
+              {riskAnalysis.recommendation}
             </p>
             <label className="flex items-center gap-2 pt-1 cursor-pointer select-none">
               <input
@@ -189,6 +195,32 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
                 I have verified this customer and accept the return risk
               </span>
             </label>
+          </div>
+        )}
+
+        {isMediumRisk && (
+          <div className="mx-4 mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 space-y-1">
+            <div className="flex items-center gap-1.5 font-semibold text-amber-200">
+              <AlertTriangle size={15} className="text-amber-400 shrink-0" />
+              Moderate Return Risk ({riskAnalysis.returnRatio}% return rate)
+            </div>
+            <p className="text-[11px] text-amber-300/90 leading-relaxed">
+              {riskAnalysis.recommendation}
+            </p>
+          </div>
+        )}
+
+        {isReliableCustomer && (
+          <div className="mx-4 mt-3 p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 flex items-center justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <CheckCircle2 size={15} className="text-emerald-400 shrink-0" />
+              <span className="text-[11px] font-medium text-emerald-200 truncate">
+                {riskAnalysis.ratingLabel} · {riskAnalysis.successRatio}% Courier Success ({riskAnalysis.delivered} Delivered{riskAnalysis.returned > 0 ? `, ${riskAnalysis.returned} Ret` : ""})
+              </span>
+            </div>
+            <span className="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full shrink-0">
+              Safe
+            </span>
           </div>
         )}
 

@@ -32,7 +32,7 @@ export function CustomerDrawer({ customer, onClose }: { customer: any; onClose: 
   }, [customer.id]);
 
   const cancelledOrders = orders.filter(o => o.internal_status === "cancelled" || o.internal_status === "returned").length;
-  const isHighRisk = cancelledOrders > 0 && cancelledOrders >= orders.length / 2;
+  const isHighRisk = orders.length >= 3 && cancelledOrders >= orders.length / 2;
 
   // Derive the best phone and email if the Shopify Customer account is missing them (e.g. guest checkout)
   const bestPhone = customer.phone || (orders.length > 0 ? orders[0].customer_phone : null);

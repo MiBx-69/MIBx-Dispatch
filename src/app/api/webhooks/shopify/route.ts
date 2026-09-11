@@ -303,20 +303,10 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload): 
         
         if (fraudRes && fraudRes.ok) {
           fraudData = fraudRes;
-          
-          if (fraudRes.fraud_reports?.count > 0) {
-            riskLevel = "fraud";
-            riskScore = 100;
-          } else if (fraudRes.overall?.success_ratio < 60 && fraudRes.overall?.total > 3) {
-            riskLevel = "risky";
-            riskScore = 80;
-          } else if (fraudRes.overall?.success_ratio < 80 && fraudRes.overall?.total > 5) {
-            riskLevel = "risky";
-            riskScore = 50;
-          } else {
-            riskLevel = "safe";
-            riskScore = 0;
-          }
+          const { analyzeCustomerRisk } = await import("@/lib/risk-analytics");
+          const riskAnalysis = analyzeCustomerRisk(fraudRes);
+          riskLevel = riskAnalysis.riskLevel;
+          riskScore = riskAnalysis.riskScore;
         }
       } else {
         // Internal heuristic if no API key provided
@@ -333,22 +323,38 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload): 
           riskScore += 20; // High value COD
         }
 
-        // 3. Serial Returner Check
+        // 3. Return rate check against historical customer orders
         if (customerPhone) {
-          const { count: returnedCount } = await supabase
-            .from("orders")
-            .select("id", { count: "exact" })
-            .eq("customer_phone", customerPhone)
-            .eq("internal_status", "returned");
+          const [{ count: totalCount }, { count: returnedCount }] = await Promise.all([
+            supabase
+              .from("orders")
+              .select("id", { count: "exact" })
+              .eq("customer_phone", customerPhone),
+            supabase
+              .from("orders")
+              .select("id", { count: "exact" })
+              .eq("customer_phone", customerPhone)
+              .eq("internal_status", "returned")
+          ]);
           
-          if (returnedCount && returnedCount > 0) {
-            riskScore += (returnedCount * 30); // 30 points per returned order
+          const totalPast = totalCount || 0;
+          const returnedPast = returnedCount || 0;
+          const deliveredPast = Math.max(0, totalPast - returnedPast);
+
+          if (totalPast > 0 && returnedPast > 0) {
+            const { analyzeCustomerRisk } = await import("@/lib/risk-analytics");
+            const internalRisk = analyzeCustomerRisk({
+              total: totalPast,
+              delivered: deliveredPast,
+              returned: returnedPast,
+            });
+            riskScore += Math.round(internalRisk.riskScore * 0.7);
           }
         }
 
         riskScore = Math.min(riskScore, 100);
         if (riskScore >= 70) riskLevel = "fraud";
-        else if (riskScore >= 30) riskLevel = "risky";
+        else if (riskScore >= 35) riskLevel = "risky";
         else riskLevel = "safe";
       }
 

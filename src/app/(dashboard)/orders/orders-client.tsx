@@ -19,6 +19,7 @@ import { OrderTimelineModal } from "@/components/orders/order-timeline-modal";
 import { BulkImportDeliveriesModal } from "@/components/orders/bulk-import-deliveries-modal";
 import { DeliveredReportingHeader, DeliveredStats } from "@/components/orders/delivered-reporting-header";
 import type { Order, OrderStatus } from "@/types/database";
+import { analyzeCustomerRisk } from "@/lib/risk-analytics";
 
 const STATUS_FILTERS = [
   { value: "everything", label: "Everything" },
@@ -735,16 +736,48 @@ export function OrdersClient({
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-zinc-200 truncate">{order.customer_name || "Unknown Customer"}</p>
-                    {((order.fraud_data as any)?.overall?.returned > 0 || (order.fraud_status && order.fraud_status !== 'safe' && order.fraud_status !== 'unchecked')) && (
-                      <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded-full border ${
-                        order.fraud_status === 'fraud' || ((order.fraud_data as any)?.overall?.returned || 0) > 1
-                          ? 'bg-red-500/10 text-red-400 border-red-500/20' 
-                          : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                      }`}>
-                        {order.fraud_status === 'fraud' || ((order.fraud_data as any)?.overall?.returned || 0) > 1 ? 'High Return Risk' : 'Medium Risk'}
-                        {typeof (order.fraud_data as any)?.overall?.returned === 'number' && (order.fraud_data as any).overall.returned > 0 ? ` (${(order.fraud_data as any).overall.returned} Ret)` : order.fraud_score ? ` (${order.fraud_score})` : ''}
-                      </span>
-                    )}
+                    {(() => {
+                      const analysis = analyzeCustomerRisk({
+                        fraud_data: order.fraud_data,
+                        fraud_status: order.fraud_status,
+                        fraud_score: order.fraud_score,
+                      });
+
+                      if (analysis.isHighRisk) {
+                        return (
+                          <span 
+                            onClick={() => setViewFraudOrder(order)}
+                            className="px-1.5 py-0.5 text-[10px] font-bold rounded-full border bg-red-500/10 text-red-400 border-red-500/20 cursor-pointer hover:bg-red-500/20 transition-colors" 
+                            title={analysis.recommendation}
+                          >
+                            {analysis.badgeText}
+                          </span>
+                        );
+                      }
+                      if (analysis.isMediumRisk) {
+                        return (
+                          <span 
+                            onClick={() => setViewFraudOrder(order)}
+                            className="px-1.5 py-0.5 text-[10px] font-bold rounded-full border bg-amber-500/10 text-amber-400 border-amber-500/20 cursor-pointer hover:bg-amber-500/20 transition-colors" 
+                            title={analysis.recommendation}
+                          >
+                            {analysis.badgeText}
+                          </span>
+                        );
+                      }
+                      if (analysis.isSafe && (analysis.delivered >= 3 || analysis.total >= 3)) {
+                        return (
+                          <span 
+                            onClick={() => setViewFraudOrder(order)}
+                            className="px-1.5 py-0.5 text-[10px] font-bold rounded-full border bg-emerald-500/10 text-emerald-400 border-emerald-500/20 cursor-pointer hover:bg-emerald-500/20 transition-colors" 
+                            title={analysis.recommendation}
+                          >
+                            {analysis.badgeText}
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                   
                   {order.customer_phone ? (

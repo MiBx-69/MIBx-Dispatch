@@ -202,19 +202,10 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
       
       if (fraudRes && fraudRes.ok) {
         orderPayload.fraud_data = fraudRes;
-        if (fraudRes.fraud_reports?.count > 0) {
-          orderPayload.fraud_status = "fraud";
-          orderPayload.fraud_score = 100;
-        } else if (fraudRes.overall?.success_ratio < 60 && fraudRes.overall?.total > 3) {
-          orderPayload.fraud_status = "risky";
-          orderPayload.fraud_score = 80;
-        } else if (fraudRes.overall?.success_ratio < 80 && fraudRes.overall?.total > 5) {
-          orderPayload.fraud_status = "risky";
-          orderPayload.fraud_score = 50;
-        } else {
-          orderPayload.fraud_status = "safe";
-          orderPayload.fraud_score = 0;
-        }
+        const { analyzeCustomerRisk } = await import("@/lib/risk-analytics");
+        const riskAnalysis = analyzeCustomerRisk(fraudRes);
+        orderPayload.fraud_status = riskAnalysis.riskLevel;
+        orderPayload.fraud_score = riskAnalysis.riskScore;
       }
     }
 

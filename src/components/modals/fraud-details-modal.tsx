@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, ShieldAlert, ShieldCheck, Shield, AlertTriangle } from "lucide-react";
+import { X, ShieldAlert, ShieldCheck, Shield, AlertTriangle, CheckCircle2 } from "lucide-react";
 import type { Order } from "@/types/database";
+import { analyzeCustomerRisk } from "@/lib/risk-analytics";
 
 interface FraudDetailsModalProps {
   order: Order | null;
@@ -59,9 +60,15 @@ export function FraudDetailsModal({ order, onClose, onCheckAgain, isChecking }: 
     );
   }
 
-  const isHighRisk = order.fraud_status === "fraud";
-  const isMediumRisk = order.fraud_status === "risky";
-  const isSafe = order.fraud_status === "safe" || (!isHighRisk && !isMediumRisk);
+  const analysis = analyzeCustomerRisk({
+    fraud_data: fraudData,
+    fraud_status: order.fraud_status,
+    fraud_score: order.fraud_score,
+  });
+
+  const isHighRisk = analysis.isHighRisk;
+  const isMediumRisk = analysis.isMediumRisk;
+  const isSafe = analysis.isSafe;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-0">
@@ -70,61 +77,82 @@ export function FraudDetailsModal({ order, onClose, onCheckAgain, isChecking }: 
       <div className="relative bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 bg-zinc-900/50">
           <h2 className="text-lg font-bold text-zinc-100 flex items-center gap-2">
-            {isHighRisk ? <ShieldAlert className="w-5 h-5 text-red-400" /> : isMediumRisk ? <AlertTriangle className="w-5 h-5 text-amber-400" /> : <ShieldCheck className="w-5 h-5 text-green-400" />}
-            Fraud Report details
+            {isHighRisk ? <ShieldAlert className="w-5 h-5 text-red-400" /> : isMediumRisk ? <AlertTriangle className="w-5 h-5 text-amber-400" /> : <ShieldCheck className="w-5 h-5 text-emerald-400" />}
+            Fraud & Return Risk Assessment
           </h2>
           <button onClick={handleClose} className="p-1 text-zinc-400 hover:text-zinc-100 rounded-lg hover:bg-zinc-800 transition-colors">
             <X size={18} />
           </button>
         </div>
 
-        <div className="p-5 max-h-[80vh] overflow-y-auto space-y-6">
+        <div className="p-5 max-h-[80vh] overflow-y-auto space-y-5">
           
           {/* Header Status */}
-          <div className={`p-4 rounded-xl border flex items-start gap-4 ${isHighRisk ? 'bg-red-500/10 border-red-500/20' : isMediumRisk ? 'bg-amber-500/10 border-amber-500/20' : 'bg-green-500/10 border-green-500/20'}`}>
-            <div className={`p-2 rounded-lg ${isHighRisk ? 'bg-red-500/20 text-red-400' : isMediumRisk ? 'bg-amber-500/20 text-amber-400' : 'bg-green-500/20 text-green-400'}`}>
+          <div className={`p-4 rounded-xl border flex items-start gap-4 ${isHighRisk ? 'bg-red-500/10 border-red-500/20' : isMediumRisk ? 'bg-amber-500/10 border-amber-500/20' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
+            <div className={`p-2 rounded-lg ${isHighRisk ? 'bg-red-500/20 text-red-400' : isMediumRisk ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
                {isHighRisk ? <ShieldAlert size={24} /> : isMediumRisk ? <AlertTriangle size={24} /> : <ShieldCheck size={24} />}
             </div>
-            <div>
-              <h3 className={`text-lg font-bold ${isHighRisk ? 'text-red-400' : isMediumRisk ? 'text-amber-400' : 'text-green-400'}`}>
-                {isHighRisk ? 'High Risk' : isMediumRisk ? 'Medium Risk' : 'Safe'}
+            <div className="flex-1 min-w-0">
+              <h3 className={`text-base font-bold ${isHighRisk ? 'text-red-400' : isMediumRisk ? 'text-amber-400' : 'text-emerald-400'}`}>
+                {analysis.ratingLabel}
               </h3>
-              <p className="text-xs text-zinc-400 mt-1">
-                Based on phone number: {fraudData.phone?.local || order.customer_phone}
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Phone: {fraudData.phone?.local || order.customer_phone}
               </p>
             </div>
-            <div className="ml-auto text-right">
-               <div className="text-2xl font-black text-zinc-100">{order.fraud_score || 0}</div>
+            <div className="ml-auto text-right shrink-0">
+               <div className="text-2xl font-black text-zinc-100">{analysis.riskScore}</div>
                <div className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">Risk Score</div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            {/* Delivery Stats */}
-            {fraudData.overall && (
-              <div className="space-y-3 col-span-2">
-                <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Delivery History</h4>
-                <div className="grid grid-cols-4 gap-2">
-                  <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-center">
-                    <div className="text-lg font-bold text-zinc-200">{fraudData.overall.total || 0}</div>
-                    <div className="text-[10px] text-zinc-500 mt-0.5">Total</div>
-                  </div>
-                  <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-center">
-                    <div className="text-lg font-bold text-green-400">{fraudData.overall.delivered || 0}</div>
-                    <div className="text-[10px] text-zinc-500 mt-0.5">Delivered</div>
-                  </div>
-                  <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-center">
-                    <div className="text-lg font-bold text-red-400">{fraudData.overall.returned || 0}</div>
-                    <div className="text-[10px] text-zinc-500 mt-0.5">Returned</div>
-                  </div>
-                  <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-center">
-                    <div className="text-lg font-bold text-indigo-400">{fraudData.overall.success_ratio || 0}%</div>
-                    <div className="text-[10px] text-zinc-500 mt-0.5">Success</div>
-                  </div>
-                </div>
-              </div>
+          {/* Analytics Assessment & Recommendation */}
+          <div className={`p-3.5 rounded-xl border ${isHighRisk ? 'bg-red-500/5 border-red-500/20 text-red-300' : isMediumRisk ? 'bg-amber-500/5 border-amber-500/20 text-amber-300' : 'bg-emerald-500/5 border-emerald-500/20 text-emerald-300'}`}>
+            <h4 className="text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5 text-zinc-200">
+              Risk Assessment & Action
+            </h4>
+            <p className="text-xs leading-relaxed text-zinc-300">
+              {analysis.recommendation}
+            </p>
+            {analysis.reasons.length > 0 && (
+              <ul className="mt-2 space-y-1 text-[11px] text-zinc-400 list-disc list-inside">
+                {analysis.reasons.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
+              </ul>
             )}
           </div>
+
+          {/* Delivery Stats */}
+          {fraudData.overall && (
+            <div className="space-y-2.5">
+              <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Courier Delivery Analytics</h4>
+              <div className="grid grid-cols-5 gap-2">
+                <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-center">
+                  <div className="text-base font-bold text-zinc-200">{analysis.total}</div>
+                  <div className="text-[10px] text-zinc-500 mt-0.5">Total</div>
+                </div>
+                <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-center">
+                  <div className="text-base font-bold text-emerald-400">{analysis.delivered}</div>
+                  <div className="text-[10px] text-zinc-500 mt-0.5">Delivered</div>
+                </div>
+                <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-center">
+                  <div className="text-base font-bold text-red-400">{analysis.returned}</div>
+                  <div className="text-[10px] text-zinc-500 mt-0.5">Returned</div>
+                </div>
+                <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-center">
+                  <div className="text-base font-bold text-indigo-400">{analysis.successRatio}%</div>
+                  <div className="text-[10px] text-zinc-500 mt-0.5">Success</div>
+                </div>
+                <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-center">
+                  <div className={`text-base font-bold ${analysis.returnRatio > 30 ? 'text-red-400' : analysis.returnRatio > 15 ? 'text-amber-400' : 'text-zinc-400'}`}>
+                    {analysis.returnRatio}%
+                  </div>
+                  <div className="text-[10px] text-zinc-500 mt-0.5">Ret Rate</div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Courier Breakdowns */}
           {fraudData.couriers && Object.keys(fraudData.couriers).length > 0 && (

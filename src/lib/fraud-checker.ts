@@ -1,5 +1,6 @@
 import { searchFraud } from "@/lib/fraudspy";
 import { updateShopifyCustomer, updateShopifyOrder } from "@/lib/shopify/client";
+import { analyzeCustomerRisk } from "@/lib/risk-analytics";
 
 export async function performFraudCheck(orderIdentifier: string, supabase: any) {
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderIdentifier);
@@ -28,26 +29,10 @@ export async function performFraudCheck(orderIdentifier: string, supabase: any) 
     throw new Error("Failed to fetch data from FraudSpy");
   }
 
-  // 3. Determine status and score
-  let fraud_status = "safe";
-  let fraud_score = 0;
-
-  if (fraudData.fraud_reports) {
-    fraud_score = fraudData.fraud_reports.risk.score;
-    if (fraudData.fraud_reports.risk.level === "HIGH") {
-      fraud_status = "fraud";
-    } else if (fraudData.fraud_reports.risk.level === "MEDIUM") {
-      fraud_status = "risky";
-    }
-  } else if (fraudData.overall) {
-    const successRatio = fraudData.overall.success_ratio;
-    const returned = fraudData.overall.returned;
-    if (returned > 2 && successRatio < 50) {
-      fraud_status = "fraud";
-    } else if (returned > 0 && successRatio < 80) {
-      fraud_status = "risky";
-    }
-  }
+  // 3. Determine status and score using proportional delivery analytics
+  const riskAnalysis = analyzeCustomerRisk(fraudData);
+  const fraud_status = riskAnalysis.riskLevel;
+  const fraud_score = riskAnalysis.riskScore;
 
   // 4. Update Supabase Order
   await supabase
@@ -98,7 +83,7 @@ export async function performFraudCheck(orderIdentifier: string, supabase: any) 
   }
 
   const { logOrderEvent } = await import("@/lib/audit");
-  await logOrderEvent(order.id, "FRAUD_CHECK", `Fraud Check completed with status: ${fraud_status.toUpperCase()} (Score: ${fraud_score})`, fraudData);
+  await logOrderEvent(order.id, "FRAUD_CHECK", `Fraud Check: ${riskAnalysis.ratingLabel} (${fraud_status.toUpperCase()}, Score: ${fraud_score}) - ${riskAnalysis.recommendation}`, fraudData);
 
-  return { fraud_status, fraud_score, data: fraudData };
+  return { fraud_status, fraud_score, data: fraudData, analysis: riskAnalysis };
 }
