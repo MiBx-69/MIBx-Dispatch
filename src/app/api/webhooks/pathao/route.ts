@@ -236,7 +236,7 @@ async function processPathaoWebhook(payload: any, storedSecret: string) {
                 const orderName = order.shopify_order_name || order.id;
                 const total = order.total_price || "0";
                 const msg = `Dear ${customerName}, your MiBx order ${orderName} is out for delivery today via Pathao! Please keep ৳${total} ready. Thank you!`;
-                await sendSMS(phone, msg);
+                await sendSMS(phone, msg, false, `pathao_out_for_delivery_${order.id}_${consignmentId}`);
               } else if (internalStatus === "dispatched" && settings.sms_auto_dispatch_enabled) {
                 template = settings.sms_auto_dispatch_template;
               } else if (internalStatus === "delivered" && settings.sms_auto_delivered_enabled) {
@@ -250,7 +250,7 @@ async function processPathaoWebhook(payload: any, storedSecret: string) {
                   .replace("{{tracking_url}}", `https://merchant.pathao.com/cn-tracking/${consignmentId}`)
                   .replace("{{total_price}}", order.total_price !== undefined && order.total_price !== null ? order.total_price.toString() : "0");
 
-                await sendSMS(phone, msg);
+                await sendSMS(phone, msg, false, `pathao_${internalStatus}_${order.id}_${consignmentId}`);
               }
             }
           }

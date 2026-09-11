@@ -237,7 +237,7 @@ export async function POST(request: NextRequest) {
             .replace(/\{\{tracking_url\}\}/g, trackingUrl)
             .replace(/\{\{total_price\}\}/g, String(amount_to_collect || order.total_price || "0"));
 
-          await sendSMS(phone, msg);
+          await sendSMS(phone, msg, false, `dispatch_${order.id}_${consignment_id}`);
         }
       }
     } catch (smsErr) {

@@ -1,6 +1,26 @@
 import { createServiceClient } from "./supabase/server";
 
-export async function sendSMS(to: string, msg: string, useWhatsapp?: boolean): Promise<{ success: boolean; message?: string; requestId?: number }> {
+export async function sendSMS(
+  to: string,
+  msg: string,
+  useWhatsapp?: boolean,
+  idempotencyKey?: string
+): Promise<{ success: boolean; message?: string; requestId?: number }> {
+  if (idempotencyKey) {
+    try {
+      const { redis } = await import("./redis");
+      const key = `idempotency:sms:${idempotencyKey}`;
+      // Atomically set key with 7-day TTL if not exists (NX: true)
+      const acquired = await redis.set(key, "1", { ex: 86400 * 7, nx: true });
+      if (!acquired) {
+        console.warn(`[SMS Idempotency] Duplicate SMS prevented for key: ${idempotencyKey}`);
+        return { success: true, message: "Duplicate SMS prevented by idempotency check" };
+      }
+    } catch (err) {
+      console.error("[SMS Idempotency] Redis check error:", err);
+    }
+  }
+
   const supabase = createServiceClient();
   const { data: settings } = await supabase.from("app_settings").select("sms_api_key, sms_sender_id").single();
 

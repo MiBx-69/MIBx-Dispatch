@@ -69,18 +69,12 @@ async function processShopifyWebhook(
   try {
     switch (topic) {
       case "orders/create": {
-        const isNew = await upsertOrder(supabase, payload);
+        const isNew = await upsertOrder(supabase, payload, true);
         if (isNew) {
           await logOrderEvent(payload.id.toString(), "SYNCED", "Order imported from Shopify via webhook");
           
-          // Await background tasks so they don't get terminated by serverless environment
-          await Promise.allSettled([
-            performFraudCheck(payload.id.toString(), supabase)
-              .then(res => console.log(`Auto fraud check for ${payload.id}: ${res.fraud_status}`))
-              .catch(e => console.error(`Auto fraud check failed for ${payload.id}:`, e)),
-            sendOrderConfirmationSMS(supabase, payload)
-              .catch(e => console.error("Order SMS Error:", e))
-          ]);
+          await sendOrderConfirmationSMS(supabase, payload)
+            .catch(e => console.error("Order SMS Error:", e));
         }
         break;
       }
@@ -221,7 +215,7 @@ async function processShopifyWebhook(
   }
 }
 
-async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload): Promise<boolean> {
+async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload, isCreate = false): Promise<boolean> {
   // Check if it already exists to detect new orders
   const { data: existingOrder } = await supabase
     .from("orders")
@@ -275,41 +269,39 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload): 
 
     let trueFulfillmentStatus = payload.fulfillment_status || null;
     
-    // Fetch true fulfillment status via GraphQL to handle 'In progress' which is null in REST
-    try {
-      if (trueFulfillmentStatus === null) {
-        // Add a 4 second delay to allow Shopify's read replicas to catch up. 
-        await new Promise(resolve => setTimeout(resolve, 4000));
-      }
-
-      const { data: settings } = await supabase.from("app_settings").select("shopify_shop_domain, shopify_access_token").single();
-      if (settings?.shopify_shop_domain && settings?.shopify_access_token) {
-        const q = `{ order(id: "gid://shopify/Order/${payload.id}") { displayFulfillmentStatus, fulfillmentOrders(first: 10) { edges { node { status } } } } }`;
-        const res = await fetch(`https://${settings.shopify_shop_domain}/admin/api/2024-07/graphql.json`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": settings.shopify_access_token },
-          body: JSON.stringify({ query: q })
-        });
-        const json = await res.json();
-        if (json.data?.order) {
-          if (json.data.order.displayFulfillmentStatus) {
-            trueFulfillmentStatus = json.data.order.displayFulfillmentStatus.toLowerCase();
-          }
-          
-          // Fallback: Check underlying fulfillment orders for immediate status changes
-          const foEdges = json.data.order.fulfillmentOrders?.edges || [];
-          const hasInProgress = foEdges.some((e: any) => e.node.status === "IN_PROGRESS");
-          const hasOnHold = foEdges.some((e: any) => e.node.status === "ON_HOLD");
-          
-          if (hasOnHold) {
-            trueFulfillmentStatus = "on_hold";
-          } else if (hasInProgress) {
-            trueFulfillmentStatus = "in_progress";
+    // Fetch true fulfillment status via GraphQL only for non-create webhooks (e.g. updates)
+    // On orders/create, status is newly created (unfulfilled). Never sleep or delay on webhook.
+    if (!isCreate && trueFulfillmentStatus === null) {
+      try {
+        const { data: settings } = await supabase.from("app_settings").select("shopify_shop_domain, shopify_access_token").single();
+        if (settings?.shopify_shop_domain && settings?.shopify_access_token) {
+          const q = `{ order(id: "gid://shopify/Order/${payload.id}") { displayFulfillmentStatus, fulfillmentOrders(first: 10) { edges { node { status } } } } }`;
+          const res = await fetch(`https://${settings.shopify_shop_domain}/admin/api/2024-07/graphql.json`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": settings.shopify_access_token },
+            body: JSON.stringify({ query: q })
+          });
+          const json = await res.json();
+          if (json.data?.order) {
+            if (json.data.order.displayFulfillmentStatus) {
+              trueFulfillmentStatus = json.data.order.displayFulfillmentStatus.toLowerCase();
+            }
+            
+            // Fallback: Check underlying fulfillment orders for immediate status changes
+            const foEdges = json.data.order.fulfillmentOrders?.edges || [];
+            const hasInProgress = foEdges.some((e: any) => e.node.status === "IN_PROGRESS");
+            const hasOnHold = foEdges.some((e: any) => e.node.status === "ON_HOLD");
+            
+            if (hasOnHold) {
+              trueFulfillmentStatus = "on_hold";
+            } else if (hasInProgress) {
+              trueFulfillmentStatus = "in_progress";
+            }
           }
         }
+      } catch (err) {
+        console.error("Failed to fetch true fulfillment status:", err);
       }
-    } catch (err) {
-      console.error("Failed to fetch true fulfillment status:", err);
     }
 
     const orderPayload: any = {
@@ -355,6 +347,13 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload): 
       orderPayload.internal_status = "pending";
     }
   }
+
+  // Save the order record immediately to lock it in Supabase so that any concurrent
+  // webhook requests or retries immediately recognize that the order already exists (isNew = false)
+  await supabase.from("orders").upsert(
+    orderPayload,
+    { onConflict: "shopify_order_id" }
+  );
 
   // Perform fraud check if this is a new order
   if (isNew) {
@@ -427,11 +426,16 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload): 
         else riskLevel = "safe";
       }
 
-      orderPayload.fraud_score = riskScore;
-      orderPayload.fraud_status = riskLevel;
-      if (fraudData) {
-        orderPayload.fraud_data = fraudData;
+      // Update the order in database with fraud results
+      await supabase.from("orders").update({
+        fraud_score: riskScore,
+        fraud_status: riskLevel,
+        fraud_data: fraudData,
+        fraud_risk_score: riskScore,
+        fraud_risk_level: riskLevel,
+      }).eq("shopify_order_id", payload.id);
 
+      if (fraudData) {
         // Update Shopify Customer and Order notes
         const tag = `FraudSpy: ${riskLevel === 'fraud' ? 'High Risk' : riskLevel === 'risky' ? 'Medium Risk' : 'Safe'}`;
 
@@ -474,11 +478,6 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload): 
     }
   }
 
-  await supabase.from("orders").upsert(
-    orderPayload,
-    { onConflict: "shopify_order_id" }
-  );
-
   return isNew;
 }
 
@@ -494,7 +493,7 @@ async function sendOrderConfirmationSMS(supabase: any, payload: ShopifyOrderWebh
         .replace("{{order_id}}", payload.name || payload.id.toString())
         .replace("{{customer_name}}", shippingAddr?.name || payload.customer?.first_name || "Customer");
         
-      await sendSMS(phone, msg);
+      await sendSMS(phone, msg, false, `order_confirmation_${payload.id}`);
     }
   }
 }
@@ -511,7 +510,7 @@ async function sendOrderCancelledSMS(supabase: any, payload: ShopifyOrderWebhook
         .replace("{{order_id}}", payload.name || payload.id.toString())
         .replace("{{customer_name}}", shippingAddr?.name || payload.customer?.first_name || "Customer");
         
-      await sendSMS(phone, msg);
+      await sendSMS(phone, msg, false, `order_cancelled_${payload.id}`);
     }
   }
 }

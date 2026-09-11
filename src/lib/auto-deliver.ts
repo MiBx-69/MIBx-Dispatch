@@ -75,7 +75,7 @@ export async function processAutoDeliveredOrders() {
               .replace("{{order_id}}", order.shopify_order_name || order.id)
               .replace("{{customer_name}}", (order.customers as any)?.name || "Customer");
             
-            await sendSMS(phone, msg);
+            await sendSMS(phone, msg, false, `order_delivered_${order.id}`);
           } catch (smsErr) {
             console.error(`[Auto-Deliver SMS] Error for order ${order.id}:`, smsErr);
           }

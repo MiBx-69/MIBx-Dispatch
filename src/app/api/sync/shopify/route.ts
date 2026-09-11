@@ -277,7 +277,7 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
         .replace("{{order_id}}", orderPayload.shopify_order_name || orderPayload.shopify_order_id.toString())
         .replace("{{customer_name}}", orderPayload.customer_name || "Customer");
       sideEffects.push(
-        sendSMS(orderPayload.customer_phone, msg).catch(e => console.error("Sync SMS Error:", e))
+        sendSMS(orderPayload.customer_phone, msg, false, `order_confirmation_${orderPayload.shopify_order_id}`).catch(e => console.error("Sync SMS Error:", e))
       );
     }
 
