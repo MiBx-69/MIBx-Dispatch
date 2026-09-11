@@ -12,7 +12,9 @@ import {
   UploadCloud,
   Filter,
   CheckCircle2,
+  RefreshCw,
 } from "lucide-react";
+import { toast } from "sonner";
 
 export interface DispatchStats {
   totalQuantity: number;
@@ -97,33 +99,59 @@ export function DispatchesReportingHeader({
     window.open(`/api/dispatches/export?${params.toString()}`, "_blank");
   };
 
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSyncCourier = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch("/api/pathao/sync-status", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to sync");
+      toast.success(`Sync complete! Checked ${data.totalChecked} parcels, updated ${data.updatedCount}.`);
+      router.refresh();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to sync with courier");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const activeLabel = DATE_PRESETS.find((p) => p.id === activeDateFilter)?.label || "All Time";
 
-  const totalQuantity = stats?.totalQuantity ?? 0;
-  const totalAmount = stats?.totalAmount ?? 0;
-  const deliveredCount = stats?.deliveredCount ?? 0;
-  const deliveredAmount = stats?.deliveredAmount ?? 0;
-  const returnedCount = stats?.returnedCount ?? 0;
-  const returnedAmount = stats?.returnedAmount ?? 0;
+  const totalQuantity = stats?.totalQuantity || 0;
+  const totalAmount = stats?.totalAmount || 0;
+  const deliveredCount = stats?.deliveredCount || 0;
+  const deliveredAmount = stats?.deliveredAmount || 0;
+  const returnedCount = stats?.returnedCount || 0;
+  const returnedAmount = stats?.returnedAmount || 0;
 
   return (
-    <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-2.5 sm:p-3 space-y-2 mb-1">
-      {/* Top row: Slim Title, Period Tag, and Quick Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-md bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
+    <div className="bg-zinc-900/90 border border-zinc-800/80 rounded-xl p-2 sm:p-2.5 space-y-2 text-xs">
+      {/* Top row: Title + Export/Import */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5">
+          <span className="p-1 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
             <Truck size={13} />
-          </div>
-          <span className="text-xs sm:text-sm font-medium text-zinc-200">
-            Dispatches Report
           </span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-medium flex items-center gap-1">
-            <CheckCircle2 size={10} /> {activeLabel}
+          <span className="text-xs font-semibold text-zinc-200">Dispatches Report</span>
+          <span className="text-[10px] text-indigo-400/90 bg-indigo-500/10 px-1.5 py-0.5 rounded-full border border-indigo-500/20 font-medium flex items-center gap-1">
+            <CheckCircle2 size={10} />
+            {activeLabel}
           </span>
         </div>
 
         {/* Small Action Buttons */}
         <div className="flex items-center gap-1.5 ml-auto">
+          <button
+            onClick={handleSyncCourier}
+            disabled={isSyncing}
+            className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-indigo-300 bg-indigo-600/15 hover:bg-indigo-600/25 border border-indigo-500/25 transition-colors disabled:opacity-50"
+            title="Poll Pathao API to update active consignments"
+          >
+            <RefreshCw size={11} className={`text-indigo-400 ${isSyncing ? "animate-spin" : ""}`} />
+            <span>{isSyncing ? "Syncing..." : "Sync Courier"}</span>
+          </button>
+
           <button
             onClick={handleExport}
             className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-zinc-300 bg-zinc-800/80 hover:bg-zinc-700 hover:text-white border border-zinc-700/80 transition-colors"

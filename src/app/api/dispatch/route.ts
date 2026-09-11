@@ -216,6 +216,34 @@ export async function POST(request: NextRequest) {
       console.error("[Dispatch] Shopify tag update error (non-fatal):", tagErr);
     }
 
+    // 6. Automated SMS on Dispatch
+    try {
+      const { data: smsSettings } = await supabase
+        .from("app_settings")
+        .select("sms_api_key, sms_auto_dispatch_enabled, sms_auto_dispatch_template")
+        .single();
+
+      if (smsSettings?.sms_api_key && smsSettings.sms_auto_dispatch_enabled) {
+        const phone = recipient_phone || order.customer_phone;
+        if (phone) {
+          const { sendSMS } = await import("@/lib/sms");
+          const template =
+            smsSettings.sms_auto_dispatch_template ||
+            "প্রিয় {{customer_name}}, Universes থেকে আপনার অর্ডার {{order_id}} ডিসপ্যাচ করা হয়েছে। খুব শীঘ্রই আপনি প্রোডাক্টটি পেয়ে যাবেন। আপনার বকেয়া বিল {{total_price}} টাকা। প্রোডাক্টটি গ্রহণ করার জন্য অনুগ্রহ করে বিল প্রস্তুত রাখুন।";
+
+          const msg = template
+            .replace(/\{\{order_id\}\}/g, order.shopify_order_name || order.id)
+            .replace(/\{\{customer_name\}\}/g, recipient_name || order.customer_name || "Customer")
+            .replace(/\{\{tracking_url\}\}/g, trackingUrl)
+            .replace(/\{\{total_price\}\}/g, String(amount_to_collect || order.total_price || "0"));
+
+          await sendSMS(phone, msg);
+        }
+      }
+    } catch (smsErr) {
+      console.error("[Dispatch] SMS send error (non-fatal):", smsErr);
+    }
+
     return NextResponse.json({
       success: true,
       consignment_id,

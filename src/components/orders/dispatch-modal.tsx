@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { X, Truck, MapPin, Package, DollarSign, Weight } from "lucide-react";
+import { X, Truck, MapPin, Package, DollarSign, Weight, AlertTriangle } from "lucide-react";
 import type { Order } from "@/types/database";
 
 interface City { city_id: number; city_name: string; }
@@ -76,10 +76,20 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
       .then((d) => setAreas(d.areas || []));
   }, [form.recipient_zone]);
 
+  const fraudData = order.fraud_data as any;
+  const returnedCount = fraudData?.overall?.returned || 0;
+  const successRatio = fraudData?.overall?.success_ratio;
+  const isHighRisk = order.fraud_status === "fraud" || order.fraud_status === "risky" || returnedCount > 1;
+  const [confirmedRisk, setConfirmedRisk] = useState(false);
+
   const set = (field: string, value: string) =>
     setForm((f) => ({ ...f, [field]: value }));
 
   const handleDispatch = async () => {
+    if (isHighRisk && !confirmedRisk) {
+      toast.error("Please confirm risk verification before dispatching this customer!");
+      return;
+    }
     if (!form.store_id) { toast.error("Please select a pickup store"); return; }
     if (!form.recipient_phone) { toast.error("Recipient phone is required"); return; }
 
@@ -155,6 +165,32 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
             </div>
           </div>
         </div>
+
+        {/* High Risk Warning Banner */}
+        {isHighRisk && (
+          <div className="mx-4 mt-3 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-300 space-y-1.5">
+            <div className="flex items-center gap-1.5 font-semibold text-red-200">
+              <AlertTriangle size={15} className="text-red-400 shrink-0" />
+              High Return Risk Warning
+            </div>
+            <p className="text-[11px] text-red-300/90 leading-relaxed">
+              This customer is flagged with <strong>{returnedCount > 0 ? `${returnedCount} recorded returns` : "high return risk"}</strong>
+              {successRatio !== undefined ? ` (${successRatio}% courier delivery success rate)` : ""}.
+              Dispatching without customer confirmation or advance delivery charge may cause courier loss.
+            </p>
+            <label className="flex items-center gap-2 pt-1 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={confirmedRisk}
+                onChange={(e) => setConfirmedRisk(e.target.checked)}
+                className="w-4 h-4 rounded border-red-500/40 text-red-600 focus:ring-red-500 bg-zinc-900"
+              />
+              <span className="text-[11px] font-medium text-red-200">
+                I have verified this customer and accept the return risk
+              </span>
+            </label>
+          </div>
+        )}
 
         {/* Form */}
         <div className="overflow-y-auto flex-1 p-4 space-y-4">
@@ -240,10 +276,14 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
         <div className="p-4 border-t border-zinc-800 bg-zinc-900">
           <button
             onClick={handleDispatch}
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-indigo-600
-                      hover:bg-indigo-500 text-white font-bold text-sm transition-colors
-                      disabled:opacity-60 disabled:cursor-not-allowed"
+            disabled={loading || (isHighRisk && !confirmedRisk)}
+            className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-sm transition-all
+              ${
+                isHighRisk && !confirmedRisk
+                  ? "bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700/50"
+                  : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/25"
+              }
+              disabled:opacity-60 disabled:cursor-not-allowed`}
           >
             {loading ? (
               <>
@@ -252,6 +292,11 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
                 Dispatching...
+              </>
+            ) : isHighRisk && !confirmedRisk ? (
+              <>
+                <AlertTriangle size={16} className="text-red-400" />
+                Confirm Risk Verification to Dispatch
               </>
             ) : (
               <>

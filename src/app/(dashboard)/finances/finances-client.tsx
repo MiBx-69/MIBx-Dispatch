@@ -1,7 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Wallet, TrendingUp, TrendingDown, ArrowDownRight, ArrowUpRight, Search, FileText, Trash2, Calendar } from "lucide-react";
+import {
+  Plus,
+  Wallet,
+  TrendingUp,
+  TrendingDown,
+  ArrowDownRight,
+  ArrowUpRight,
+  Search,
+  FileText,
+  Trash2,
+  Calendar,
+} from "lucide-react";
 import { Transaction } from "@/types/database";
 import { addTransaction, deleteTransaction } from "./actions";
 import { toast } from "sonner";
@@ -12,9 +23,16 @@ interface FinancesClientProps {
   totalExpense: number;
 }
 
-export function FinancesClient({ transactions, totalIncome, totalExpense }: FinancesClientProps) {
+export function FinancesClient({
+  transactions,
+  totalIncome,
+  totalExpense,
+}: FinancesClientProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<"income" | "expense">("expense");
+  const [modalAmount, setModalAmount] = useState("");
+  const [modalDescription, setModalDescription] = useState("");
+  const [modalCategory, setModalCategory] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -30,7 +48,10 @@ export function FinancesClient({ transactions, totalIncome, totalExpense }: Fina
     setIsSubmitting(true);
     
     try {
-      const formData = new FormData(e.currentTarget);
+      const formData = new FormData();
+      formData.append("amount", modalAmount);
+      formData.append("description", modalDescription);
+      formData.append("category", modalCategory);
       formData.append("type", modalType);
       
       const res = await addTransaction(formData);
@@ -61,28 +82,32 @@ export function FinancesClient({ transactions, totalIncome, totalExpense }: Fina
 
   const openModal = (type: "income" | "expense") => {
     setModalType(type);
+    setModalAmount("");
+    setModalDescription("");
+    setModalCategory("");
     setIsModalOpen(true);
   };
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-white tracking-tight">Finances & Expenses</h2>
-          <p className="text-sm text-zinc-400 mt-1">Track your daily expenses and received funds</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Finances & Expenses</h2>
+          <p className="text-xs sm:text-sm text-zinc-400 mt-0.5">Track daily expenses and received funds</p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={() => openModal("income")}
-            className="flex items-center gap-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 px-4 py-2 rounded-xl text-sm font-semibold transition-colors border border-emerald-500/20"
+            className="flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors border border-emerald-500/20"
           >
-            <ArrowDownRight size={16} /> Add Received
+            <ArrowDownRight size={15} /> Add Received
           </button>
           <button
             onClick={() => openModal("expense")}
-            className="flex items-center gap-2 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 px-4 py-2 rounded-xl text-sm font-semibold transition-colors border border-rose-500/20"
+            className="flex items-center gap-1.5 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors border border-rose-500/20"
           >
-            <ArrowUpRight size={16} /> Add Expense
+            <ArrowUpRight size={15} /> Add Expense
           </button>
         </div>
       </div>
@@ -93,30 +118,33 @@ export function FinancesClient({ transactions, totalIncome, totalExpense }: Fina
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <Wallet size={48} className="text-indigo-400" />
           </div>
-          <p className="text-sm font-medium text-zinc-400 mb-1">Available Balance</p>
-          <p className="text-3xl font-bold text-white tracking-tight">
+          <p className="text-xs sm:text-sm font-medium text-zinc-400 mb-1">Available Fund Balance</p>
+          <p className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
             ৳ {balance.toLocaleString()}
           </p>
+          <p className="text-[11px] text-zinc-500 mt-1">Total recorded receipts minus all expenses</p>
         </div>
         
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <TrendingUp size={48} className="text-emerald-400" />
           </div>
-          <p className="text-sm font-medium text-zinc-400 mb-1">Total Received</p>
-          <p className="text-3xl font-bold text-emerald-400 tracking-tight">
+          <p className="text-xs sm:text-sm font-medium text-zinc-400 mb-1">Total Bank/Cash Received</p>
+          <p className="text-2xl sm:text-3xl font-bold text-emerald-400 tracking-tight">
             ৳ {totalIncome.toLocaleString()}
           </p>
+          <p className="text-[11px] text-zinc-500 mt-1">From Courier payouts, investments & manual deposits</p>
         </div>
 
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <TrendingDown size={48} className="text-rose-400" />
           </div>
-          <p className="text-sm font-medium text-zinc-400 mb-1">Total Expenses</p>
-          <p className="text-3xl font-bold text-rose-400 tracking-tight">
+          <p className="text-xs sm:text-sm font-medium text-zinc-400 mb-1">Total Operating Expenses</p>
+          <p className="text-2xl sm:text-3xl font-bold text-rose-400 tracking-tight">
             ৳ {totalExpense.toLocaleString()}
           </p>
+          <p className="text-[11px] text-zinc-500 mt-1">Office, marketing, packaging & supplies</p>
         </div>
       </div>
 
@@ -204,6 +232,8 @@ export function FinancesClient({ transactions, totalIncome, totalExpense }: Fina
                 <input
                   type="number"
                   name="amount"
+                  value={modalAmount}
+                  onChange={(e) => setModalAmount(e.target.value)}
                   required
                   min="1"
                   step="any"
@@ -217,6 +247,8 @@ export function FinancesClient({ transactions, totalIncome, totalExpense }: Fina
                 <input
                   type="text"
                   name="description"
+                  value={modalDescription}
+                  onChange={(e) => setModalDescription(e.target.value)}
                   required
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-zinc-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
                   placeholder={modalType === "income" ? "e.g. Office Budget November" : "e.g. Office Snacks"}
@@ -228,6 +260,8 @@ export function FinancesClient({ transactions, totalIncome, totalExpense }: Fina
                 <input
                   type="text"
                   name="category"
+                  value={modalCategory}
+                  onChange={(e) => setModalCategory(e.target.value)}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-zinc-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
                   placeholder={modalType === "income" ? "e.g. Budget" : "e.g. Food, Transport, Supplies"}
                 />

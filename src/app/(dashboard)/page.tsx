@@ -12,6 +12,7 @@ import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { FraudWidget } from "@/components/dashboard/fraud-widget";
 import { DispatchedProductsToday } from "@/components/dashboard/dispatched-today";
 import type { Order } from "@/types/database";
+import { getUnifiedReportMetrics } from "@/lib/reporting-engine";
 
 export const metadata = { title: "Dashboard" };
 export const dynamic = "force-dynamic";
@@ -20,6 +21,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const supabase = createServiceClient();
   const params = await searchParams;
   const dateFilter = params.dateFilter || "last_30_days";
+
+  const unifiedMetrics = await getUnifiedReportMetrics({
+    dateFilter,
+  });
 
   const now = new Date();
   let startDateStr = "";
@@ -280,12 +285,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const courierStats = Array.from(statusCountMap.entries()).map(([status, count]) => ({ status, count }));
 
   const statCards = [
-    { label: "Pending Orders", value: liveStats.pending_orders || 0, icon: Clock, color: "text-zinc-400", bg: "bg-zinc-800/50", href: "/orders?status=pending" },
+    { label: "Pending Orders", value: unifiedMetrics.pendingOrdersCount, icon: Clock, color: "text-zinc-400", bg: "bg-zinc-800/50", href: "/orders?status=pending" },
     { label: "Preparing", value: liveStats.preparing_orders || 0, icon: Package, color: "text-amber-400", bg: "bg-amber-500/10", href: "/orders?status=preparing" },
-    { label: "Dispatched", value: liveStats.dispatched_orders || 0, icon: Truck, color: "text-indigo-400", bg: "bg-indigo-500/10", href: "/orders?status=dispatched" },
-    { label: "Delivered", value: liveStats.delivered_orders || 0, icon: CheckCircle, color: "text-emerald-400", bg: "bg-emerald-500/10", href: "/orders?status=delivered" },
+    { label: "Dispatched", value: unifiedMetrics.dispatchedCount, icon: Truck, color: "text-indigo-400", bg: "bg-indigo-500/10", href: "/dispatches" },
+    { label: "Delivered", value: unifiedMetrics.deliveredCount, icon: CheckCircle, color: "text-emerald-400", bg: "bg-emerald-500/10", href: "/orders?status=delivered" },
     { label: "On Hold", value: liveStats.hold_orders || 0, icon: AlertCircle, color: "text-orange-400", bg: "bg-orange-500/10", href: "/orders?status=hold" },
-    { label: "Net Revenue", value: `৳${Number(liveStats.revenue_period || 0).toLocaleString()}`, subValue: `৳${Number(liveStats.subtotal_period || 0).toLocaleString()} w/o delivery`, icon: TrendingUp, color: "text-violet-400", bg: "bg-violet-500/10", isText: true },
+    { label: "Net Revenue", value: `৳${Number(unifiedMetrics.netRevenue || unifiedMetrics.deliveredRevenue).toLocaleString()}`, subValue: `৳${Number(unifiedMetrics.deliveredRevenue).toLocaleString()} delivered`, icon: TrendingUp, color: "text-violet-400", bg: "bg-violet-500/10", isText: true },
   ];
 
   return (
@@ -300,7 +305,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             <Package className="w-16 h-16 text-zinc-100" />
           </div>
           <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider relative z-10">Orders</p>
-          <p className="text-2xl lg:text-4xl font-bold text-white mt-2 relative z-10 truncate">{liveStats.orders_period || 0}</p>
+          <p className="text-2xl lg:text-4xl font-bold text-white mt-2 relative z-10 truncate">{unifiedMetrics.totalOrders}</p>
         </div>
 
         {/* Sales */}
@@ -308,9 +313,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <TrendingUp className="w-16 h-16 text-emerald-400" />
           </div>
-          <p className="text-xs text-emerald-400/80 font-medium uppercase tracking-wider relative z-10">Sales</p>
-          <p className="text-2xl lg:text-4xl font-bold text-emerald-400 mt-2 relative z-10 truncate" title={`৳${Number(liveStats.revenue_period || 0).toLocaleString()}`}>
-            ৳{Number(liveStats.revenue_period || 0).toLocaleString()}
+          <p className="text-xs text-emerald-400/80 font-medium uppercase tracking-wider relative z-10">Delivered Sales</p>
+          <p className="text-2xl lg:text-4xl font-bold text-emerald-400 mt-2 relative z-10 truncate" title={`৳${Number(unifiedMetrics.deliveredRevenue).toLocaleString()}`}>
+            ৳{Number(unifiedMetrics.deliveredRevenue).toLocaleString()}
           </p>
         </div>
 
@@ -321,7 +326,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </div>
           <p className="text-xs text-indigo-400/80 font-medium uppercase tracking-wider relative z-10">Dispatched</p>
           <div className="flex items-center gap-2 relative z-10 mt-2 truncate">
-            <p className="text-2xl lg:text-4xl font-bold text-indigo-400 truncate">{liveStats.dispatched_period || 0}</p>
+            <p className="text-2xl lg:text-4xl font-bold text-indigo-400 truncate">{unifiedMetrics.dispatchedCount}</p>
             <Link href="/dispatches" className="text-[10px] text-indigo-500/60 hover:text-indigo-400 transition-colors uppercase tracking-widest font-semibold border border-indigo-500/20 px-2 py-0.5 rounded-full shrink-0">
               View
             </Link>
@@ -334,7 +339,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             <XCircle className="w-16 h-16 text-rose-400" />
           </div>
           <p className="text-xs text-rose-400/80 font-medium uppercase tracking-wider relative z-10">Cancelled</p>
-          <p className="text-2xl lg:text-4xl font-bold text-rose-400 mt-2 relative z-10 truncate">{liveStats.cancelled_period || 0}</p>
+          <p className="text-2xl lg:text-4xl font-bold text-rose-400 mt-2 relative z-10 truncate">{unifiedMetrics.cancelledOrdersCount}</p>
         </div>
       </div>
 

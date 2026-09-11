@@ -13,6 +13,7 @@ export interface UnifiedReportMetrics {
   returnFees: number;
   pendingReturnsCount: number;
   processedReturnsCount: number;
+  needsAttentionCount: number;
 
   // Dispatches
   dispatchedCount: number;
@@ -193,6 +194,10 @@ export async function getUnifiedReportMetrics(params: {
     ["inspected", "restocked", "damaged"].includes(r.status)
   ).length;
 
+  const needsAttentionCount = filteredReturns.filter((r: any) => 
+    r.status === "pending_verification" || (r.return_type === "partial" && !r.is_verified)
+  ).length;
+
   // Dispatches Calculations
   const dispatchedCount = filteredDispatches.length;
   const amountToCollect = Math.round(
@@ -215,6 +220,7 @@ export async function getUnifiedReportMetrics(params: {
     returnFees,
     pendingReturnsCount,
     processedReturnsCount,
+    needsAttentionCount,
     dispatchedCount,
     amountToCollect,
     totalOrders,

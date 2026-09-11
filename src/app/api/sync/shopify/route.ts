@@ -288,6 +288,24 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
     const { logOrderEvent } = await import("@/lib/audit");
     await logOrderEvent(upsertedOrder.id, "SYNCED", "Order synced manually from Shopify");
   }
+
+  // Check if order has been returned/refunded on Shopify
+  const finStatus = (orderPayload.financial_status || "").toLowerCase();
+  if (finStatus === "refunded" || finStatus === "partially_refunded") {
+    try {
+      const { handleShopifyRefundOrReturn } = await import("@/lib/shopify-returns");
+      await handleShopifyRefundOrReturn({
+        shopifyOrderId: orderPayload.shopify_order_id,
+        refundData: {
+          financial_status: finStatus,
+          note: orderPayload.note,
+        },
+        topic: "sync/orders",
+      });
+    } catch (refundErr) {
+      console.error("[Sync] Error syncing return for order:", refundErr);
+    }
+  }
 }
 
 async function upsertShopifyCustomer(supabase: any, customer: any) {

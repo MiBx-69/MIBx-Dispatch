@@ -27,7 +27,7 @@ export default async function OrdersPage({
 
   let query = supabase
     .from("orders")
-    .select("*", { count: "exact" })
+    .select("*, returns(id, status, return_type, is_verified, refund_amount)", { count: "exact" })
     .order("shopify_created_at", { ascending: false })
     .range(offset, offset + pageSize - 1);
 

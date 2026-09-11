@@ -214,7 +214,8 @@ async function processPathaoWebhook(payload: any, storedSecret: string) {
 
       // Handle automated SMS
       try {
-        if (internalStatus === "dispatched" || internalStatus === "delivered") {
+        const isOutForDelivery = newEvent.includes("out_for_delivery") || newEvent.includes("out for delivery");
+        if (internalStatus === "dispatched" || internalStatus === "delivered" || isOutForDelivery) {
           const { data: settings } = await supabase.from("app_settings").select("*").single();
           if (settings?.sms_api_key) {
             const phone = order?.customer_phone || order?.customers?.phone;
@@ -222,7 +223,13 @@ async function processPathaoWebhook(payload: any, storedSecret: string) {
               const { sendSMS } = await import("@/lib/sms");
               let template = null;
               
-              if (internalStatus === "dispatched" && settings.sms_auto_dispatch_enabled) {
+              if (isOutForDelivery) {
+                const customerName = order.customers?.name || "Customer";
+                const orderName = order.shopify_order_name || order.id;
+                const total = order.total_price || "0";
+                const msg = `Dear ${customerName}, your MiBx order ${orderName} is out for delivery today via Pathao! Please keep ৳${total} ready. Thank you!`;
+                await sendSMS(phone, msg);
+              } else if (internalStatus === "dispatched" && settings.sms_auto_dispatch_enabled) {
                 template = settings.sms_auto_dispatch_template;
               } else if (internalStatus === "delivered" && settings.sms_auto_delivered_enabled) {
                 template = settings.sms_auto_delivered_template;

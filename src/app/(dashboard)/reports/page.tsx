@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { format, parseISO, differenceInDays, subDays } from "date-fns";
 import { ReportsClient } from "./reports-client";
+import { getUnifiedReportMetrics } from "@/lib/reporting-engine";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Reports" };
@@ -152,52 +153,40 @@ export default async function ReportsPage({
     .sort((a, b) => b.qty - a.qty)
     .slice(0, 10);
 
-  // D. Return-adjusted calculations
+  // D. Return-adjusted calculations using single Unified Reporting Engine
+  const unifiedMetrics = await getUnifiedReportMetrics({
+    dateFilter: params.filterType,
+    startDate: startDateStr,
+    endDate: endDateStr,
+  });
+
   const returnedOrders = orders.filter((o: any) => o.internal_status === 'returned');
   const cancelledOrders = orders.filter((o: any) => o.internal_status === 'cancelled');
   const deliveredOrders = orders.filter((o: any) => o.internal_status === 'delivered');
 
-  const returnedRevenue = returnedOrders.reduce((acc: number, o: any) => acc + (Number(o.total_price) || 0), 0);
   const cancelledRevenue = cancelledOrders.reduce((acc: number, o: any) => acc + (Number(o.total_price) || 0), 0);
-  const deliveredRevenue = deliveredOrders.reduce((acc: number, o: any) => acc + (Number(o.total_price) || 0), 0);
-
-  // Return delivery fees from the returns table (more accurate than order-level)
-  const totalReturnDeliveryFees = returns.reduce((acc: number, r: any) => acc + (Number(r.return_delivery_fee) || 0), 0);
-
-  // Partial return deductions: sum of refund_amount / returned items from partial returns
-  const partialReturnDeductions = returns
-    .filter((r: any) => r.return_type === 'partial')
-    .reduce((acc: number, r: any) => {
-      const val = Number(r.refund_amount) || 
-        (Array.isArray(r.returned_items) && r.returned_items.reduce((s: number, i: any) => s + (Number(i.price || 0) * Number(i.quantity || 1)), 0)) ||
-        (Number(r.order_total) || 0);
-      return acc + val;
-    }, 0);
-
-  // Total returned = full returns (from order status) + partial return deductions
-  const totalReturnedRevenue = returnedRevenue + partialReturnDeductions;
-
-  // Net collectible = Total Gross - Cancelled - Full Returns - Partial Deductions
-  const netCollectibleRevenue = totalGross - cancelledRevenue - totalReturnedRevenue;
+  const deliveredRevenue = unifiedMetrics.deliveredRevenue;
+  const totalReturnedRevenue = unifiedMetrics.returnedValue;
+  const totalReturnDeliveryFees = unifiedMetrics.returnFees;
+  const partialReturnDeductions = Math.max(0, unifiedMetrics.returnedValue - returnedOrders.reduce((acc: number, o: any) => acc + (Number(o.total_price) || 0), 0));
+  const netCollectibleRevenue = unifiedMetrics.netRevenue;
 
   // Success rate = Delivered / (Delivered + Returned) * 100
-  const totalFinalizedOrders = deliveredOrders.length + returnedOrders.length;
+  const totalFinalizedOrders = unifiedMetrics.deliveredCount + unifiedMetrics.returnedCount;
   const successRate = totalFinalizedOrders > 0
-    ? Math.round((deliveredOrders.length / totalFinalizedOrders) * 100)
+    ? Math.round((unifiedMetrics.deliveredCount / totalFinalizedOrders) * 100)
     : 100;
 
   // General Order Stats
   const orderStats = {
-    totalOrders: orders.length,
-    dispatchedOrders: dispatches.length,
-    deliveredOrders: deliveredOrders.length,
+    totalOrders: unifiedMetrics.totalOrders || orders.length,
+    dispatchedOrders: unifiedMetrics.dispatchedCount,
+    deliveredOrders: unifiedMetrics.deliveredCount,
     cancelledOrders: cancelledOrders.length,
-    returnedOrders: returnedOrders.length,
+    returnedOrders: unifiedMetrics.returnedCount,
   };
 
-  const totalDispatchedAmount = dispatches.reduce((acc: number, d: any) => {
-    return acc + (Number(d.orders?.total_price) || 0);
-  }, 0);
+  const totalDispatchedAmount = unifiedMetrics.amountToCollect;
 
   return (
     <ReportsClient 

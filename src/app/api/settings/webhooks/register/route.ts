@@ -7,6 +7,7 @@ const REQUIRED_TOPICS = [
   "ORDERS_UPDATED",
   "ORDERS_CANCELLED",
   "ORDERS_FULFILLED",
+  "REFUNDS_CREATE",
 ];
 
 export async function POST(request: NextRequest) {

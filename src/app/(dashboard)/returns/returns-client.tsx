@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Return } from "@/types/database";
 
 const STATUS_STYLES: Record<string, { label: string; class: string; icon: any }> = {
-  pending_verification: { label: "Pending Verification", class: "bg-fuchsia-500/15 text-fuchsia-400 border-fuchsia-500/20", icon: AlertCircle },
+  pending_verification: { label: "Needs Admin Attention", class: "bg-amber-500/15 text-amber-400 border-amber-500/25", icon: AlertCircle },
   in_transit: { label: "In Transit", class: "bg-amber-500/15 text-amber-400 border-amber-500/20", icon: Truck },
   received: { label: "Received", class: "bg-blue-500/15 text-blue-400 border-blue-500/20", icon: Package },
   inspected: { label: "Inspected", class: "bg-indigo-500/15 text-indigo-400 border-indigo-500/20", icon: Eye },
@@ -27,6 +27,7 @@ interface ReturnsClientProps {
   totalReturnFees: number;
   pendingReturns: number;
   processedReturns: number;
+  needsAttentionCount?: number;
   currentFilter?: string;
   currentSearch?: string;
   page?: number;
@@ -41,6 +42,7 @@ export function ReturnsClient({
   totalReturnFees,
   pendingReturns,
   processedReturns,
+  needsAttentionCount = 0,
   currentFilter = "all",
   currentSearch = "",
   page = 1,
@@ -410,10 +412,11 @@ export function ReturnsClient({
 
 
   const statCards = [
-    { label: "Total Returns", value: totalReturns, icon: RotateCcw, color: "text-rose-400", bg: "bg-rose-500/10", border: "border-rose-500/20" },
+    { label: "Total Returns", value: totalReturns, icon: RotateCcw, color: "text-rose-400", bg: "bg-rose-500/10", border: "border-rose-500/20", filterKey: "all" },
     { label: "Return Value", value: `৳${Number(totalReturnValue).toLocaleString()}`, icon: TrendingDown, color: "text-rose-400", bg: "bg-rose-500/10", border: "border-rose-500/20", isText: true },
     { label: "Return Fees", value: `৳${Number(totalReturnFees).toLocaleString()}`, icon: Truck, color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20", isText: true },
-    { label: "Pending", value: pendingReturns, icon: Clock, color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20" },
+    { label: "Needs Attention", value: needsAttentionCount, icon: AlertCircle, color: "text-amber-400", bg: "bg-amber-500/15", border: "border-amber-500/35", filterKey: "pending_verification" },
+    { label: "In Pipeline", value: pendingReturns, icon: Clock, color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20" },
     { label: "Processed", value: processedReturns, icon: CheckCircle, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20" },
   ];
 
@@ -439,12 +442,16 @@ export function ReturnsClient({
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
         {statCards.map((stat) => (
-          <div key={stat.label} className={`${stat.bg} border ${stat.border} rounded-2xl p-4 flex flex-col justify-center`}>
-            <p className={`text-xs font-medium ${stat.color} opacity-80 uppercase tracking-wider`}>{stat.label}</p>
-            <p className={`text-xl sm:text-2xl font-bold ${stat.color} mt-1 flex items-center gap-2`}>
-              <stat.icon className="w-4 h-4 shrink-0" />
+          <div
+            key={stat.label}
+            onClick={() => stat.filterKey && setFilter(stat.filterKey)}
+            className={`${stat.bg} border ${stat.border} rounded-2xl p-3.5 flex flex-col justify-center ${stat.filterKey ? "cursor-pointer hover:opacity-90 transition-opacity" : ""}`}
+          >
+            <p className={`text-[11px] font-medium ${stat.color} opacity-80 uppercase tracking-wider`}>{stat.label}</p>
+            <p className={`text-lg sm:text-xl font-bold ${stat.color} mt-1 flex items-center gap-1.5`}>
+              <stat.icon className="w-3.5 h-3.5 shrink-0" />
               {stat.value}
             </p>
           </div>
@@ -510,7 +517,7 @@ export function ReturnsClient({
           className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:border-zinc-700"
         >
           <option value="all">All Statuses</option>
-          <option value="pending_verification">Pending Verification</option>
+          <option value="pending_verification">⚠️ Needs Admin Attention ({needsAttentionCount})</option>
           <option value="in_transit">In Transit</option>
           <option value="received">Received</option>
           <option value="inspected">Inspected</option>
@@ -518,6 +525,37 @@ export function ReturnsClient({
           <option value="damaged">Damaged</option>
         </select>
       </div>
+
+      {/* Admin Attention Section for Partial Returns */}
+      {needsAttentionCount > 0 && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <span className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">
+              <AlertCircle size={18} />
+            </span>
+            <div>
+              <p className="font-bold text-amber-200 text-xs sm:text-sm flex items-center gap-2">
+                {needsAttentionCount} Partial Return{needsAttentionCount > 1 ? "s" : ""} Awaiting Admin Attention & Approval
+              </p>
+              <p className="text-amber-300/80 text-[11px] sm:text-xs mt-0.5">
+                These orders have partial return/refund entries from Shopify. They are held here so you can verify returned items before applying revenue deductions.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setFilter(filter === "pending_verification" ? "all" : "pending_verification")}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all shadow-sm whitespace-nowrap flex items-center gap-1.5 shrink-0 ${
+              filter === "pending_verification"
+                ? "bg-amber-500 text-zinc-950 font-bold"
+                : "bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30"
+            }`}
+          >
+            <AlertCircle size={13} />
+            {filter === "pending_verification" ? "Showing Needs Attention" : "View Attention Section"}
+          </button>
+        </div>
+      )}
 
       {/* Helper Banner when only page was selected and more exist */}
       {selected.size === filteredReturns.length && count > filteredReturns.length && (

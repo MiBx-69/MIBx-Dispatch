@@ -699,9 +699,20 @@ export function OrdersClient({
                   >
                     {isSelected && <Check size={12} strokeWidth={3} />}
                   </button>
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-2 min-w-0 flex-wrap">
                     <h3 className="font-bold text-zinc-100 text-sm truncate">{order.shopify_order_name}</h3>
                     <StatusBadge status={order.internal_status as OrderStatus} />
+                    {(order as any).returns?.some((r: any) => r.return_type === "partial" && !r.is_verified) && (
+                      <a
+                        href="/returns?filter=pending_verification"
+                        onClick={(e) => e.stopPropagation()}
+                        className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/35 hover:bg-amber-500/30 transition-colors flex items-center gap-1 shrink-0 animate-pulse"
+                        title="Partial return from Shopify awaiting admin verification & approval in Returns"
+                      >
+                        <AlertCircle size={10} className="text-amber-400" />
+                        Needs Attention
+                      </a>
+                    )}
                   </div>
                 </div>
                 
@@ -724,14 +735,14 @@ export function OrdersClient({
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-zinc-200 truncate">{order.customer_name || "Unknown Customer"}</p>
-                    {order.fraud_status && order.fraud_status !== 'safe' && order.fraud_status !== 'unchecked' && (
+                    {((order.fraud_data as any)?.overall?.returned > 0 || (order.fraud_status && order.fraud_status !== 'safe' && order.fraud_status !== 'unchecked')) && (
                       <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded-full border ${
-                        order.fraud_status === 'fraud' 
+                        order.fraud_status === 'fraud' || ((order.fraud_data as any)?.overall?.returned || 0) > 1
                           ? 'bg-red-500/10 text-red-400 border-red-500/20' 
                           : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                       }`}>
-                        {order.fraud_status === 'fraud' ? 'High Risk' : 'Medium Risk'}
-                        {order.fraud_score ? ` (${order.fraud_score})` : ''}
+                        {order.fraud_status === 'fraud' || ((order.fraud_data as any)?.overall?.returned || 0) > 1 ? 'High Return Risk' : 'Medium Risk'}
+                        {typeof (order.fraud_data as any)?.overall?.returned === 'number' && (order.fraud_data as any).overall.returned > 0 ? ` (${(order.fraud_data as any).overall.returned} Ret)` : order.fraud_score ? ` (${order.fraud_score})` : ''}
                       </span>
                     )}
                   </div>

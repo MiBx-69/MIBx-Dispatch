@@ -25,23 +25,24 @@ export async function POST(request: NextRequest) {
   }
 
   // Log the webhook
+  const effectiveOrderId = payload.id || (payload as any).order_id;
   await supabase.from("webhook_logs").insert({
     source: "shopify",
     topic,
-    shopify_order_id: payload.id,
+    shopify_order_id: effectiveOrderId,
     payload: payload as any,
     processed: false,
   });
 
   // Ignore test webhook
-  if (payload.id === 123456) {
+  if (effectiveOrderId === 123456) {
     return NextResponse.json({ received: true }, { status: 200 });
   }
 
   // Ignore any order created before Sept 1st (BD Time)
   const minCreatedAt = new Date("2026-08-31T18:00:00Z");
   if (payload.created_at && new Date(payload.created_at) < minCreatedAt) {
-    console.log(`Ignoring webhook for old order ${payload.id}`);
+    console.log(`Ignoring webhook for old order ${effectiveOrderId}`);
     return NextResponse.json({ received: true, ignored: true }, { status: 200 });
   }
 
@@ -56,12 +57,14 @@ export async function POST(request: NextRequest) {
 }
 
 import { performFraudCheck } from "@/lib/fraud-checker";
+import { handleShopifyRefundOrReturn } from "@/lib/shopify-returns";
 
 async function processShopifyWebhook(
   topic: string,
   payload: ShopifyOrderWebhookPayload
 ) {
   const supabase = createServiceClient();
+  const effectiveOrderId = payload.id || (payload as any).order_id;
 
   try {
     switch (topic) {
@@ -82,10 +85,49 @@ async function processShopifyWebhook(
         break;
       }
 
-      case "orders/updated":
-      case "orders/paid":
-        await upsertOrder(supabase, payload);
+      case "refunds/create": {
+        if (effectiveOrderId) {
+          await handleShopifyRefundOrReturn({
+            shopifyOrderId: effectiveOrderId,
+            refundData: payload,
+            topic,
+          });
+        }
         break;
+      }
+
+      case "returns/approve":
+      case "returns/create":
+      case "returns/close": {
+        if (effectiveOrderId) {
+          await handleShopifyRefundOrReturn({
+            shopifyOrderId: effectiveOrderId,
+            refundData: payload,
+            topic,
+          });
+        }
+        break;
+      }
+
+      case "orders/updated":
+      case "orders/paid": {
+        await upsertOrder(supabase, payload);
+
+        // Check if this update represents a return/refund on Shopify
+        const p = payload as any;
+        if (
+          p.financial_status === "refunded" ||
+          p.financial_status === "partially_refunded" ||
+          (Array.isArray(p.refunds) && p.refunds.length > 0)
+        ) {
+          await handleShopifyRefundOrReturn({
+            shopifyOrderId: payload.id,
+            refundData: payload,
+            topic,
+          });
+        }
+        break;
+      }
 
       case "orders/cancelled":
         await upsertOrder(supabase, payload);
@@ -113,14 +155,14 @@ async function processShopifyWebhook(
     await supabase
       .from("webhook_logs")
       .update({ processed: true })
-      .eq("shopify_order_id", payload.id)
+      .eq("shopify_order_id", effectiveOrderId)
       .eq("source", "shopify");
   } catch (err: any) {
     console.error("[Shopify Webhook] Processing error:", err);
     await supabase
       .from("webhook_logs")
       .update({ error: err.message })
-      .eq("shopify_order_id", payload.id)
+      .eq("shopify_order_id", effectiveOrderId)
       .eq("source", "shopify");
   }
 }

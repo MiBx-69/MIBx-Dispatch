@@ -69,6 +69,7 @@ export default async function ReturnsPage({
       totalReturnFees={metrics.returnFees}
       pendingReturns={metrics.pendingReturnsCount}
       processedReturns={metrics.processedReturnsCount}
+      needsAttentionCount={metrics.needsAttentionCount}
       currentFilter={params.filter}
       currentSearch={params.search}
       page={page}
