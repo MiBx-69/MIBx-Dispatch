@@ -14,9 +14,16 @@ jobs:
       - name: Trigger Courier Sync Endpoint
         run: |
           echo "Triggering courier sync on orders.universesraw.com..."
-          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST "https://orders.universesraw.com/api/cron/courier-sync" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            -H "Content-Type: application/json")
+          
+          SECRET="${{ secrets.CRON_SECRET }}"
+          if [ -n "$SECRET" ]; then
+            RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST "https://orders.universesraw.com/api/cron/courier-sync" \
+              -H "Authorization: Bearer $SECRET" \
+              -H "Content-Type: application/json")
+          else
+            RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST "https://orders.universesraw.com/api/cron/courier-sync" \
+              -H "Content-Type: application/json")
+          fi
           
           echo "Response:"
           echo "$RESPONSE"

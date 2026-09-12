@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { getPathaoOrderStatus } from "@/lib/pathao/client";
 import { markShopifyOrderAsDelivered } from "@/lib/shopify/client";
 
 export const dynamic = "force-dynamic";
@@ -29,15 +30,6 @@ async function handleCron(request: NextRequest) {
   if (configuredSecret && providedSecret !== configuredSecret) {
     return NextResponse.json({ error: "Unauthorized. Invalid cron secret." }, { status: 401 });
   }
-
-  // 2. Fetch Pathao access token
-  const token = settings?.pathao_access_token;
-  if (!token) {
-    return NextResponse.json({ error: "Pathao access token not configured in app_settings" }, { status: 400 });
-  }
-
-  const baseUrl = settings.pathao_base_url || "https://courier.redx.com.bd"; // fallback
-  const pathaoApiBase = baseUrl.includes("pathao.com") ? baseUrl : "https://api-hermes.pathao.com";
 
   try {
     // 3. Scan orders dispatched within the last 7 days that are not finalized
@@ -86,21 +78,8 @@ async function handleCron(request: NextRequest) {
         batch.map(async (d: any) => {
           try {
             scannedCount++;
-            const res = await fetch(`${pathaoApiBase}/aladdin/api/v1/orders/${d.consignment_id}/info`, {
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-                Accept: "application/json",
-              },
-            });
-
-            if (!res.ok) {
-              errors.push({ consignment_id: d.consignment_id, status: res.status });
-              return;
-            }
-
-            const json = await res.json();
-            const data = json.data;
+            const infoRes = await getPathaoOrderStatus(d.consignment_id);
+            const data = infoRes?.data;
             if (!data?.order_status) return;
 
             const currentStatus = (d.pathao_order_status || "").toLowerCase().trim();
