@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { formatBstDate } from "@/lib/reporting-engine";
 
 export async function GET(request: NextRequest) {
   try {
@@ -27,10 +28,9 @@ export async function GET(request: NextRequest) {
         shopify_created_at, 
         customer_name, 
         customer_phone, 
-        customer_address,
+        shipping_address,
         total_price, 
         subtotal_price, 
-        delivery_fee,
         internal_status,
         fulfillment_status,
         fraud_status,
@@ -73,7 +73,8 @@ export async function GET(request: NextRequest) {
     // Build CSV rows
     const rows = orders.map((o: any) => {
       const date = o.shopify_created_at ? new Date(o.shopify_created_at).toLocaleString() : "";
-      const city = o.customer_address?.city || "";
+      const city = o.shipping_address?.city || o.shipping_address?.province || "";
+      const deliveryFee = Math.max(0, Math.round(Number(o.total_price || 0) - Number(o.subtotal_price || 0)));
       
       let itemsCount = 0;
       let productsList = "";
@@ -97,9 +98,9 @@ export async function GET(request: NextRequest) {
         escape(o.customer_name),
         escape(o.customer_phone),
         escape(city),
-        o.total_price,
-        o.subtotal_price,
-        o.delivery_fee,
+        o.total_price != null ? o.total_price : 0,
+        o.subtotal_price != null ? o.subtotal_price : 0,
+        deliveryFee,
         escape(o.internal_status),
         escape(o.fulfillment_status),
         escape(o.fraud_status),
@@ -117,7 +118,7 @@ export async function GET(request: NextRequest) {
     return new NextResponse(csvContent, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="MiBx-Orders-${startDate.split("T")[0]}-to-${endDate.split("T")[0]}.csv"`,
+        "Content-Disposition": `attachment; filename="MiBx-Orders-${formatBstDate(startDate)}-to-${formatBstDate(endDate)}.csv"`,
       },
     });
 

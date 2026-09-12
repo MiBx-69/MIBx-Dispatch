@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { format, subDays, startOfMonth } from "date-fns";
+import { formatBstDate } from "@/lib/date-utils";
 import { Download, Calendar, BarChart, ShoppingCart, Truck, CheckCircle, XCircle, RotateCcw, TrendingUp, Award, FileSpreadsheet } from "lucide-react";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
 import { TopProducts } from "@/components/dashboard/top-products";
@@ -57,8 +58,8 @@ export function ReportsClient({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [filterType, setFilterType] = useState(initialFilterType);
-  const [startDate, setStartDate] = useState(format(new Date(initialStartDate), "yyyy-MM-dd"));
-  const [endDate, setEndDate] = useState(format(new Date(initialEndDate), "yyyy-MM-dd"));
+  const [startDate, setStartDate] = useState(formatBstDate(initialStartDate));
+  const [endDate, setEndDate] = useState(formatBstDate(initialEndDate));
   const [isExporting, setIsExporting] = useState(false);
 
   const applyFilter = (type: string, customStart?: string, customEnd?: string) => {
@@ -69,21 +70,27 @@ export function ReportsClient({
     const now = new Date();
 
     if (type === "today") {
-      newStart = format(now, "yyyy-MM-dd");
-      newEnd = format(now, "yyyy-MM-dd");
+      newStart = formatBstDate(now);
+      newEnd = formatBstDate(now);
     } else if (type === "yesterday") {
       const yest = subDays(now, 1);
-      newStart = format(yest, "yyyy-MM-dd");
-      newEnd = format(yest, "yyyy-MM-dd");
+      newStart = formatBstDate(yest);
+      newEnd = formatBstDate(yest);
     } else if (type === "last_7_days") {
-      newStart = format(subDays(now, 7), "yyyy-MM-dd");
-      newEnd = format(now, "yyyy-MM-dd");
+      newStart = formatBstDate(subDays(now, 7));
+      newEnd = formatBstDate(now);
     } else if (type === "this_month") {
-      newStart = format(startOfMonth(now), "yyyy-MM-dd");
-      newEnd = format(now, "yyyy-MM-dd");
+      const dtf = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Dhaka", year: "numeric", month: "numeric" });
+      const parts = dtf.formatToParts(now);
+      const year = parseInt(parts.find(p => p.type === "year")!.value);
+      const month = parseInt(parts.find(p => p.type === "month")!.value);
+      const lastDayOfMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+      const pad = (n: number) => n.toString().padStart(2, "0");
+      newStart = `${year}-${pad(month)}-01`;
+      newEnd = `${year}-${pad(month)}-${pad(lastDayOfMonth)}`;
     } else if (type === "last_30_days") {
-      newStart = format(subDays(now, 30), "yyyy-MM-dd");
-      newEnd = format(now, "yyyy-MM-dd");
+      newStart = formatBstDate(subDays(now, 30));
+      newEnd = formatBstDate(now);
     } else if (type === "custom") {
       newStart = customStart || startDate;
       newEnd = customEnd || endDate;
@@ -98,9 +105,9 @@ export function ReportsClient({
 
     startTransition(() => {
       const params = new URLSearchParams();
-      // Use setHours to cover the entire day for DB query
-      const startIso = new Date(`${newStart}T00:00:00`).toISOString();
-      const endIso = new Date(`${newEnd}T23:59:59.999`).toISOString();
+      // Use Bangladesh (+06:00) time boundaries to ensure correct local dates
+      const startIso = new Date(`${newStart}T00:00:00+06:00`).toISOString();
+      const endIso = new Date(`${newEnd}T23:59:59.999+06:00`).toISOString();
       
       params.set("startDate", startIso);
       params.set("endDate", endIso);
@@ -112,8 +119,8 @@ export function ReportsClient({
   const handleExport = async () => {
     try {
       setIsExporting(true);
-      const startIso = new Date(`${startDate}T00:00:00`).toISOString();
-      const endIso = new Date(`${endDate}T23:59:59.999`).toISOString();
+      const startIso = new Date(`${startDate}T00:00:00+06:00`).toISOString();
+      const endIso = new Date(`${endDate}T23:59:59.999+06:00`).toISOString();
       
       const res = await fetch(`/api/reports/export?startDate=${startIso}&endDate=${endIso}`);
       if (!res.ok) throw new Error("Failed to generate CSV");
@@ -140,8 +147,8 @@ export function ReportsClient({
   const handleExportDispatched = async () => {
     try {
       setIsExportingDispatched(true);
-      const startIso = new Date(`${startDate}T00:00:00`).toISOString();
-      const endIso = new Date(`${endDate}T23:59:59.999`).toISOString();
+      const startIso = new Date(`${startDate}T00:00:00+06:00`).toISOString();
+      const endIso = new Date(`${endDate}T23:59:59.999+06:00`).toISOString();
       
       const res = await fetch(`/api/reports/export-dispatched?startDate=${startIso}&endDate=${endIso}`);
       if (!res.ok) throw new Error("Failed to generate CSV");
@@ -169,8 +176,8 @@ export function ReportsClient({
   const handleExportAll = async () => {
     try {
       setIsExportingAll(true);
-      const startIso = new Date(`${startDate}T00:00:00`).toISOString();
-      const endIso = new Date(`${endDate}T23:59:59.999`).toISOString();
+      const startIso = new Date(`${startDate}T00:00:00+06:00`).toISOString();
+      const endIso = new Date(`${endDate}T23:59:59.999+06:00`).toISOString();
       
       const res = await fetch(`/api/reports/export-all?startDate=${startIso}&endDate=${endIso}`);
       if (!res.ok) {
@@ -201,8 +208,8 @@ export function ReportsClient({
   const handleExportReturns = async () => {
     try {
       setIsExportingReturns(true);
-      const startIso = new Date(`${startDate}T00:00:00`).toISOString();
-      const endIso = new Date(`${endDate}T23:59:59.999`).toISOString();
+      const startIso = new Date(`${startDate}T00:00:00+06:00`).toISOString();
+      const endIso = new Date(`${endDate}T23:59:59.999+06:00`).toISOString();
       
       const res = await fetch(`/api/reports/export-returns?startDate=${startIso}&endDate=${endIso}`);
       if (!res.ok) throw new Error("Failed to generate CSV");

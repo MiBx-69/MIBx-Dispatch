@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getPathaoOrderStatus } from "@/lib/pathao/client";
 import { markShopifyOrderAsDelivered } from "@/lib/shopify/client";
+import { Receiver } from "@upstash/qstash";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 5 minutes for serverless runtimes
@@ -18,17 +19,34 @@ async function handleCron(request: NextRequest) {
   const startTime = Date.now();
   const supabase = createServiceClient();
 
-  // 1. Validate Cron Secret
+  // 1. Validate request — QStash signature (primary) or CRON_SECRET fallback
   const { data: settings } = await supabase.from("app_settings").select("*").single();
-  const configuredSecret = process.env.CRON_SECRET || settings?.cron_secret;
 
-  const authHeader = request.headers.get("authorization");
-  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : null;
-  const querySecret = request.nextUrl.searchParams.get("secret");
-  const providedSecret = bearerToken || querySecret;
+  const qstashCurrentKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
+  const qstashNextKey = process.env.QSTASH_NEXT_SIGNING_KEY;
 
-  if (configuredSecret && providedSecret !== configuredSecret) {
-    return NextResponse.json({ error: "Unauthorized. Invalid cron secret." }, { status: 401 });
+  if (qstashCurrentKey && qstashNextKey) {
+    // QStash signature verification
+    const receiver = new Receiver({
+      currentSigningKey: qstashCurrentKey,
+      nextSigningKey: qstashNextKey,
+    });
+    const rawBody = await request.text();
+    const signature = request.headers.get("upstash-signature") ?? "";
+    const isValid = await receiver.verify({ signature, body: rawBody }).catch(() => false);
+    if (!isValid) {
+      return NextResponse.json({ error: "Unauthorized. Invalid QStash signature." }, { status: 401 });
+    }
+  } else {
+    // Fallback: custom CRON_SECRET for manual / dev triggering
+    const configuredSecret = process.env.CRON_SECRET || settings?.cron_secret;
+    const authHeader = request.headers.get("authorization");
+    const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : null;
+    const querySecret = request.nextUrl.searchParams.get("secret");
+    const providedSecret = bearerToken || querySecret;
+    if (configuredSecret && providedSecret !== configuredSecret) {
+      return NextResponse.json({ error: "Unauthorized. Invalid cron secret." }, { status: 401 });
+    }
   }
 
   try {

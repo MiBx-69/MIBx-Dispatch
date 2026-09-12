@@ -1,6 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import Link from "next/link";
-import { Store, Truck, Webhook, Shield, User, MessageSquare } from "lucide-react";
+import { Store, Truck, Webhook, Shield, User, MessageSquare, RefreshCw } from "lucide-react";
 
 export const metadata = { title: "Settings" };
 
@@ -71,6 +71,15 @@ export default async function SettingsPage() {
       color: "text-rose-400",
       bg: "bg-rose-500/10",
       isConfigured: settings?.delivery_charge_inside_dhaka !== null,
+    },
+    {
+      title: "Sync Scheduler",
+      description: "Configure Upstash QStash for automated Pathao courier status sync (Vercel free-tier cron alternative).",
+      icon: RefreshCw,
+      href: "/settings/sync",
+      color: "text-violet-400",
+      bg: "bg-violet-500/10",
+      isConfigured: !!(process.env.QSTASH_CURRENT_SIGNING_KEY || settings?.cron_secret || process.env.CRON_SECRET),
     },
   ];
 

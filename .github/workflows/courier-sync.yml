@@ -1,37 +1,37 @@
-name: Courier Sync Cron
+name: Courier Sync (Manual / Backup)
 
 on:
-  schedule:
-    # Runs every 2 hours (0:00, 2:00, 4:00, etc. UTC)
-    - cron: '0 */2 * * *'
-  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+  workflow_dispatch: # Manual trigger only — QStash handles automated scheduling
+    inputs:
+      reason:
+        description: 'Reason for manual trigger'
+        required: false
+        default: 'Manual sync requested'
 
 jobs:
   sync-courier:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Trigger Courier Sync Endpoint
+      - name: Trigger Courier Sync via QStash
         run: |
-          echo "Triggering courier sync on orders.universesraw.com..."
-          
-          SECRET="${{ secrets.CRON_SECRET }}"
-          if [ -n "$SECRET" ]; then
-            RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST "https://orders.universesraw.com/api/cron/courier-sync" \
-              -H "Authorization: Bearer $SECRET" \
-              -H "Content-Type: application/json")
-          else
-            RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST "https://orders.universesraw.com/api/cron/courier-sync" \
-              -H "Content-Type: application/json")
-          fi
-          
-          echo "Response:"
+          echo "Triggering courier sync via QStash for orders.universesraw.com..."
+          echo "Reason: ${{ github.event.inputs.reason }}"
+
+          # Use QStash to publish a message so the endpoint receives a properly-signed request
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+            -X POST "https://qstash-us-east-1.upstash.io/v2/publish/https://orders.universesraw.com/api/cron/courier-sync" \
+            -H "Authorization: Bearer ${{ secrets.QSTASH_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"trigger":"manual","source":"github-actions"}')
+
+          echo "QStash Response:"
           echo "$RESPONSE"
-          
+
           STATUS=$(echo "$RESPONSE" | tr -d '\r' | grep "HTTP_STATUS:" | cut -d':' -f2)
           if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ]; then
-            echo "Courier sync executed successfully with HTTP $STATUS"
+            echo "✅ QStash message published successfully (HTTP $STATUS). Sync will execute shortly."
           else
-            echo "Failed with HTTP $STATUS"
+            echo "❌ Failed to publish to QStash (HTTP $STATUS)"
             exit 1
           fi

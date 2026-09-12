@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { formatBstDate } from "@/lib/reporting-engine";
 
 export async function GET(request: NextRequest) {
   try {
@@ -29,10 +30,9 @@ export async function GET(request: NextRequest) {
           shopify_created_at, 
           customer_name, 
           customer_phone, 
-          customer_address,
+          shipping_address,
           total_price, 
           subtotal_price, 
-          delivery_fee,
           internal_status,
           fulfillment_status,
           fraud_status,
@@ -212,7 +212,8 @@ export async function GET(request: NextRequest) {
 
     const orderRows = orders.map((o: any) => {
       const date = o.shopify_created_at ? new Date(o.shopify_created_at).toLocaleString() : "";
-      const city = o.customer_address?.city || "";
+      const city = o.shipping_address?.city || o.shipping_address?.province || "";
+      const deliveryFee = Math.max(0, Math.round(Number(o.total_price || 0) - Number(o.subtotal_price || 0)));
       
       let itemsCount = 0;
       let productsList = "";
@@ -231,7 +232,7 @@ export async function GET(request: NextRequest) {
         escapeCsv(city),
         o.total_price != null ? o.total_price : 0,
         o.subtotal_price != null ? o.subtotal_price : 0,
-        o.delivery_fee != null ? o.delivery_fee : 0,
+        deliveryFee,
         escapeCsv(o.internal_status),
         escapeCsv(o.fulfillment_status),
         escapeCsv(o.fraud_status),
@@ -364,8 +365,8 @@ export async function GET(request: NextRequest) {
       ...returnsSection
     ].join("\n");
 
-    const fileStartDate = startDate.split("T")[0];
-    const fileEndDate = endDate.split("T")[0];
+    const fileStartDate = formatBstDate(startDate);
+    const fileEndDate = formatBstDate(endDate);
 
     return new NextResponse(finalCsv, {
       headers: {
