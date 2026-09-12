@@ -34,6 +34,17 @@ export async function PATCH(
 
   if (status === "cancelled") {
     await supabase
+      .from("orders")
+      .update({
+        cancel_reason: order.cancel_reason || "Cancelled by Admin",
+        returned_at: null,
+        return_reason: null,
+      })
+      .eq("id", id);
+
+    await supabase.from("returns").delete().eq("order_id", id);
+
+    await supabase
       .from("dispatches")
       .update({
         is_cancelled: true,

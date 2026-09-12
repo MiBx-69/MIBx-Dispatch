@@ -106,11 +106,16 @@ export function OrdersClient({
             // Prevent duplicates
             if (prev.some((o) => o.id === newOrder.id)) return prev;
             
-            // Optionally filter by effectiveStatus
             const resolvedNewStatus = getOrderDisplayStatus(newOrder);
+            const isCancelled = resolvedNewStatus === "cancelled" || newOrder.internal_status === "cancelled" || !!newOrder.cancel_reason || newOrder.financial_status === "voided";
+
+            // If on Pending Actions tab, never insert cancelled orders
+            if ((!effectiveStatus || effectiveStatus === "all") && isCancelled) {
+              return prev;
+            }
+
             const matchesFilter =
-              !effectiveStatus ||
-              effectiveStatus === "all" ||
+              (!effectiveStatus || effectiveStatus === "all" ? !isCancelled && !newOrder.is_archived && newOrder.internal_status !== "dispatched" && !newOrder.pathao_consignment_id : false) ||
               resolvedNewStatus === effectiveStatus ||
               (effectiveStatus === "hold" && resolvedNewStatus === "hold") ||
               (effectiveStatus === "on_hold" && resolvedNewStatus === "hold") ||
@@ -128,6 +133,37 @@ export function OrdersClient({
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, (payload) => {
           const updatedOrder = payload.new as Order;
           setOrdersList((prev) => {
+            const isPendingActionsTab = !effectiveStatus || effectiveStatus === "all";
+            const resolvedStatus = getOrderDisplayStatus(updatedOrder);
+            const isCancelled = resolvedStatus === "cancelled" || updatedOrder.internal_status === "cancelled" || !!updatedOrder.cancel_reason || updatedOrder.financial_status === "voided";
+
+            // If on "Pending Actions" tab and order is cancelled (or dispatched/archived), remove it automatically!
+            if (
+              isPendingActionsTab &&
+              (isCancelled ||
+                updatedOrder.is_archived ||
+                updatedOrder.internal_status === "dispatched" ||
+                !!updatedOrder.pathao_consignment_id ||
+                updatedOrder.fulfillment_status === "fulfilled")
+            ) {
+              return prev.filter((o) => o.id !== updatedOrder.id);
+            }
+
+            // If on a specific tab (e.g., preparing, hold) and order became cancelled, remove it!
+            if (
+              effectiveStatus &&
+              effectiveStatus !== "cancelled" &&
+              effectiveStatus !== "everything" &&
+              isCancelled
+            ) {
+              return prev.filter((o) => o.id !== updatedOrder.id);
+            }
+
+            // If on Cancelled tab, and order became cancelled, ensure it's displayed
+            if (effectiveStatus === "cancelled" && !isCancelled) {
+              return prev.filter((o) => o.id !== updatedOrder.id);
+            }
+
             return prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o));
           });
         })
@@ -307,7 +343,18 @@ export function OrdersClient({
       toast.success(`${ids.length} orders updated to ${status}`);
       setSelected(new Set());
       router.refresh();
-      setOrdersList(prev => prev.map(o => ids.includes(o.id) ? { ...o, internal_status: status } : o));
+
+      const isPendingActionsTab = !effectiveStatus || effectiveStatus === "all";
+      if (status === "cancelled") {
+        if (isPendingActionsTab || (effectiveStatus && effectiveStatus !== "cancelled" && effectiveStatus !== "everything")) {
+          // Immediately remove cancelled orders from Pending Actions / active tabs
+          setOrdersList(prev => prev.filter(o => !ids.includes(o.id)));
+        } else {
+          setOrdersList(prev => prev.map(o => ids.includes(o.id) ? { ...o, internal_status: status, cancel_reason: "Cancelled by Admin" } : o));
+        }
+      } else {
+        setOrdersList(prev => prev.map(o => ids.includes(o.id) ? { ...o, internal_status: status } : o));
+      }
     } catch {
       toast.error("Bulk update failed");
     }
@@ -788,7 +835,22 @@ export function OrdersClient({
 
       {/* Order List */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-        {ordersList.map((order) => {
+        {ordersList.filter((order) => {
+          const isPendingActions = !effectiveStatus || effectiveStatus === "all";
+          if (isPendingActions) {
+            if (
+              order.internal_status === "cancelled" ||
+              !!order.cancel_reason ||
+              order.financial_status === "voided" ||
+              order.is_archived ||
+              order.internal_status === "dispatched" ||
+              !!order.pathao_consignment_id
+            ) {
+              return false;
+            }
+          }
+          return true;
+        }).map((order) => {
           const isSelected = selected.has(order.id);
           const lineItems = (order.line_items as any[]) || [];
           const isDispatchedOrCancelled = order.internal_status === "dispatched" || order.internal_status === "delivered" || order.internal_status === "returned" || order.internal_status === "cancelled";

@@ -45,6 +45,8 @@ export default async function OrdersPage({
       .or("internal_status.in.(preparing,in_progress),fulfillment_status.in.(in_progress,partial)")
       .neq("internal_status", "dispatched")
       .neq("internal_status", "cancelled")
+      .is("cancel_reason", null)
+      .neq("financial_status", "voided")
       .is("pathao_consignment_id", null);
   } else if (params.status === "on_hold" || params.status === "hold") {
     query = query
@@ -52,23 +54,34 @@ export default async function OrdersPage({
       .or("internal_status.in.(hold,on_hold),fulfillment_status.in.(on_hold,hold)")
       .neq("internal_status", "dispatched")
       .neq("internal_status", "cancelled")
+      .is("cancel_reason", null)
+      .neq("financial_status", "voided")
       .is("pathao_consignment_id", null);
   } else if (params.status === "dispatched") {
     query = query
       .eq("is_archived", false)
       .neq("internal_status", "cancelled")
+      .is("cancel_reason", null)
+      .neq("financial_status", "voided")
       .or("internal_status.eq.dispatched,fulfillment_status.eq.fulfilled");
   } else if (params.status === "delivered") {
     query = query.eq("is_archived", false).eq("internal_status", "delivered");
     if (startDateStr && endDateStr) {
       query = query.gte("shopify_created_at", startDateStr).lte("shopify_created_at", endDateStr);
     }
+  } else if (params.status === "cancelled") {
+    query = query
+      .eq("is_archived", false)
+      .or("internal_status.eq.cancelled,cancel_reason.not.is.null,financial_status.eq.voided");
   } else if (!params.status || params.status === "all" || params.status === "pending" || params.status === "unfulfilled") {
-    query = query.eq("is_archived", false)
-                 .neq("internal_status", "dispatched")
-                 .neq("internal_status", "cancelled")
-                 .is("pathao_consignment_id", null)
-                 .or("fulfillment_status.neq.fulfilled,fulfillment_status.is.null");
+    query = query
+      .eq("is_archived", false)
+      .neq("internal_status", "dispatched")
+      .neq("internal_status", "cancelled")
+      .is("cancel_reason", null)
+      .neq("financial_status", "voided")
+      .is("pathao_consignment_id", null)
+      .or("fulfillment_status.neq.fulfilled,fulfillment_status.is.null");
   } else {
     query = query.eq("is_archived", false).eq("internal_status", params.status);
   }
@@ -110,6 +123,8 @@ export default async function OrdersPage({
     .or("internal_status.in.(preparing,in_progress),fulfillment_status.in.(in_progress,partial)")
     .neq("internal_status", "dispatched")
     .neq("internal_status", "cancelled")
+    .is("cancel_reason", null)
+    .neq("financial_status", "voided")
     .is("pathao_consignment_id", null);
 
   const { count: dispatchedCount } = await supabase
@@ -117,6 +132,8 @@ export default async function OrdersPage({
     .select("*", { count: "exact", head: true })
     .eq("is_archived", false)
     .neq("internal_status", "cancelled")
+    .is("cancel_reason", null)
+    .neq("financial_status", "voided")
     .or("internal_status.eq.dispatched,fulfillment_status.eq.fulfilled");
 
   // Accurate count of on hold orders (combines Shopify on_hold and local hold)
@@ -127,13 +144,15 @@ export default async function OrdersPage({
     .or("internal_status.in.(hold,on_hold),fulfillment_status.in.(on_hold,hold)")
     .neq("internal_status", "dispatched")
     .neq("internal_status", "cancelled")
+    .is("cancel_reason", null)
+    .neq("financial_status", "voided")
     .is("pathao_consignment_id", null);
 
   const { count: cancelledCount } = await supabase
     .from("orders")
     .select("*", { count: "exact", head: true })
     .eq("is_archived", false)
-    .eq("internal_status", "cancelled");
+    .or("internal_status.eq.cancelled,cancel_reason.not.is.null,financial_status.eq.voided");
 
   // Get Pathao location lists for dispatch modal
   const { data: settings } = await supabase.from("app_settings").select("pathao_store_id").single();

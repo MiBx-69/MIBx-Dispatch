@@ -33,6 +33,8 @@ export async function GET(request: NextRequest) {
         .or("internal_status.in.(preparing,in_progress),fulfillment_status.in.(in_progress,partial)")
         .neq("internal_status", "dispatched")
         .neq("internal_status", "cancelled")
+        .is("cancel_reason", null)
+        .neq("financial_status", "voided")
         .is("pathao_consignment_id", null);
     } else if (status === "on_hold" || status === "hold") {
       query = query
@@ -40,9 +42,16 @@ export async function GET(request: NextRequest) {
         .or("internal_status.in.(hold,on_hold),fulfillment_status.in.(on_hold,hold)")
         .neq("internal_status", "dispatched")
         .neq("internal_status", "cancelled")
+        .is("cancel_reason", null)
+        .neq("financial_status", "voided")
         .is("pathao_consignment_id", null);
     } else if (status === "dispatched") {
-      query = query.eq("is_archived", false).or("internal_status.eq.dispatched,fulfillment_status.eq.fulfilled");
+      query = query
+        .eq("is_archived", false)
+        .neq("internal_status", "cancelled")
+        .is("cancel_reason", null)
+        .neq("financial_status", "voided")
+        .or("internal_status.eq.dispatched,fulfillment_status.eq.fulfilled");
     } else if (status === "pending") {
       query = query
         .eq("is_archived", false)
@@ -50,19 +59,31 @@ export async function GET(request: NextRequest) {
         .not("fulfillment_status", "in", '("on_hold","in_progress","partial")')
         .neq("internal_status", "dispatched")
         .neq("internal_status", "cancelled")
+        .is("cancel_reason", null)
+        .neq("financial_status", "voided")
         .is("pathao_consignment_id", null);
     } else if (status === "unfulfilled") {
-      query = query.eq("is_archived", false)
-                   .or("fulfillment_status.eq.unfulfilled,fulfillment_status.is.null")
-                   .neq("internal_status", "dispatched")
-                   .neq("internal_status", "cancelled")
-                   .is("pathao_consignment_id", null);
+      query = query
+        .eq("is_archived", false)
+        .or("fulfillment_status.eq.unfulfilled,fulfillment_status.is.null")
+        .neq("internal_status", "dispatched")
+        .neq("internal_status", "cancelled")
+        .is("cancel_reason", null)
+        .neq("financial_status", "voided")
+        .is("pathao_consignment_id", null);
+    } else if (status === "cancelled") {
+      query = query
+        .eq("is_archived", false)
+        .or("internal_status.eq.cancelled,cancel_reason.not.is.null,financial_status.eq.voided");
     } else if (status === "all") {
-      query = query.eq("is_archived", false)
-                   .neq("internal_status", "dispatched")
-                   .neq("internal_status", "cancelled")
-                   .is("pathao_consignment_id", null)
-                   .or("fulfillment_status.neq.fulfilled,fulfillment_status.is.null");
+      query = query
+        .eq("is_archived", false)
+        .neq("internal_status", "dispatched")
+        .neq("internal_status", "cancelled")
+        .is("cancel_reason", null)
+        .neq("financial_status", "voided")
+        .is("pathao_consignment_id", null)
+        .or("fulfillment_status.neq.fulfilled,fulfillment_status.is.null");
     } else {
       query = query.eq("is_archived", false).eq("internal_status", status);
     }
