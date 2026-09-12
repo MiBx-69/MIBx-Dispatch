@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { format, subDays, startOfMonth } from "date-fns";
 import { Download, Calendar, BarChart, ShoppingCart, Truck, CheckCircle, XCircle, RotateCcw, TrendingUp, Award, FileSpreadsheet } from "lucide-react";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
@@ -228,10 +229,19 @@ export function ReportsClient({
       {/* Header and Controls */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
         <div>
-          <h1 className="text-xl font-bold text-white flex items-center gap-2">
-            <BarChart className="w-5 h-5 text-indigo-400" />
-            Reports & Analytics
-          </h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-bold text-white flex items-center gap-2">
+              <BarChart className="w-5 h-5 text-indigo-400" />
+              Reports & Analytics
+            </h1>
+            <Link
+              href="/reports/analytics"
+              className="px-3 py-1 bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+            >
+              <TrendingUp size={13} />
+              <span>Zone & COD Analytics &rarr;</span>
+            </Link>
+          </div>
           <p className="text-xs text-zinc-400 mt-0.5">Generate custom reports and export data</p>
         </div>
         
