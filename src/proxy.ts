@@ -24,7 +24,11 @@ export async function proxy(request: NextRequest) {
           );
           supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
+            supabaseResponse.cookies.set(name, value, {
+              ...options,
+              sameSite: "none",
+              secure: true,
+            })
           );
         },
       },
@@ -42,8 +46,8 @@ export async function proxy(request: NextRequest) {
   const publicPaths = [
     "/login",
     "/api/auth",
-    "/api/webhooks/shopify",
-    "/api/webhooks/pathao",
+    "/api/webhooks",
+    "/api/pathao",
     "/site.webmanifest",
     "/manifest.json",
     "/robots.txt",

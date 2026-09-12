@@ -4,7 +4,7 @@ import { useState, useTransition, useCallback, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
-  Search, Filter, ChevronLeft, ChevronRight,
+  Search, Filter, ChevronLeft, ChevronRight, ChevronDown,
   Truck, Package, X, CheckCircle, PauseCircle, AlertCircle, Archive, ArchiveRestore, Copy, Check, MessageSquare, ShieldCheck, List, Loader2, RotateCcw, UploadCloud
 } from "lucide-react";
 import { StatusBadge, ShopifyFinancialBadge, ShopifyFulfillmentBadge } from "@/components/ui/status-badge";
@@ -28,10 +28,7 @@ const STATUS_FILTERS = [
   { value: "hold", label: "On Hold" },
   { value: "dispatched", label: "Dispatched" },
   { value: "delivered", label: "Delivered" },
-  { value: "pending", label: "Pending" },
-  { value: "unfulfilled", label: "Unfulfilled" },
   { value: "cancelled", label: "Cancelled" },
-  { value: "delayed", label: "Delayed" },
   { value: "returned", label: "Returned" },
   { value: "everything", label: "Everything" },
   { value: "archived", label: "Removed" },
@@ -343,8 +340,8 @@ export function OrdersClient({
   const cancelReturn = async (orderIds: string[]) => {
     if (orderIds.length === 0) return;
     const confirmMsg = orderIds.length === 1 
-      ? "Mark this order as Not Delivered & Not Returned? It will restore the order to its old status." 
-      : `Mark ${orderIds.length} orders as Not Delivered & Not Returned? It will restore the orders to their old status.`;
+      ? "Mark this order as Unreturned? It will remove the return record and restore the order to its previous status." 
+      : `Mark ${orderIds.length} orders as Unreturned? It will remove the return records and restore the orders to their previous status.`;
     if (!confirm(confirmMsg)) return;
 
     try {
@@ -356,7 +353,7 @@ export function OrdersClient({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to update orders");
 
-      toast.success(`Marked ${data.processed} order(s) as Not Delivered & Not Returned`);
+      toast.success(`Marked ${data.processed} order(s) as Unreturned`);
       setSelected(new Set());
       router.refresh();
       // Optimistically update status to dispatched if consignment/dispatch exists, else pending
@@ -373,8 +370,8 @@ export function OrdersClient({
   const cancelDelivery = async (orderIds: string[]) => {
     if (orderIds.length === 0) return;
     const confirmMsg = orderIds.length === 1 
-      ? "Mark this order as Not Delivered & Not Returned? It will restore the order to its old status." 
-      : `Mark ${orderIds.length} orders as Not Delivered & Not Returned? It will restore the orders to their old status.`;
+      ? "Mark this order as Undelivered? It will restore the order to its previous status." 
+      : `Mark ${orderIds.length} orders as Undelivered? It will restore the orders to their previous status.`;
     if (!confirm(confirmMsg)) return;
 
     try {
@@ -386,7 +383,7 @@ export function OrdersClient({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to update orders");
 
-      toast.success(`Marked ${data.processed} order(s) as Not Delivered & Not Returned`);
+      toast.success(`Marked ${data.processed} order(s) as Undelivered`);
       setSelected(new Set());
       router.refresh();
       // Optimistically update status
@@ -436,6 +433,33 @@ export function OrdersClient({
   const [returnModalOpen, setReturnModalOpen] = useState(false);
   const [deliverModalOpen, setDeliverModalOpen] = useState(false);
   const [bulkImportDeliveriesOpen, setBulkImportDeliveriesOpen] = useState(false);
+  const [isCourierSyncing, setIsCourierSyncing] = useState(false);
+  const [courierMenuOpen, setCourierMenuOpen] = useState(false);
+
+  const handleCourierSync = async (days: number | "all" = 7) => {
+    setCourierMenuOpen(false);
+    setIsCourierSyncing(true);
+    const toastId = toast.loading(
+      days === "all"
+        ? "Scanning all Pathao courier dispatches (Full History)..."
+        : "Scanning courier orders for the last 7 days..."
+    );
+    try {
+      const res = await fetch(`/api/pathao/sync-status?days=${days}`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to scan courier status");
+
+      toast.success(
+        `Courier Sync Complete: Checked ${data.checked || data.totalChecked} parcels (${days === "all" ? "All History" : "Last 7 Days"}), updated ${data.updated || data.updatedCount} orders.`,
+        { id: toastId, duration: 5000 }
+      );
+      router.refresh();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to sync courier status", { id: toastId });
+    } finally {
+      setIsCourierSyncing(false);
+    }
+  };
 
   const singleOrder = selected.size === 1 ? ordersList.find(o => o.id === Array.from(selected)[0]) : null;
   const singleLineItems = singleOrder ? ((singleOrder.line_items as any[]) || []) : [];
@@ -504,6 +528,52 @@ export function OrdersClient({
                 `Select All (${total})`
               )}
             </button>
+            {/* Sync Courier (7d or All) Dropdown */}
+            <div className="relative flex items-center flex-1 sm:flex-initial">
+              <button
+                type="button"
+                onClick={() => handleCourierSync(7)}
+                disabled={isCourierSyncing}
+                className="flex-1 sm:flex-initial px-3 py-2 sm:py-2.5 bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-l-xl text-xs sm:text-sm font-medium hover:bg-blue-600/30 transition-colors whitespace-nowrap flex items-center justify-center gap-1.5 disabled:opacity-50"
+                title="Scan Pathao courier status for all orders in the last 7 days and update DB + Shopify"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 shrink-0 ${isCourierSyncing ? "animate-spin" : ""}`} />
+                <span>{isCourierSyncing ? "Syncing..." : "Sync Courier (7d)"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCourierMenuOpen(!courierMenuOpen)}
+                disabled={isCourierSyncing}
+                className="px-2 py-2 sm:py-2.5 bg-blue-600/20 text-blue-400 border-t border-r border-b border-l-0 border-blue-500/30 rounded-r-xl text-xs sm:text-sm font-medium hover:bg-blue-600/30 transition-colors disabled:opacity-50"
+                title="Options: 7 Days or Complete Scan"
+              >
+                <ChevronDown size={14} />
+              </button>
+
+              {courierMenuOpen && (
+                <div className="absolute right-0 top-full mt-1.5 w-60 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95">
+                  <div className="px-2.5 py-1 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+                    Courier Scan Range
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCourierSync(7)}
+                    className="w-full text-left px-2.5 py-2 rounded-lg text-xs text-zinc-200 hover:text-white hover:bg-zinc-800 transition-colors"
+                  >
+                    <div className="font-medium text-blue-400">Scan Last 7 Days (Default)</div>
+                    <div className="text-[10px] text-zinc-400">Fast scan of recent deliveries</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCourierSync("all")}
+                    className="w-full text-left px-2.5 py-2 rounded-lg text-xs text-zinc-200 hover:text-white hover:bg-zinc-800 transition-colors"
+                  >
+                    <div className="font-medium text-indigo-400">Complete Scan (All Dispatches)</div>
+                    <div className="text-[10px] text-zinc-400">Scan all past orders on Pathao</div>
+                  </button>
+                </div>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => setBulkImportDeliveriesOpen(true)}
@@ -533,7 +603,7 @@ export function OrdersClient({
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
           {STATUS_FILTERS.map((f) => {
             const isSelected =
-              (f.value === "all" && (!effectiveStatus || effectiveStatus === "all")) ||
+              (f.value === "all" && (!effectiveStatus || effectiveStatus === "all" || effectiveStatus === "pending" || effectiveStatus === "unfulfilled")) ||
               (f.value === "preparing" && (effectiveStatus === "preparing" || effectiveStatus === "in_progress")) ||
               (f.value === "hold" && (effectiveStatus === "hold" || effectiveStatus === "on_hold")) ||
               (effectiveStatus === f.value);
@@ -670,25 +740,39 @@ export function OrdersClient({
                 <RotateCcw size={14} /> Return
               </button>
 
-              {Array.from(selected).some(id => ordersList.find(o => o.id === id)?.internal_status === "returned") && (
-                <button
-                  onClick={() => cancelReturn(Array.from(selected).filter(id => ordersList.find(o => o.id === id)?.internal_status === "returned"))}
-                  className="flex items-center gap-1 bg-rose-600/20 text-rose-300 hover:bg-rose-600/30 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors border border-rose-500/40 whitespace-nowrap shadow-sm"
-                  title="Mark as Not Delivered & Not Returned (moves to old status)"
-                >
-                  <RotateCcw size={13} /> Not Returned
-                </button>
-              )}
+              {(() => {
+                const selOrders = Array.from(selected).map(id => ordersList.find(o => o.id === id)).filter(Boolean);
+                const deliveredIds = selOrders.filter(o => o?.internal_status === "delivered" || o?.delivered_at || getOrderDisplayStatus(o!) === "delivered").map(o => o!.id);
+                const returnedIds = selOrders.filter(o => o?.internal_status === "returned" || o?.returned_at || (o as any)?.returns?.length > 0 || getOrderDisplayStatus(o!) === "returned").map(o => o!.id);
 
-              {Array.from(selected).some(id => ordersList.find(o => o.id === id)?.internal_status === "delivered") && (
-                <button
-                  onClick={() => cancelDelivery(Array.from(selected).filter(id => ordersList.find(o => o.id === id)?.internal_status === "delivered"))}
-                  className="flex items-center gap-1 bg-amber-600/20 text-amber-300 hover:bg-amber-600/30 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors border border-amber-500/40 whitespace-nowrap shadow-sm"
-                  title="Mark as Not Delivered & Not Returned (moves to old status)"
-                >
-                  <RotateCcw size={13} /> Not Delivered
-                </button>
-              )}
+                return (
+                  <>
+                    <button
+                      onClick={() => cancelDelivery(deliveredIds.length > 0 ? deliveredIds : Array.from(selected))}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border whitespace-nowrap shadow-sm ${
+                        deliveredIds.length > 0 
+                          ? "bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border-amber-500/40" 
+                          : "bg-zinc-800 text-zinc-400 hover:text-amber-300 hover:bg-zinc-700 border-zinc-700"
+                      }`}
+                      title="Mark selected orders as Undelivered (restores previous status)"
+                    >
+                      <RotateCcw size={13} /> {deliveredIds.length > 0 ? `Undelivered (${deliveredIds.length})` : "Undelivered"}
+                    </button>
+
+                    <button
+                      onClick={() => cancelReturn(returnedIds.length > 0 ? returnedIds : Array.from(selected))}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border whitespace-nowrap shadow-sm ${
+                        returnedIds.length > 0 
+                          ? "bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border-rose-500/40" 
+                          : "bg-zinc-800 text-zinc-400 hover:text-rose-300 hover:bg-zinc-700 border-zinc-700"
+                      }`}
+                      title="Mark selected orders as Unreturned (removes return record and restores previous status)"
+                    >
+                      <RotateCcw size={13} /> {returnedIds.length > 0 ? `Unreturned (${returnedIds.length})` : "Unreturned"}
+                    </button>
+                  </>
+                );
+              })()}
 
               <div className="w-px h-6 bg-zinc-700 mx-1 hidden sm:block"></div>
               
@@ -922,25 +1006,34 @@ export function OrdersClient({
                   </button>
                 )}
 
-                {order.internal_status === "returned" && (
-                  <button 
-                    onClick={() => cancelReturn([order.id])}
-                    className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded-md bg-rose-600/20 text-rose-300 border border-rose-500/35 hover:bg-rose-600/30 transition-colors whitespace-nowrap ml-auto"
-                    title="Mark order as Not Returned (moves back to old status)"
-                  >
-                    <RotateCcw size={11} /> Not Returned
-                  </button>
-                )}
+                {(() => {
+                  const isOrderDelivered = order.internal_status === "delivered" || Boolean(order.delivered_at) || getOrderDisplayStatus(order) === "delivered";
+                  const isOrderReturned = order.internal_status === "returned" || Boolean(order.returned_at) || Boolean((order as any).returns?.length) || getOrderDisplayStatus(order) === "returned";
 
-                {order.internal_status === "delivered" && (
-                  <button 
-                    onClick={() => cancelDelivery([order.id])}
-                    className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded-md bg-amber-600/20 text-amber-300 border border-amber-500/35 hover:bg-amber-600/30 transition-colors whitespace-nowrap ml-auto"
-                    title="Mark order as Not Delivered (moves back to old status)"
-                  >
-                    <RotateCcw size={11} /> Not Delivered
-                  </button>
-                )}
+                  return (
+                    <>
+                      {isOrderDelivered && (
+                        <button 
+                          onClick={() => cancelDelivery([order.id])}
+                          className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/35 hover:bg-amber-500/30 transition-colors whitespace-nowrap ml-auto"
+                          title="Mark order as Undelivered (restores previous status)"
+                        >
+                          <RotateCcw size={11} /> Undelivered
+                        </button>
+                      )}
+
+                      {isOrderReturned && (
+                        <button 
+                          onClick={() => cancelReturn([order.id])}
+                          className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/35 hover:bg-rose-500/30 transition-colors whitespace-nowrap ml-auto"
+                          title="Mark order as Unreturned (removes return record and restores previous status)"
+                        >
+                          <RotateCcw size={11} /> Unreturned
+                        </button>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           );

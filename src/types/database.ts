@@ -69,6 +69,16 @@ export type Database = {
           sms_auto_dispatch_template: string | null
           sms_auto_order_enabled: boolean | null
           sms_auto_order_template: string | null
+          sms_auto_out_for_delivery_enabled: boolean | null
+          sms_auto_out_for_delivery_template: string | null
+          sms_auto_returned_enabled: boolean | null
+          sms_auto_returned_template: string | null
+          sms_auto_on_hold_enabled: boolean | null
+          sms_auto_on_hold_template: string | null
+          sms_master_enabled: boolean | null
+          sms_sender_id_enabled: boolean | null
+          sms_non_sender_id_enabled: boolean | null
+          sms_sender_id_event_types: string | null
           sms_sender_id: string | null
           system_name: string
           updated_at: string
@@ -102,6 +112,16 @@ export type Database = {
           sms_auto_dispatch_template?: string | null
           sms_auto_order_enabled?: boolean | null
           sms_auto_order_template?: string | null
+          sms_auto_out_for_delivery_enabled?: boolean | null
+          sms_auto_out_for_delivery_template?: string | null
+          sms_auto_returned_enabled?: boolean | null
+          sms_auto_returned_template?: string | null
+          sms_auto_on_hold_enabled?: boolean | null
+          sms_auto_on_hold_template?: string | null
+          sms_master_enabled?: boolean | null
+          sms_sender_id_enabled?: boolean | null
+          sms_non_sender_id_enabled?: boolean | null
+          sms_sender_id_event_types?: string | null
           sms_sender_id?: string | null
           system_name?: string
           updated_at?: string
@@ -135,6 +155,16 @@ export type Database = {
           sms_auto_dispatch_template?: string | null
           sms_auto_order_enabled?: boolean | null
           sms_auto_order_template?: string | null
+          sms_auto_out_for_delivery_enabled?: boolean | null
+          sms_auto_out_for_delivery_template?: string | null
+          sms_auto_returned_enabled?: boolean | null
+          sms_auto_returned_template?: string | null
+          sms_auto_on_hold_enabled?: boolean | null
+          sms_auto_on_hold_template?: string | null
+          sms_master_enabled?: boolean | null
+          sms_sender_id_enabled?: boolean | null
+          sms_non_sender_id_enabled?: boolean | null
+          sms_sender_id_event_types?: string | null
           sms_sender_id?: string | null
           system_name?: string
           updated_at?: string
@@ -337,6 +367,7 @@ export type Database = {
           internal_status: string
           is_archived: boolean | null
           line_items: Json
+          delivered_at: string | null
           note: string | null
           pathao_consignment_id: string | null
           pathao_delivery_status: string | null
@@ -378,6 +409,7 @@ export type Database = {
           internal_status?: string
           is_archived?: boolean | null
           line_items?: Json
+          delivered_at?: string | null
           note?: string | null
           pathao_consignment_id?: string | null
           pathao_delivery_status?: string | null
@@ -419,6 +451,7 @@ export type Database = {
           internal_status?: string
           is_archived?: boolean | null
           line_items?: Json
+          delivered_at?: string | null
           note?: string | null
           pathao_consignment_id?: string | null
           pathao_delivery_status?: string | null

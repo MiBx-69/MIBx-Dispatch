@@ -24,13 +24,13 @@ export async function GET(request: NextRequest) {
   const cookieStore = await cookies();
   cookieStore.set("shopify_oauth_nonce", nonce, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    secure: true,
+    sameSite: "none",
     maxAge: 10 * 60, // 10 minutes
   });
 
   const redirectUri = `${appUrl.replace(/\/$/, '')}/api/auth/shopify/callback`;
-  const scopes = "read_orders,write_orders,read_customers,write_customers,read_fulfillments,write_fulfillments,read_inventory,write_inventory";
+  const scopes = "read_all_orders,read_customers,write_customers,read_fulfillments,write_fulfillments,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders,read_orders,write_orders,read_products,read_inventory,write_inventory,read_assigned_fulfillment_orders,write_assigned_fulfillment_orders,read_third_party_fulfillment_orders,write_third_party_fulfillment_orders";
 
   const authUrl = `https://${shop}/admin/oauth/authorize?client_id=${clientId}&scope=${scopes}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${nonce}`;
 

@@ -1,6 +1,63 @@
 import { searchFraud } from "@/lib/fraudspy";
 import { updateShopifyCustomer, updateShopifyOrder } from "@/lib/shopify/client";
-import { analyzeCustomerRisk } from "@/lib/risk-analytics";
+import { analyzeCustomerRisk, type CustomerRiskAnalysis } from "@/lib/risk-analytics";
+
+export function buildFraudSpyCustomAttributes(fraudData: any, riskAnalysis: CustomerRiskAnalysis) {
+  const overall = fraudData.overall || {};
+  const delivered = Number(overall.delivered || 0);
+  const returned = Number(overall.returned || 0);
+  const total = Number(overall.total || (delivered + returned));
+  const successRatio = riskAnalysis.successRatio;
+  const returnRatio = riskAnalysis.returnRatio;
+  const reportsCount = fraudData.fraud_reports?.count || 0;
+
+  // Format courier breakdown string e.g. STEADFAST: 10/10, PATHAO: 4/5
+  const courierParts: string[] = [];
+  if (fraudData.couriers && typeof fraudData.couriers === "object") {
+    for (const [name, stats] of Object.entries(fraudData.couriers as Record<string, any>)) {
+      if (stats && (stats.total > 0 || stats.successful > 0 || stats.delivered > 0)) {
+        const dlv = stats.successful ?? stats.delivered ?? 0;
+        const tot = stats.total ?? (dlv + (stats.returned ?? 0));
+        courierParts.push(`${name.toUpperCase()}: ${dlv}/${tot}`);
+      }
+    }
+  }
+  const couriersSummary = courierParts.length > 0 ? courierParts.join(", ") : "No courier data";
+
+  // Format customer complaints summary
+  let customerReportSummary = "None (Clean Record)";
+  if (reportsCount > 0) {
+    const reportDetails = fraudData.fraud_reports?.reports?.map((r: any) => 
+      `${r.complain_details || r.category || 'Complaint'}`
+    ).filter(Boolean).slice(0, 2).join("; ");
+    customerReportSummary = `${reportsCount} Complaint(s)${reportDetails ? `: ${reportDetails}` : ''}`;
+  }
+
+  return [
+    { key: "FraudSpy Status", value: riskAnalysis.riskLevel.toUpperCase() },
+    { key: "FraudSpy Score", value: riskAnalysis.riskScore.toString() },
+    { key: "FraudSpy Rating", value: riskAnalysis.ratingLabel },
+    { key: "FraudSpy Total Parcels", value: total.toString() },
+    { key: "FraudSpy Delivered", value: delivered.toString() },
+    { key: "FraudSpy Returned", value: returned.toString() },
+    { key: "FraudSpy Success Ratio", value: `${successRatio}%` },
+    { key: "FraudSpy Return Ratio", value: `${returnRatio}%` },
+    { key: "FraudSpy Customer Reports", value: customerReportSummary },
+    { key: "FraudSpy Couriers", value: couriersSummary },
+    { key: "FraudSpy Recommendation", value: riskAnalysis.recommendation },
+    { key: "FraudSpy Last Checked", value: new Date().toLocaleString() }
+  ];
+}
+
+export function buildFraudSpyCustomerNote(fraudData: any, riskAnalysis: CustomerRiskAnalysis) {
+  const reportsCount = fraudData.fraud_reports?.count || 0;
+  return `[FraudSpy Assessment]
+Status: ${riskAnalysis.riskLevel.toUpperCase()} (Score: ${riskAnalysis.riskScore}/100) - ${riskAnalysis.ratingLabel}
+Delivery Rate: ${riskAnalysis.successRatio}% (${fraudData.overall?.delivered || 0} delivered, ${fraudData.overall?.returned || 0} returned of ${fraudData.overall?.total || 0} total)
+Merchant Reports: ${reportsCount > 0 ? `${reportsCount} complaint(s) filed` : 'Clean record (0 complaints)'}
+Recommendation: ${riskAnalysis.recommendation}
+Checked: ${new Date().toLocaleString()}`;
+}
 
 export async function performFraudCheck(orderIdentifier: string, supabase: any) {
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderIdentifier);
@@ -45,8 +102,10 @@ export async function performFraudCheck(orderIdentifier: string, supabase: any) 
     .eq("id", order.id);
 
   const tag = `FraudSpy: ${fraud_status === 'fraud' ? 'High Risk' : fraud_status === 'risky' ? 'Medium Risk' : 'Safe'}`;
+  const customAttributes = buildFraudSpyCustomAttributes(fraudData, riskAnalysis);
+  const customerNote = buildFraudSpyCustomerNote(fraudData, riskAnalysis);
 
-  // 5. Update Shopify Customer Profile (Tags)
+  // 5. Update Shopify Customer Profile (Tags & Note)
   if (order.shopify_customer_id) {
     try {
       const { data: customerData } = await supabase.from("customers").select("shopify_tags").eq("shopify_id", order.shopify_customer_id).single();
@@ -55,7 +114,8 @@ export async function performFraudCheck(orderIdentifier: string, supabase: any) 
 
       await updateShopifyCustomer({
         id: `gid://shopify/Customer/${order.shopify_customer_id}`,
-        tags: mergedTags
+        tags: mergedTags,
+        note: customerNote,
       });
     } catch (shopifyError) {
       console.error("Failed to update Shopify customer profile:", shopifyError);
@@ -68,14 +128,7 @@ export async function performFraudCheck(orderIdentifier: string, supabase: any) 
       await updateShopifyOrder({
         id: `gid://shopify/Order/${order.shopify_order_id}`,
         tags: [tag, 'FraudSpy Verified'],
-        customAttributes: [
-          { key: "FraudSpy Status", value: fraud_status.toUpperCase() },
-          { key: "FraudSpy Score", value: fraud_score.toString() },
-          { key: "FraudSpy Delivered", value: (fraudData.overall?.delivered || 0).toString() },
-          { key: "FraudSpy Returned", value: (fraudData.overall?.returned || 0).toString() },
-          { key: "FraudSpy Success Ratio", value: `${fraudData.overall?.success_ratio || 0}%` },
-          { key: "FraudSpy Last Checked", value: new Date().toLocaleString() }
-        ]
+        customAttributes: customAttributes,
       });
     } catch (shopifyError) {
       console.error("Failed to update Shopify order:", shopifyError);

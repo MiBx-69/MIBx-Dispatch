@@ -104,10 +104,10 @@ export function DispatchesReportingHeader({
   const handleSyncCourier = async () => {
     setIsSyncing(true);
     try {
-      const res = await fetch("/api/pathao/sync-status", { method: "POST" });
+      const res = await fetch("/api/pathao/sync-status?days=7", { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to sync");
-      toast.success(`Sync complete! Checked ${data.totalChecked} parcels, updated ${data.updatedCount}.`);
+      toast.success(`Courier scan complete! Checked ${data.totalChecked} parcels from last 7 days, updated ${data.updatedCount}.`);
       router.refresh();
     } catch (err: any) {
       toast.error(err.message || "Failed to sync with courier");
@@ -146,10 +146,10 @@ export function DispatchesReportingHeader({
             onClick={handleSyncCourier}
             disabled={isSyncing}
             className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-indigo-300 bg-indigo-600/15 hover:bg-indigo-600/25 border border-indigo-500/25 transition-colors disabled:opacity-50"
-            title="Poll Pathao API to update active consignments"
+            title="Scan Pathao API to update all active consignments from the last 7 days"
           >
             <RefreshCw size={11} className={`text-indigo-400 ${isSyncing ? "animate-spin" : ""}`} />
-            <span>{isSyncing ? "Syncing..." : "Sync Courier"}</span>
+            <span>{isSyncing ? "Scanning 7d..." : "Sync Courier (7d)"}</span>
           </button>
 
           <button

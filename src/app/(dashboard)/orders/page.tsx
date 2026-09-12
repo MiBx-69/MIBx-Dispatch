@@ -63,21 +63,7 @@ export default async function OrdersPage({
     if (startDateStr && endDateStr) {
       query = query.gte("shopify_created_at", startDateStr).lte("shopify_created_at", endDateStr);
     }
-  } else if (params.status === "pending") {
-    query = query
-      .eq("is_archived", false)
-      .eq("internal_status", "pending")
-      .not("fulfillment_status", "in", '("on_hold","in_progress","partial")')
-      .neq("internal_status", "dispatched")
-      .neq("internal_status", "cancelled")
-      .is("pathao_consignment_id", null);
-  } else if (params.status === "unfulfilled") {
-    query = query.eq("is_archived", false)
-                 .or("fulfillment_status.eq.unfulfilled,fulfillment_status.is.null")
-                 .neq("internal_status", "dispatched")
-                 .neq("internal_status", "cancelled")
-                 .is("pathao_consignment_id", null);
-  } else if (!params.status || params.status === "all") {
+  } else if (!params.status || params.status === "all" || params.status === "pending" || params.status === "unfulfilled") {
     query = query.eq("is_archived", false)
                  .neq("internal_status", "dispatched")
                  .neq("internal_status", "cancelled")

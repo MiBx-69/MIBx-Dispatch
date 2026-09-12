@@ -110,13 +110,30 @@ async function pathaoFetch<T = any>(
     },
   });
 
-  const data = await response.json();
+  let currentResponse = response;
+  let attempts = 0;
+  while (currentResponse.status === 429 && attempts < 3) {
+    attempts++;
+    const backoff = attempts * 1500;
+    console.warn(`[Pathao API] Rate limited on ${endpoint}. Attempt ${attempts}, backing off ${backoff}ms...`);
+    await new Promise((resolve) => setTimeout(resolve, backoff));
+    currentResponse = await fetch(`${PATHAO_BASE_URL}${endpoint}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        ...(options.headers || {}),
+      },
+    });
+  }
 
-  if (!response.ok) {
+  const data = await currentResponse.json();
+
+  if (!currentResponse.ok) {
     console.error("[Pathao API Error response data]:", JSON.stringify(data, null, 2));
     const errorDetails = data?.errors ? JSON.stringify(data.errors) : "";
     throw new Error(
-      data?.message ? `${data.message} ${errorDetails}` : `Pathao API error: ${response.status}`
+      data?.message ? `${data.message} ${errorDetails}` : `Pathao API error: ${currentResponse.status}`
     );
   }
 

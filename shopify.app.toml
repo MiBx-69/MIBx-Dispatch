@@ -1,0 +1,21 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "564155a82ac56b69364f8c32e256f1b6"
+name = "MiBx Dispatch"
+application_url = "https://orders.universesraw.com"
+embedded = true
+
+[access_scopes]
+# Full access scopes for orders, fulfillment, inventory, customers, and products
+scopes = "read_all_orders,read_customers,write_customers,read_fulfillments,write_fulfillments,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders,read_orders,write_orders,read_products,read_inventory,write_inventory,read_assigned_fulfillment_orders,write_assigned_fulfillment_orders,read_third_party_fulfillment_orders,write_third_party_fulfillment_orders"
+optional_scopes = [ ]
+use_legacy_install_flow = true
+
+[auth]
+redirect_urls = [
+  "https://orders.universesraw.com/api/auth/shopify/callback",
+  "http://localhost:3000/api/auth/shopify/callback"
+]
+
+[webhooks]
+api_version = "2024-07"

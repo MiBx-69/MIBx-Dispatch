@@ -41,7 +41,11 @@ export function SendSMSModal({ isOpen, onClose, order }: SendSMSModalProps) {
     setLoading(true);
 
     try {
-      const result = await sendSMSAction(phone, message);
+      const result = await sendSMSAction(phone, message, {
+        orderId: order?.shopify_order_id,
+        orderName: order?.shopify_order_name,
+        customerName: order?.customer_name,
+      });
       if (result.success) {
         toast.success("Message sent successfully!");
         setTimeout(() => {

@@ -492,6 +492,11 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload, i
         const tag = `FraudSpy: ${riskLevel === 'fraud' ? 'High Risk' : riskLevel === 'risky' ? 'Medium Risk' : 'Safe'}`;
 
         const { updateShopifyCustomer, updateShopifyOrder } = await import("@/lib/shopify/client");
+        const { buildFraudSpyCustomAttributes, buildFraudSpyCustomerNote } = await import("@/lib/fraud-checker");
+        const { analyzeCustomerRisk } = await import("@/lib/risk-analytics");
+        const riskAnalysis = analyzeCustomerRisk(fraudData);
+        const customAttributes = buildFraudSpyCustomAttributes(fraudData, riskAnalysis);
+        const customerNote = buildFraudSpyCustomerNote(fraudData, riskAnalysis);
         
         if (orderPayload.customer_shopify_id) {
           try {
@@ -501,7 +506,8 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload, i
 
             await updateShopifyCustomer({
               id: `gid://shopify/Customer/${orderPayload.customer_shopify_id}`,
-              tags: mergedTags
+              tags: mergedTags,
+              note: customerNote,
             });
           } catch (e) {
             console.error("Failed to update Shopify customer during webhook:", e);
@@ -513,14 +519,7 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload, i
             await updateShopifyOrder({
               id: `gid://shopify/Order/${orderPayload.shopify_order_id}`,
               tags: [tag, 'FraudSpy Verified'],
-              customAttributes: [
-                { key: "FraudSpy Status", value: riskLevel.toUpperCase() },
-                { key: "FraudSpy Score", value: riskScore.toString() },
-                { key: "FraudSpy Delivered", value: (fraudData.overall?.delivered || 0).toString() },
-                { key: "FraudSpy Returned", value: (fraudData.overall?.returned || 0).toString() },
-                { key: "FraudSpy Success Ratio", value: `${fraudData.overall?.success_ratio || 0}%` },
-                { key: "FraudSpy Last Checked", value: new Date().toLocaleString() }
-              ]
+              customAttributes: customAttributes,
             });
           } catch (e) {
             console.error("Failed to update Shopify order during webhook:", e);
@@ -545,7 +544,12 @@ async function sendOrderConfirmationSMS(supabase: any, payload: ShopifyOrderWebh
         .replace("{{order_id}}", payload.name || payload.id.toString())
         .replace("{{customer_name}}", shippingAddr?.name || payload.customer?.first_name || "Customer");
         
-      await sendSMS(phone, msg, false, `order_confirmation_${payload.id}`);
+      await sendSMS(phone, msg, false, `order_confirmation_${payload.id}`, {
+        orderId: payload.id,
+        orderName: payload.name || `#${payload.order_number || payload.id}`,
+        customerName: shippingAddr?.name || payload.customer?.first_name || "Customer",
+        eventType: "order",
+      });
     }
   }
 }
@@ -562,7 +566,12 @@ async function sendOrderCancelledSMS(supabase: any, payload: ShopifyOrderWebhook
         .replace("{{order_id}}", payload.name || payload.id.toString())
         .replace("{{customer_name}}", shippingAddr?.name || payload.customer?.first_name || "Customer");
         
-      await sendSMS(phone, msg, false, `order_cancelled_${payload.id}`);
+      await sendSMS(phone, msg, false, `order_cancelled_${payload.id}`, {
+        orderId: payload.id,
+        orderName: payload.name || `#${payload.order_number || payload.id}`,
+        customerName: shippingAddr?.name || payload.customer?.first_name || "Customer",
+        eventType: "cancelled",
+      });
     }
   }
 }

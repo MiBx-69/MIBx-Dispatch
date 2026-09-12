@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, ShoppingBag, Truck, Calendar, MapPin, AlertTriangle, Copy, Check } from "lucide-react";
+import { X, ShoppingBag, Truck, Calendar, MapPin, AlertTriangle, Copy, Check, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { SendSMSModal } from "@/components/orders/send-sms-modal";
+import { FraudDetailsModal } from "@/components/modals/fraud-details-modal";
+import { analyzeCustomerRisk } from "@/lib/risk-analytics";
 
 export function CustomerDrawer({ customer, onClose }: { customer: any; onClose: () => void }) {
   const [orders, setOrders] = useState<any[]>([]);
@@ -11,6 +13,7 @@ export function CustomerDrawer({ customer, onClose }: { customer: any; onClose: 
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [smsOpen, setSmsOpen] = useState(false);
+  const [fraudModalOrder, setFraudModalOrder] = useState<any | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -33,6 +36,10 @@ export function CustomerDrawer({ customer, onClose }: { customer: any; onClose: 
 
   const cancelledOrders = orders.filter(o => o.internal_status === "cancelled" || o.internal_status === "returned").length;
   const isHighRisk = orders.length >= 3 && cancelledOrders >= orders.length / 2;
+
+  const latestFraudOrder = orders.find(o => o.fraud_data);
+  const fraudData = latestFraudOrder?.fraud_data;
+  const analysis = fraudData ? analyzeCustomerRisk(fraudData) : null;
 
   // Derive the best phone and email if the Shopify Customer account is missing them (e.g. guest checkout)
   const bestPhone = customer.phone || (orders.length > 0 ? orders[0].customer_phone : null);
@@ -143,6 +150,53 @@ export function CustomerDrawer({ customer, onClose }: { customer: any; onClose: 
           )}
         </div>
 
+        {/* FraudSpy Customer Risk & Delivery Report */}
+        {analysis && (
+          <div className="p-4 border-b border-zinc-800 bg-zinc-950/40 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={15} className={analysis.isHighRisk ? "text-red-400" : analysis.isMediumRisk ? "text-amber-400" : "text-emerald-400"} />
+                <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">FraudSpy Customer Report</span>
+              </div>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${analysis.isHighRisk ? 'bg-red-500/20 text-red-400 border border-red-500/30' : analysis.isMediumRisk ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'}`}>
+                {analysis.riskLevel.toUpperCase()} ({analysis.riskScore}/100)
+              </span>
+            </div>
+
+            <p className="text-xs text-zinc-300">
+              {analysis.ratingLabel} • <span className="text-zinc-400">{fraudData.fraud_reports?.count > 0 ? `${fraudData.fraud_reports.count} Merchant Complaint(s)` : "Clean Record (0 Complaints)"}</span>
+            </p>
+
+            <div className="grid grid-cols-4 gap-1.5 text-center">
+              <div className="bg-zinc-900 border border-zinc-800 rounded p-1.5">
+                <div className="text-xs font-bold text-zinc-200">{analysis.total}</div>
+                <div className="text-[9px] text-zinc-500">Parcels</div>
+              </div>
+              <div className="bg-zinc-900 border border-zinc-800 rounded p-1.5">
+                <div className="text-xs font-bold text-emerald-400">{analysis.delivered}</div>
+                <div className="text-[9px] text-zinc-500">Delivered</div>
+              </div>
+              <div className="bg-zinc-900 border border-zinc-800 rounded p-1.5">
+                <div className="text-xs font-bold text-red-400">{analysis.returned}</div>
+                <div className="text-[9px] text-zinc-500">Returned</div>
+              </div>
+              <div className="bg-zinc-900 border border-zinc-800 rounded p-1.5">
+                <div className="text-xs font-bold text-indigo-400">{analysis.successRatio}%</div>
+                <div className="text-[9px] text-zinc-500">Success</div>
+              </div>
+            </div>
+
+            {latestFraudOrder && (
+              <button
+                onClick={() => setFraudModalOrder(latestFraudOrder)}
+                className="w-full text-center text-[11px] font-medium text-indigo-400 hover:text-indigo-300 py-1 bg-indigo-500/10 hover:bg-indigo-500/20 rounded border border-indigo-500/20 transition-colors"
+              >
+                View Full Detailed Report
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Order History */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           <h3 className="text-sm font-semibold text-zinc-400 mb-3 flex items-center gap-2">
@@ -198,6 +252,13 @@ export function CustomerDrawer({ customer, onClose }: { customer: any; onClose: 
           isOpen={smsOpen}
           onClose={() => setSmsOpen(false)}
           order={{ customers: { name: bestName, phone: bestPhone } }}
+        />
+      )}
+
+      {fraudModalOrder && (
+        <FraudDetailsModal
+          order={fraudModalOrder}
+          onClose={() => setFraudModalOrder(null)}
         />
       )}
     </>

@@ -43,7 +43,9 @@ export interface LogAnalyticsStats {
  */
 function normalizeWebhookLog(row: any): UnifiedLogEntry {
   let reference = null;
-  if (row.shopify_order_id) {
+  if (row.source === "sms") {
+    reference = row.payload?.orderName || row.payload?.to || row.payload?.formattedPhone || row.payload?.originalPhone || (row.shopify_order_id ? `#${row.shopify_order_id}` : null) || row.payload?.idempotencyKey || null;
+  } else if (row.shopify_order_id) {
     const orderName = row.payload?.name || (row.payload?.order_number ? `#${row.payload.order_number}` : null);
     reference = orderName || String(row.shopify_order_id);
   } else if (row.pathao_consignment_id) {
@@ -63,9 +65,14 @@ function normalizeWebhookLog(row: any): UnifiedLogEntry {
 
   let summary = `${row.source.toUpperCase()} - ${row.topic}`;
   if (row.source === "sms") {
-    if (row.topic === "sms/sent") summary = `SMS sent to ${row.payload?.to || "customer"}`;
-    else if (row.topic === "sms/duplicate_blocked") summary = `Duplicate SMS prevented for ${row.payload?.idempotencyKey || ""}`;
-    else if (row.topic === "sms/failed") summary = `SMS failed: ${row.error || "Unknown"}`;
+    const to = row.payload?.to || row.payload?.formattedPhone || row.payload?.originalPhone || "customer";
+    const msgPreview = row.payload?.msg ? ` "${row.payload.msg.slice(0, 45)}${row.payload.msg.length > 45 ? '...' : ''}"` : "";
+    if (row.topic === "sms/sent") summary = `SMS sent to ${to}${msgPreview}`;
+    else if (row.topic === "sms/duplicate_blocked") summary = `Duplicate SMS prevented for ${to}`;
+    else if (row.topic === "sms/failed") summary = `SMS delivery failed to ${to}: ${row.error || "Provider error"}`;
+    else if (row.topic === "sms/invalid_phone") summary = `SMS failed: Invalid phone format (${row.payload?.originalPhone || to})`;
+    else if (row.topic === "sms/not_configured") summary = `SMS failed: API Key not configured`;
+    else summary = `SMS ${row.topic}${msgPreview}`;
   } else if (row.source === "shopify") {
     summary = `Shopify ${row.topic}${reference ? ` (${reference})` : ""}`;
   } else if (row.source === "pathao") {

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, ShieldAlert, ShieldCheck, Shield, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { X, ShieldAlert, ShieldCheck, Shield, AlertTriangle, CheckCircle2, Copy, Check, UserCheck, MessageSquareWarning } from "lucide-react";
+import { toast } from "sonner";
 import type { Order } from "@/types/database";
 import { analyzeCustomerRisk } from "@/lib/risk-analytics";
 
@@ -14,6 +15,7 @@ interface FraudDetailsModalProps {
 
 export function FraudDetailsModal({ order, onClose, onCheckAgain, isChecking }: FraudDetailsModalProps) {
   const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (order) setOpen(true);
@@ -68,7 +70,33 @@ export function FraudDetailsModal({ order, onClose, onCheckAgain, isChecking }: 
 
   const isHighRisk = analysis.isHighRisk;
   const isMediumRisk = analysis.isMediumRisk;
-  const isSafe = analysis.isSafe;
+  const customerReportsCount = fraudData.fraud_reports?.count || 0;
+
+  const handleCopyReport = () => {
+    const courierLines = fraudData.couriers 
+      ? Object.entries(fraudData.couriers)
+          .filter(([_, d]: [string, any]) => d.total > 0 || d.successful > 0)
+          .map(([c, d]: [string, any]) => `  - ${c.toUpperCase()}: ${d.successful || d.delivered || 0} Delivered / ${d.total || 0} Total`)
+          .join("\n")
+      : "  No courier data";
+
+    const reportText = `🛡️ FraudSpy Customer & Delivery Report
+👤 Customer: ${order.customer_name || "Customer"} (${fraudData.phone?.local || order.customer_phone})
+🏷️ Status: ${analysis.riskLevel.toUpperCase()} (Score: ${analysis.riskScore}/100) - ${analysis.ratingLabel}
+📦 Total Parcels: ${analysis.total}
+✅ Delivered: ${analysis.delivered} (${analysis.successRatio}%)
+❌ Returned: ${analysis.returned} (${analysis.returnRatio}%)
+⚠️ Merchant Complaints: ${customerReportsCount > 0 ? `${customerReportsCount} complaint(s) reported` : "Clean record (0 complaints)"}
+🚚 Couriers Breakdown:
+${courierLines}
+💡 Recommendation: ${analysis.recommendation}
+🕒 Checked: ${new Date().toLocaleString()}`;
+
+    navigator.clipboard.writeText(reportText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    toast.success("Detailed customer report copied to clipboard!");
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-0">
@@ -78,11 +106,21 @@ export function FraudDetailsModal({ order, onClose, onCheckAgain, isChecking }: 
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 bg-zinc-900/50">
           <h2 className="text-lg font-bold text-zinc-100 flex items-center gap-2">
             {isHighRisk ? <ShieldAlert className="w-5 h-5 text-red-400" /> : isMediumRisk ? <AlertTriangle className="w-5 h-5 text-amber-400" /> : <ShieldCheck className="w-5 h-5 text-emerald-400" />}
-            Fraud & Return Risk Assessment
+            Fraud &amp; Customer Risk Assessment
           </h2>
-          <button onClick={handleClose} className="p-1 text-zinc-400 hover:text-zinc-100 rounded-lg hover:bg-zinc-800 transition-colors">
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleCopyReport}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors border border-zinc-700"
+              title="Copy Full Report"
+            >
+              {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+              <span>{copied ? "Copied" : "Copy Report"}</span>
+            </button>
+            <button onClick={handleClose} className="p-1 text-zinc-400 hover:text-zinc-100 rounded-lg hover:bg-zinc-800 transition-colors">
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         <div className="p-5 max-h-[80vh] overflow-y-auto space-y-5">
@@ -97,7 +135,7 @@ export function FraudDetailsModal({ order, onClose, onCheckAgain, isChecking }: 
                 {analysis.ratingLabel}
               </h3>
               <p className="text-xs text-zinc-400 mt-0.5">
-                Phone: {fraudData.phone?.local || order.customer_phone}
+                Phone: {fraudData.phone?.local || order.customer_phone} {order.customer_name ? `• ${order.customer_name}` : ""}
               </p>
             </div>
             <div className="ml-auto text-right shrink-0">
@@ -106,10 +144,60 @@ export function FraudDetailsModal({ order, onClose, onCheckAgain, isChecking }: 
             </div>
           </div>
 
+          {/* Customer Report / Merchant History Section */}
+          <div className="space-y-2">
+            <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider flex items-center justify-between">
+              <span>Customer Merchant Complaints</span>
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${customerReportsCount > 0 ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                {customerReportsCount > 0 ? `${customerReportsCount} Complaint(s)` : "Clean Record (0 Reports)"}
+              </span>
+            </h4>
+
+            {customerReportsCount === 0 ? (
+              <div className="p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl flex items-center gap-2.5">
+                <UserCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                <div className="text-xs text-emerald-300">
+                  <strong>Clean Merchant History:</strong> No complaints, scam reports, or refusal flags reported by other merchants on FraudSpy.
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {fraudData.fraud_reports?.reports?.map((report: any, i: number) => (
+                  <div key={i} className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 space-y-1.5">
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-red-300">
+                        <MessageSquareWarning size={13} className="text-red-400" />
+                        <span>{report.contact_name || "Merchant Report"}</span>
+                        {report.courier_name && (
+                          <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">
+                            {report.courier_name}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-zinc-500">
+                        {report.created_at ? new Date(report.created_at).toLocaleDateString() : ""}
+                      </div>
+                    </div>
+                    <p className="text-xs text-zinc-300 leading-relaxed pl-5">
+                      {report.complain_details || "Complaint recorded by merchant."}
+                    </p>
+                    {report.categories?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1 pl-5">
+                        {report.categories.map((c: string) => (
+                          <span key={c} className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">{c}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Analytics Assessment & Recommendation */}
           <div className={`p-3.5 rounded-xl border ${isHighRisk ? 'bg-red-500/5 border-red-500/20 text-red-300' : isMediumRisk ? 'bg-amber-500/5 border-amber-500/20 text-amber-300' : 'bg-emerald-500/5 border-emerald-500/20 text-emerald-300'}`}>
             <h4 className="text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5 text-zinc-200">
-              Risk Assessment & Action
+              Risk Assessment &amp; Action
             </h4>
             <p className="text-xs leading-relaxed text-zinc-300">
               {analysis.recommendation}
@@ -157,50 +245,36 @@ export function FraudDetailsModal({ order, onClose, onCheckAgain, isChecking }: 
           {/* Courier Breakdowns */}
           {fraudData.couriers && Object.keys(fraudData.couriers).length > 0 && (
              <div className="space-y-3">
-                <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Courier Breakdown</h4>
+                <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Courier Network Breakdown</h4>
                 <div className="space-y-2">
                   {Object.entries(fraudData.couriers).map(([courier, data]: [string, any]) => {
-                    if (!data.ok || data.total === 0) return null;
+                    if (!data.ok || (data.total === 0 && !data.successful && !data.delivered)) return null;
+                    const dlv = data.successful ?? data.delivered ?? 0;
+                    const tot = data.total ?? (dlv + (data.returned ?? 0));
+                    const rate = tot > 0 ? Math.round((dlv / tot) * 100) : 0;
+
                     return (
-                      <div key={courier} className="flex items-center justify-between p-3 rounded-lg bg-zinc-950 border border-zinc-800">
-                        <div className="capitalize text-sm font-medium text-zinc-300">{courier}</div>
-                        <div className="flex gap-4 text-xs text-zinc-400">
-                          <div><span className="text-zinc-500">Total:</span> {data.total}</div>
-                          <div><span className="text-green-500/80">Del:</span> {data.successful}</div>
-                          <div><span className="text-red-500/80">Ret:</span> {data.returned}</div>
+                      <div key={courier} className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="capitalize text-sm font-semibold text-zinc-200">{courier}</span>
+                          <div className="flex gap-3 text-xs">
+                            <span className="text-zinc-500">Total: <strong className="text-zinc-300">{tot}</strong></span>
+                            <span className="text-emerald-400 font-medium">Del: {dlv}</span>
+                            <span className="text-rose-400 font-medium">Ret: {data.returned || 0}</span>
+                            <span className="text-indigo-400 font-semibold">{rate}%</span>
+                          </div>
                         </div>
+                        {tot > 0 && (
+                          <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden flex">
+                            <div className="bg-emerald-500 h-full" style={{ width: `${rate}%` }} />
+                            <div className="bg-rose-500 h-full" style={{ width: `${100 - rate}%` }} />
+                          </div>
+                        )}
                       </div>
-                    )
+                    );
                   })}
                 </div>
              </div>
-          )}
-
-          {/* Fraud Reports List */}
-          {fraudData.fraud_reports?.reports?.length > 0 && (
-            <div className="space-y-3">
-               <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
-                 Reported Issues <span className="bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded-full text-[10px]">{fraudData.fraud_reports.count}</span>
-               </h4>
-               <div className="space-y-2">
-                 {fraudData.fraud_reports.reports.map((report: any, i: number) => (
-                   <div key={i} className="p-3 rounded-lg bg-red-500/5 border border-red-500/10 space-y-2">
-                     <div className="flex justify-between items-start">
-                       <div className="text-xs font-medium text-zinc-300">{report.contact_name || "Unknown"}</div>
-                       <div className="text-[10px] text-zinc-500">{new Date(report.created_at).toLocaleDateString()}</div>
-                     </div>
-                     <p className="text-xs text-zinc-400">{report.complain_details}</p>
-                     {report.categories?.length > 0 && (
-                       <div className="flex flex-wrap gap-1 mt-2">
-                         {report.categories.map((c: string) => (
-                           <span key={c} className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">{c}</span>
-                         ))}
-                       </div>
-                     )}
-                   </div>
-                 ))}
-               </div>
-            </div>
           )}
         </div>
 

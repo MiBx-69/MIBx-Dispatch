@@ -5,10 +5,12 @@ export function getOrderDisplayStatus(order: {
   fulfillment_status?: string | null;
   cancel_reason?: string | null;
   pathao_consignment_id?: string | null;
+  delivered_at?: string | null;
+  pathao_delivery_status?: string | null;
 }): OrderStatus | string {
   if (order.internal_status === "cancelled" || order.cancel_reason) return "cancelled";
   if (order.internal_status === "returned") return "returned";
-  if (order.internal_status === "delivered") return "delivered";
+  if (order.internal_status === "delivered" || Boolean(order.delivered_at)) return "delivered";
   if (order.internal_status === "dispatched" || !!order.pathao_consignment_id) return "dispatched";
   if (
     order.internal_status === "hold" ||

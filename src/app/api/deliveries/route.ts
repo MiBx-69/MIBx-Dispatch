@@ -18,6 +18,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing orderIds" }, { status: 400 });
     }
 
+    if (delivery_type === "partial") {
+      return NextResponse.json(
+        { error: "Partial delivery is strictly disabled by system policy. Only full deliveries are permitted." },
+        { status: 400 }
+      );
+    }
+
     const supabase = createServiceClient();
     let processedCount = 0;
     const errors: any[] = [];

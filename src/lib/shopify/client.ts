@@ -271,6 +271,142 @@ export async function updateShopifyFulfillmentTracking(params: {
   return fulfillment;
 }
 
+// ─── Create Fulfillment Event (Mark as Delivered / In Transit) ────────────────
+const CREATE_FULFILLMENT_EVENT_MUTATION = `
+  mutation CreateFulfillmentEvent($fulfillmentEvent: FulfillmentEventInput!) {
+    fulfillmentEventCreate(fulfillmentEvent: $fulfillmentEvent) {
+      fulfillmentEvent {
+        id
+        status
+        happenedAt
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;
+
+export async function createShopifyFulfillmentEvent(params: {
+  fulfillmentId: string;
+  status: "DELIVERED" | "OUT_FOR_DELIVERY" | "IN_TRANSIT" | "ATTEMPTED_DELIVERY" | "CARRIER_PICKED_UP";
+  message?: string;
+  happenedAt?: string;
+}) {
+  const gid = params.fulfillmentId.startsWith("gid://shopify/Fulfillment/")
+    ? params.fulfillmentId
+    : `gid://shopify/Fulfillment/${params.fulfillmentId}`;
+
+  const result = await shopifyFetch(CREATE_FULFILLMENT_EVENT_MUTATION, {
+    fulfillmentEvent: {
+      fulfillmentId: gid,
+      status: params.status,
+      ...(params.message ? { message: params.message } : {}),
+      ...(params.happenedAt ? { happenedAt: params.happenedAt } : {}),
+    },
+  });
+
+  const res = result.data?.fulfillmentEventCreate;
+  if (res?.userErrors?.length) {
+    throw new Error(res.userErrors.map((e: any) => e.message).join(", "));
+  }
+  return res?.fulfillmentEvent;
+}
+
+/**
+ * Marks an order as delivered on Shopify by creating a DELIVERED fulfillment event
+ * and tagging the order with "Delivered"
+ */
+export async function markShopifyOrderAsDelivered(params: {
+  shopifyOrderId?: string | number | null;
+  shopifyFulfillmentId?: string | number | null;
+  consignmentId?: string | null;
+}) {
+  const errors: string[] = [];
+  let fulfillmentId = params.shopifyFulfillmentId ? String(params.shopifyFulfillmentId) : null;
+  const rawOrderId = params.shopifyOrderId ? String(params.shopifyOrderId) : null;
+  const orderGid = rawOrderId
+    ? rawOrderId.startsWith("gid://shopify/Order/")
+      ? rawOrderId
+      : `gid://shopify/Order/${rawOrderId}`
+    : null;
+
+  // 1. If fulfillmentId is missing, look it up on Shopify using orderGid
+  if (!fulfillmentId && orderGid) {
+    try {
+      const orderQuery = `
+        query GetOrderFulfillments($id: ID!) {
+          order(id: $id) {
+            id
+            fulfillments {
+              id
+              status
+            }
+          }
+        }
+      `;
+      const res = await shopifyFetch(orderQuery, { id: orderGid });
+      const fulfillments = res.data?.order?.fulfillments || [];
+      if (fulfillments.length > 0) {
+        fulfillmentId = fulfillments[0].id;
+      }
+    } catch (err: any) {
+      console.error("[Shopify] Failed to fetch order fulfillments:", err);
+      errors.push(`Lookup fulfillments: ${err.message}`);
+    }
+  }
+
+  // 2. If we have a fulfillmentId, create the DELIVERED event on Shopify
+  if (fulfillmentId) {
+    try {
+      await createShopifyFulfillmentEvent({
+        fulfillmentId,
+        status: "DELIVERED",
+        message: params.consignmentId
+          ? `Delivered via Pathao Courier (${params.consignmentId})`
+          : "Delivered via Pathao Courier",
+        happenedAt: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      console.error("[Shopify] Failed to create DELIVERED event on fulfillment:", err);
+      errors.push(`Fulfillment event: ${err.message}`);
+    }
+  }
+
+  // 3. Add "Delivered" tag to the Shopify order
+  if (orderGid) {
+    try {
+      const getTagsQuery = `
+        query GetOrderTags($id: ID!) {
+          order(id: $id) {
+            id
+            tags
+          }
+        }
+      `;
+      const tagsRes = await shopifyFetch(getTagsQuery, { id: orderGid });
+      const currentTags: string[] = tagsRes.data?.order?.tags || [];
+      if (!currentTags.includes("Delivered")) {
+        const newTags = [...currentTags.filter((t) => t !== "In Transit" && t !== "Dispatched"), "Delivered"];
+        await updateShopifyOrder({
+          id: orderGid,
+          tags: newTags,
+        });
+      }
+    } catch (err: any) {
+      console.error("[Shopify] Failed to update tags on order:", err);
+      errors.push(`Tags update: ${err.message}`);
+    }
+  }
+
+  return {
+    success: errors.length === 0,
+    fulfillmentId,
+    errors,
+  };
+}
+
 // ─── Cancel Order ─────────────────────────────────────────────────────────────
 const CANCEL_ORDER_MUTATION = `
   mutation CancelOrder($orderId: ID!, $reason: OrderCancelReason!, $refund: Boolean!, $restock: Boolean!, $notifyCustomer: Boolean!) {

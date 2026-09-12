@@ -237,19 +237,30 @@ export function DispatchesClient({
           let statusColor = PATHAO_STATUS_COLORS[friendlyStatus] || PATHAO_STATUS_COLORS["Pending"];
           const order = d.orders;
           
-          // Override status if a return exists
-          const returnRecord = order?.returns?.[0];
-          if (returnRecord) {
-            if (returnRecord.return_type === "partial") {
-              friendlyStatus = "Partially Returned";
-              statusColor = "text-amber-400 border-amber-400/30 bg-amber-400/10";
-            } else {
-              friendlyStatus = "Returned (Manual)";
+          const isDelivered =
+            friendlyStatus === "Delivered" ||
+            (d.pathao_order_status && d.pathao_order_status.toLowerCase().includes("deliver")) ||
+            order?.internal_status === "delivered" ||
+            Boolean(order?.delivered_at);
+
+          if (isDelivered) {
+            friendlyStatus = "Delivered";
+            statusColor = PATHAO_STATUS_COLORS["Delivered"] || "text-emerald-400 border-emerald-400/30 bg-emerald-400/10";
+          } else {
+            // Override status if an authentic Shopify/verified return exists
+            const returnRecord = order?.returns?.[0];
+            if (returnRecord) {
+              if (returnRecord.return_type === "partial") {
+                friendlyStatus = "Partially Returned";
+                statusColor = "text-amber-400 border-amber-400/30 bg-amber-400/10";
+              } else {
+                friendlyStatus = "Returned";
+                statusColor = "text-rose-400 border-rose-400/30 bg-rose-400/10";
+              }
+            } else if (order?.internal_status === "returned") {
+              friendlyStatus = "Return Completed";
               statusColor = "text-rose-400 border-rose-400/30 bg-rose-400/10";
             }
-          } else if (order?.internal_status === "returned") {
-            friendlyStatus = "Return Completed";
-            statusColor = "text-rose-400 border-rose-400/30 bg-rose-400/10";
           }
 
           const trackingUrl = `https://merchant.pathao.com/tracking?consignment_id=${d.consignment_id}&phone=${encodeURIComponent(d.recipient_phone || order?.customer_phone || "")}`;
@@ -472,6 +483,58 @@ export function DispatchesClient({
               className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
             >
               <RotateCcw size={16} /> Mark as Returned
+            </button>
+            <button
+              onClick={async () => {
+                const selectedOrderIds = dispatches
+                  .filter((d: any) => selected.has(d.id) && d.orders?.id)
+                  .map((d: any) => d.orders.id);
+                if (selectedOrderIds.length === 0) return;
+                if (!confirm(`Mark ${selectedOrderIds.length} dispatch order(s) as Undelivered? This will restore their previous status.`)) return;
+                try {
+                  const res = await fetch("/api/deliveries/cancel", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ orderIds: selectedOrderIds }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) throw new Error(data.error || "Failed to mark as undelivered");
+                  toast.success(`Marked ${data.processed} order(s) as Undelivered`);
+                  setSelected(new Set());
+                  router.refresh();
+                } catch (err: any) {
+                  toast.error(err.message || "Failed to mark as undelivered");
+                }
+              }}
+              className="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
+            >
+              <RotateCcw size={16} /> Mark as Undelivered
+            </button>
+            <button
+              onClick={async () => {
+                const selectedOrderIds = dispatches
+                  .filter((d: any) => selected.has(d.id) && d.orders?.id)
+                  .map((d: any) => d.orders.id);
+                if (selectedOrderIds.length === 0) return;
+                if (!confirm(`Mark ${selectedOrderIds.length} dispatch order(s) as Unreturned? This will remove return records and restore their previous status.`)) return;
+                try {
+                  const res = await fetch("/api/returns/cancel", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ orderIds: selectedOrderIds }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) throw new Error(data.error || "Failed to mark as unreturned");
+                  toast.success(`Marked ${data.processed} order(s) as Unreturned`);
+                  setSelected(new Set());
+                  router.refresh();
+                } catch (err: any) {
+                  toast.error(err.message || "Failed to mark as unreturned");
+                }
+              }}
+              className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
+            >
+              <RotateCcw size={16} /> Mark as Unreturned
             </button>
           </div>
         </div>

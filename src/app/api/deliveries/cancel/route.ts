@@ -73,7 +73,17 @@ export async function POST(request: NextRequest) {
 
           if (updateErr) throw updateErr;
 
-          await logOrderEvent(orderId, "DELIVERY_CANCELLED", `Delivery cancelled. Moved order back to ${oldStatus}.`);
+          if (dispatch?.id) {
+            await supabase
+              .from("dispatches")
+              .update({
+                pathao_order_status: "In Transit",
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", dispatch.id);
+          }
+
+          await logOrderEvent(orderId, "DELIVERY_CANCELLED", `Marked as Undelivered. Moved order back to ${oldStatus}.`);
           cancelledCount++;
         } catch (err: any) {
           errors.push({ orderId, error: err.message });

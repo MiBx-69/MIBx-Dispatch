@@ -237,7 +237,12 @@ export async function POST(request: NextRequest) {
             .replace(/\{\{tracking_url\}\}/g, trackingUrl)
             .replace(/\{\{total_price\}\}/g, String(amount_to_collect || order.total_price || "0"));
 
-          await sendSMS(phone, msg, false, `dispatch_${order.id}_${consignment_id}`);
+          await sendSMS(phone, msg, false, `dispatch_${order.id}_${consignment_id}`, {
+            orderId: order.shopify_order_id,
+            orderName: order.shopify_order_name,
+            customerName: recipient_name || order.customer_name,
+            eventType: "dispatch",
+          });
         }
       }
     } catch (smsErr) {
