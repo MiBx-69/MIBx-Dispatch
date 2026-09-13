@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
 import { Truck, CheckCircle2, ArrowDownLeft, RotateCcw, Clock, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import type { UnifiedReportMetrics } from "@/lib/reporting-engine";
 
 interface Props {
@@ -9,6 +12,11 @@ interface Props {
 }
 
 export function PathaoReconciliationWidget({ metrics }: Props) {
+  const router = useRouter();
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  const hasAutoSyncedRef = useRef(false);
+
   const {
     courierDeliveredCount = 0,
     courierDeliveredValue = 0,
@@ -26,6 +34,63 @@ export function PathaoReconciliationWidget({ metrics }: Props) {
     startDateStr,
     endDateStr,
   } = metrics;
+
+  const handleManualSync = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    const toastId = toast.loading("Syncing with Pathao Courier Hermes API...");
+    try {
+      const res = await fetch("/api/pathao/sync-status?days=this_month&force=true", {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to sync with Pathao");
+
+      toast.success("Pathao Sync Completed!", {
+        id: toastId,
+        description: `Checked ${data.checked || data.totalChecked || 0} parcels. Updated ${data.updated || data.updatedCount || 0} statuses.`,
+      });
+      setLastSyncTime(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+      router.refresh();
+    } catch (err: any) {
+      toast.error(err.message || "Sync failed", { id: toastId });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Automatically sync on every refresh / page load
+  useEffect(() => {
+    if (hasAutoSyncedRef.current) return;
+    hasAutoSyncedRef.current = true;
+
+    const last = sessionStorage.getItem("last_pathao_auto_sync");
+    const now = Date.now();
+    // Auto-sync on refresh (cooldown 15s to prevent loops)
+    if (!last || now - Number(last) > 15000) {
+      sessionStorage.setItem("last_pathao_auto_sync", String(now));
+
+      const autoSync = async () => {
+        try {
+          setIsSyncing(true);
+          const res = await fetch("/api/pathao/sync-status?days=this_month", {
+            method: "POST",
+          });
+          const data = await res.json();
+          setLastSyncTime(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+          if (data.updated && data.updated > 0) {
+            router.refresh();
+          }
+        } catch (e) {
+          console.error("Pathao auto-sync error:", e);
+        } finally {
+          setIsSyncing(false);
+        }
+      };
+
+      autoSync();
+    }
+  }, [router]);
 
   // Calculate percentages based on active orders (Delivered + Paid Return + Returned + Processing)
   const totalOrders = courierActiveTotalCount || 1;
@@ -72,26 +137,45 @@ export function PathaoReconciliationWidget({ metrics }: Props) {
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-base font-semibold text-zinc-100">Pathao Courier Statistics</h2>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Live Sync
-              </span>
+              {isSyncing ? (
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  <RefreshCw size={10} className="animate-spin text-amber-400" />
+                  Syncing with Pathao...
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Live Synced {lastSyncTime ? `(${lastSyncTime})` : ""}
+                </span>
+              )}
             </div>
             <p className="text-xs text-zinc-400 mt-0.5 flex items-center gap-1.5">
               <span>📅 {dateLabel}</span>
               <span className="text-zinc-600">•</span>
-              <span>1:1 Pathao Hermes Alignment</span>
+              <span>Auto-synced with Pathao Hermes API</span>
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Manual Sync Button */}
+          <button
+            type="button"
+            onClick={handleManualSync}
+            disabled={isSyncing}
+            className="text-xs font-semibold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+            title="Force immediate synchronization with Pathao"
+          >
+            <RefreshCw size={13} className={isSyncing ? "animate-spin text-amber-400" : "text-amber-400"} />
+            <span>{isSyncing ? "Syncing..." : "Sync with Pathao"}</span>
+          </button>
+
           <Link
             href="/dispatches"
             className="text-xs text-zinc-300 hover:text-white bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700/60 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
           >
             <Truck size={13} className="text-zinc-400" />
-            <span>View All Dispatches</span>
+            <span className="hidden sm:inline">View All Dispatches</span>
           </Link>
         </div>
       </div>
