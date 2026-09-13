@@ -29,9 +29,11 @@ export default async function DispatchesPage({
     "Picked Up": ["Picked Up", "order.pickup_collected"],
     "In Transit": ["In Transit", "order.in_transit", "order.at_delivery_hub"],
     "Out for Delivery": ["Out for Delivery", "order.out_for_delivery"],
-    "Delivered": ["Delivered", "order.delivered", "order.partial_delivery", "order.payment_received"],
+    "Delivered": ["Delivered", "order.delivered", "order.payment_received"],
+    "Partial Delivered": ["Partial Delivered", "order.partial_delivery"],
     "Return": ["Return", "order.return_in_transit"],
-    "Return Completed": ["Return Completed", "order.returned"],
+    "Paid Return": ["Paid Return", "order.paid-return"],
+    "Return Completed": ["Return Completed", "Returned", "order.returned"],
     "Hold": ["Hold", "order.hold", "order.failed"],
     "Cancelled": ["Cancelled", "order.cancelled"],
   };

@@ -28,6 +28,7 @@ const STATUS_FILTERS = [
   { value: "hold", label: "On Hold" },
   { value: "dispatched", label: "Dispatched" },
   { value: "delivered", label: "Delivered" },
+  { value: "partial_delivery", label: "Partial Delivery" },
   { value: "cancelled", label: "Cancelled" },
   { value: "returned", label: "Returned" },
   { value: "everything", label: "Everything" },
@@ -42,6 +43,7 @@ interface OrdersClientProps {
   dispatchedCount?: number;
   onHoldCount?: number;
   cancelledCount?: number;
+  partialDeliveryCount?: number;
   page: number;
   pageSize: number;
   currentStatus?: string;
@@ -58,6 +60,7 @@ export function OrdersClient({
   dispatchedCount = 0,
   onHoldCount = 0,
   cancelledCount = 0,
+  partialDeliveryCount = 0,
   pageSize,
   currentStatus,
   currentSearch,
@@ -680,6 +683,9 @@ export function OrdersClient({
                 )}
                 {f.value === "hold" && onHoldCount > 0 && (
                   <span className="ml-1 opacity-70 text-xs">({onHoldCount})</span>
+                )}
+                {f.value === "partial_delivery" && partialDeliveryCount > 0 && (
+                  <span className="ml-1 opacity-70 text-xs">({partialDeliveryCount})</span>
                 )}
               </button>
             );

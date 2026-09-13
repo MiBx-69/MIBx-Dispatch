@@ -407,6 +407,70 @@ export async function markShopifyOrderAsDelivered(params: {
   };
 }
 
+/**
+ * Marks an order as Partial Delivery on Shopify:
+ * 1. Appends "Partial Delivery" tag to order
+ * 2. Adds order note about partial delivery and courier consignment
+ */
+export async function markShopifyOrderAsPartialDelivered(params: {
+  shopifyOrderId?: string | number | null;
+  shopifyFulfillmentId?: string | number | null;
+  consignmentId?: string | null;
+  note?: string | null;
+}) {
+  const errors: string[] = [];
+  const rawOrderId = params.shopifyOrderId ? String(params.shopifyOrderId) : null;
+  const orderGid = rawOrderId
+    ? rawOrderId.startsWith("gid://shopify/Order/")
+      ? rawOrderId
+      : `gid://shopify/Order/${rawOrderId}`
+    : null;
+
+  if (orderGid) {
+    try {
+      const getTagsQuery = `
+        query GetOrderTags($id: ID!) {
+          order(id: $id) {
+            id
+            tags
+            note
+          }
+        }
+      `;
+      const tagsRes = await shopifyFetch(getTagsQuery, { id: orderGid });
+      const currentTags: string[] = tagsRes.data?.order?.tags || [];
+      const currentNote: string = tagsRes.data?.order?.note || "";
+
+      const newTags = [
+        ...currentTags.filter((t) => t !== "In Transit" && t !== "Dispatched" && t !== "Delivered"),
+        "Partial Delivery",
+      ];
+
+      const deliveryNote = params.note || (params.consignmentId
+        ? `[MiBx ERP] Partial delivery recorded via Pathao Courier (Consignment: ${params.consignmentId})`
+        : `[MiBx ERP] Partial delivery recorded via Pathao Courier`);
+
+      const updatedNote = currentNote
+        ? `${currentNote}\n${deliveryNote}`
+        : deliveryNote;
+
+      await updateShopifyOrder({
+        id: orderGid,
+        tags: Array.from(new Set(newTags)),
+        note: updatedNote,
+      });
+    } catch (err: any) {
+      console.error("[Shopify] Failed to sync partial delivery to Shopify:", err);
+      errors.push(`Partial delivery sync: ${err.message}`);
+    }
+  }
+
+  return {
+    success: errors.length === 0,
+    errors,
+  };
+}
+
 // ─── Cancel Order ─────────────────────────────────────────────────────────────
 const CANCEL_ORDER_MUTATION = `
   mutation CancelOrder($orderId: ID!, $reason: OrderCancelReason!, $refund: Boolean!, $restock: Boolean!, $notifyCustomer: Boolean!) {

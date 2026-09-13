@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { updateShopifyFulfillmentTracking, markShopifyOrderAsDelivered } from "@/lib/shopify/client";
+import { updateShopifyFulfillmentTracking, markShopifyOrderAsDelivered, markShopifyOrderAsPartialDelivered } from "@/lib/shopify/client";
 
 export const dynamic = "force-dynamic";
 
@@ -174,20 +174,8 @@ async function processPathaoWebhook(payload: any, storedSecret: string, logId?: 
     const rawEvent = payload.event || payload.order_status || "updated";
     const newEvent = String(rawEvent);
 
-    // STRICT SYSTEM POLICY: Do not accept or allow partial delivery webhooks
-    if (newEvent.toLowerCase().includes("partial")) {
-      console.log(`[Pathao Webhook] BLOCKED: Partial delivery event '${rawEvent}' for consignment ${consignmentId} is strictly ignored.`);
-      if (logId) {
-        await supabase
-          .from("webhook_logs")
-          .update({
-            processed: true,
-            error: `Ignored: Partial delivery webhook (${rawEvent}) is strictly disabled by system policy.`
-          })
-          .eq("id", logId);
-      }
-      return;
-    }
+    const isPartialDelivery = newEvent.toLowerCase().includes("partial");
+    const isReturnEvent = newEvent.toLowerCase().includes("return");
 
     // 1. Try to find the order directly first (more reliable)
     let order: any = null;
@@ -229,8 +217,19 @@ async function processPathaoWebhook(payload: any, storedSecret: string, logId?: 
       });
 
       const isCancelled = newEvent.toLowerCase().includes("cancel");
+      let normalizedDispatchStatus = newEvent;
+      if (isPartialDelivery) {
+        normalizedDispatchStatus = "Partial Delivered";
+      } else if (newEvent.toLowerCase().includes("paid") && isReturnEvent) {
+        normalizedDispatchStatus = "Paid Return";
+      } else if (newEvent.toLowerCase() === "order.delivered" || newEvent.toLowerCase() === "delivered") {
+        normalizedDispatchStatus = "Delivered";
+      } else if (newEvent.toLowerCase().includes("assigned-for-delivery") || newEvent.toLowerCase().includes("assigned for delivery")) {
+        normalizedDispatchStatus = "Assigned for Delivery";
+      }
+
       const dispatchUpdate: any = {
-        pathao_order_status: newEvent,
+        pathao_order_status: normalizedDispatchStatus,
         tracking_history: history,
         updated_at: new Date().toISOString(),
       };
@@ -267,11 +266,49 @@ async function processPathaoWebhook(payload: any, storedSecret: string, logId?: 
         internal_status: internalStatus,
       };
 
-      const isPartialDelivery = newEvent.toLowerCase().includes("partial");
+      // ─── PARTIAL DELIVERY HANDLING ─────────────────────────────────────────
+      if (isPartialDelivery) {
+        orderUpdate.pathao_delivery_status = "Partial Delivered";
+        orderUpdate.internal_status = "delivered";
+        orderUpdate.delivered_at = order.delivered_at || new Date().toISOString();
 
-      // If event is delivered (and not partial delivery), mark order as delivered in ERP and Shopify
-      if (internalStatus === "delivered" && !isPartialDelivery) {
-        orderUpdate.delivered_at = new Date().toISOString();
+        // Create return record in returns table if not already created
+        const { data: existingReturn } = await supabase
+          .from("returns")
+          .select("id")
+          .eq("order_id", order.id)
+          .maybeSingle();
+
+        if (!existingReturn) {
+          await supabase.from("returns").insert({
+            order_id: order.id,
+            dispatch_id: dispatch?.id || null,
+            consignment_id: consignmentId,
+            return_type: "partial",
+            return_source: "pathao_webhook",
+            order_total: Number(order.total_price) || 0,
+            return_delivery_fee: 0,
+            status: "pending_verification",
+            is_verified: false,
+            return_reason: "Pathao Partial Delivery",
+            returned_at: new Date().toISOString(),
+          });
+        }
+
+        // Auto-sync Partial Delivery to Shopify
+        try {
+          await markShopifyOrderAsPartialDelivered({
+            shopifyOrderId: order.shopify_order_id,
+            shopifyFulfillmentId: order.shopify_fulfillment_id,
+            consignmentId,
+          });
+        } catch (shopifyErr) {
+          console.error("[Pathao Webhook] Failed to sync partial delivery to Shopify:", shopifyErr);
+        }
+      }
+      // ─── FULL DELIVERY HANDLING ───────────────────────────────────────────
+      else if (internalStatus === "delivered") {
+        orderUpdate.delivered_at = order.delivered_at || new Date().toISOString();
         orderUpdate.internal_status = "delivered";
         orderUpdate.pathao_delivery_status = "Delivered";
 
@@ -292,7 +329,7 @@ async function processPathaoWebhook(payload: any, storedSecret: string, logId?: 
           console.error("[Pathao Webhook] Failed to insert audit event:", eventErr);
         }
 
-        // Mark as Delivered on Shopify (creates DELIVERED fulfillment event + adds Delivered tag)
+        // Mark as Delivered on Shopify
         try {
           const shopifyRes = await markShopifyOrderAsDelivered({
             shopifyOrderId: order.shopify_order_id,
@@ -306,9 +343,23 @@ async function processPathaoWebhook(payload: any, storedSecret: string, logId?: 
         } catch (shopifyErr) {
           console.error("[Pathao Webhook] Failed to mark order delivered on Shopify:", shopifyErr);
         }
-      } else if (order.internal_status === "delivered") {
-        // Preserve delivered status if already delivered
-        delete orderUpdate.internal_status;
+      }
+      // ─── RETURN HANDLING ───────────────────────────────────────────────────
+      else if (internalStatus === "returned") {
+        orderUpdate.pathao_delivery_status = newEvent.toLowerCase().includes("paid") ? "Paid Return" : "Returned";
+        orderUpdate.internal_status = "returned";
+        orderUpdate.returned_at = new Date().toISOString();
+        orderUpdate.return_reason = newEvent.toLowerCase().includes("paid") ? "Paid Return via Pathao" : "Returned via Pathao";
+      }
+      // ─── OTHER STATUSES (Assigned for Delivery / In Transit / On Hold) ─────
+      else {
+        if (newEvent.toLowerCase().includes("assigned-for-delivery") || newEvent.toLowerCase().includes("assigned for delivery")) {
+          orderUpdate.pathao_delivery_status = "Assigned for Delivery";
+        }
+        // Don't overwrite if order was already explicitly delivered
+        if (order.internal_status === "delivered") {
+          delete orderUpdate.internal_status;
+        }
       }
 
       // Update order internal status in database
@@ -423,38 +474,37 @@ async function processPathaoWebhook(payload: any, storedSecret: string, logId?: 
 
 function mapPathaoEventToInternal(event: string): string {
   const evt = (event || "").toLowerCase();
+
+  // 1. Returns and Paid Returns MUST come first so paid-return is never marked delivered
+  if (evt.includes("return")) {
+    return "returned";
+  }
+
+  // 2. Partial Delivery
+  if (evt.includes("partial")) {
+    return "delivered";
+  }
+
+  // 3. True Delivery events
   if (
+    evt === "order.delivered" ||
     evt.includes("delivered") ||
     evt.includes("payment_received") ||
-    evt.includes("payment invoice") ||
-    evt.includes("paid")
+    evt.includes("payment invoice")
   ) {
     return "delivered";
   }
-  // Note: Courier return events represent parcel return transit in courier lifecycle.
-  // Internal ERP return status and records are strictly driven by Shopify return webhooks.
-  if (evt.includes("return")) {
-    return "dispatched";
+
+  // 4. Cancel
+  if (evt.includes("cancel")) {
+    return "cancelled";
   }
-  if (
-    evt.includes("hold") ||
-    evt.includes("failed") ||
-    evt.includes("cancel")
-  ) {
+
+  // 5. Hold / Failed
+  if (evt.includes("hold") || evt.includes("failed")) {
     return "hold";
   }
-  if (
-    evt.includes("pick") ||
-    evt.includes("transit") ||
-    evt.includes("hub") ||
-    evt.includes("sorting") ||
-    evt.includes("last mile") ||
-    evt.includes("assigned") ||
-    evt.includes("created") ||
-    evt.includes("updated") ||
-    evt.includes("exchange")
-  ) {
-    return "dispatched";
-  }
+
+  // 6. In transit / assigned for delivery / pickup
   return "dispatched";
 }

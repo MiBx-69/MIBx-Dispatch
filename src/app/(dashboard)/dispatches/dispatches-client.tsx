@@ -18,7 +18,9 @@ const PATHAO_STATUS_COLORS: Record<string, string> = {
   "In Transit": "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
   "Out for Delivery": "bg-violet-500/10 text-violet-400 border-violet-500/20",
   "Delivered": "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  "Partial Delivered": "bg-teal-500/10 text-teal-400 border-teal-500/20",
   "Return": "bg-red-500/10 text-red-400 border-red-500/20",
+  "Paid Return": "bg-rose-500/10 text-rose-400 border-rose-500/20",
   "Return Completed": "bg-orange-500/10 text-orange-400 border-orange-500/20",
   "Cancelled": "bg-red-500/10 text-red-400 border-red-500/20",
   "Hold": "bg-amber-500/10 text-amber-400 border-amber-500/20",
@@ -26,7 +28,7 @@ const PATHAO_STATUS_COLORS: Record<string, string> = {
 
 const statusFilters = [
   "All", "Pending", "Picked Up", "In Transit", "Out for Delivery",
-  "Delivered", "Return", "Return Completed", "Hold", "Cancelled",
+  "Delivered", "Partial Delivered", "Return", "Paid Return", "Return Completed", "Hold", "Cancelled",
 ];
 
 export function DispatchesClient({

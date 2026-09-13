@@ -7,9 +7,16 @@ export function getOrderDisplayStatus(order: {
   pathao_consignment_id?: string | null;
   delivered_at?: string | null;
   pathao_delivery_status?: string | null;
+  returns?: any[] | null;
 }): OrderStatus | string {
   if (order.internal_status === "cancelled" || order.cancel_reason) return "cancelled";
   if (order.internal_status === "returned") return "returned";
+  if (
+    order.pathao_delivery_status?.toLowerCase().includes("partial") ||
+    order.returns?.some((r: any) => r.return_type === "partial")
+  ) {
+    return "partial_delivery";
+  }
   if (order.internal_status === "delivered" || Boolean(order.delivered_at)) return "delivered";
   if (order.internal_status === "dispatched" || !!order.pathao_consignment_id) return "dispatched";
   if (

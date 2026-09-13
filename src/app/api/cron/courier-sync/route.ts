@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getPathaoOrderStatus } from "@/lib/pathao/client";
-import { markShopifyOrderAsDelivered } from "@/lib/shopify/client";
+import { markShopifyOrderAsDelivered, markShopifyOrderAsPartialDelivered } from "@/lib/shopify/client";
 import { Receiver } from "@upstash/qstash";
 
 export const dynamic = "force-dynamic";
@@ -105,18 +105,95 @@ async function handleCron(request: NextRequest) {
 
             if (currentStatus === newStatus) return;
 
-            // STRICT SYSTEM POLICY: Skip partial delivery completely
-            if (newStatus.includes("partial")) {
-              return;
-            }
-
             const now = new Date().toISOString();
             const orderId = (d.orders as any)?.id;
             const shopifyOrderId = (d.orders as any)?.shopify_order_id;
             const shopifyFulfillmentId = (d.orders as any)?.shopify_fulfillment_id;
 
-            // 1. Delivered
-            if (
+            // 1. Partial Delivery
+            if (newStatus.includes("partial")) {
+              if (d.id) {
+                await supabase.from("dispatches").update({
+                  pathao_order_status: "Partial Delivered",
+                  updated_at: now,
+                }).eq("id", d.id);
+              }
+
+              if (orderId) {
+                await supabase.from("orders").update({
+                  internal_status: "delivered",
+                  pathao_delivery_status: "Partial Delivered",
+                  delivered_at: now,
+                }).eq("id", orderId);
+
+                // Record in returns if not already present
+                const { data: existingReturn } = await supabase
+                  .from("returns")
+                  .select("id")
+                  .eq("order_id", orderId)
+                  .maybeSingle();
+
+                if (!existingReturn) {
+                  await supabase.from("returns").insert({
+                    order_id: orderId,
+                    dispatch_id: d.id || null,
+                    consignment_id: d.consignment_id,
+                    return_type: "partial",
+                    return_source: "cron_sync",
+                    order_total: Number(d.amount_to_collect || (d.orders as any)?.total_price) || 0,
+                    return_delivery_fee: 0,
+                    status: "pending_verification",
+                    is_verified: false,
+                    return_reason: "Pathao Partial Delivery",
+                    returned_at: now,
+                  });
+                }
+
+                // Auto-sync with Shopify
+                try {
+                  await markShopifyOrderAsPartialDelivered({
+                    shopifyOrderId,
+                    shopifyFulfillmentId,
+                    consignmentId: d.consignment_id,
+                  });
+                } catch (shopifyErr) {
+                  console.error("[Cron Sync] Failed to mark order partial delivery on Shopify:", shopifyErr);
+                }
+              }
+              updatedCount++;
+              updatedDetails.push({
+                consignment_id: d.consignment_id,
+                order: d.shopify_order_name,
+                newStatus: "Partial Delivered",
+              });
+            }
+            // 2. Returned / Paid Return
+            else if (newStatus.includes("return") || newStatus.includes("returned")) {
+              const returnLabel = newStatus.includes("paid") ? "Paid Return" : "Returned";
+              if (d.id) {
+                await supabase.from("dispatches").update({
+                  pathao_order_status: returnLabel,
+                  updated_at: now,
+                }).eq("id", d.id);
+              }
+
+              if (orderId) {
+                await supabase.from("orders").update({
+                  pathao_delivery_status: returnLabel,
+                  internal_status: "returned",
+                  returned_at: now,
+                  return_reason: returnLabel === "Paid Return" ? "Paid Return via Pathao" : "Returned via Pathao",
+                }).eq("id", orderId);
+              }
+              updatedCount++;
+              updatedDetails.push({
+                consignment_id: d.consignment_id,
+                order: d.shopify_order_name,
+                newStatus: returnLabel,
+              });
+            }
+            // 3. Delivered
+            else if (
               newStatus.includes("delivered") ||
               newStatus.includes("payment_received") ||
               newStatus.includes("payment invoice")
@@ -151,27 +228,6 @@ async function handleCron(request: NextRequest) {
                 consignment_id: d.consignment_id,
                 order: d.shopify_order_name,
                 newStatus: "Delivered",
-              });
-            }
-            // 2. Returned
-            else if (newStatus.includes("return") || newStatus.includes("returned")) {
-              if (d.id) {
-                await supabase.from("dispatches").update({
-                  pathao_order_status: "Returned",
-                  updated_at: now,
-                }).eq("id", d.id);
-              }
-
-              if (orderId) {
-                await supabase.from("orders").update({
-                  pathao_delivery_status: "Returned",
-                }).eq("id", orderId);
-              }
-              updatedCount++;
-              updatedDetails.push({
-                consignment_id: d.consignment_id,
-                order: d.shopify_order_name,
-                newStatus: "Returned (Courier)",
               });
             }
             // 3. Out for Delivery / Assigned for Delivery

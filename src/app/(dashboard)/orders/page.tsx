@@ -69,6 +69,11 @@ export default async function OrdersPage({
     if (startDateStr && endDateStr) {
       query = query.gte("shopify_created_at", startDateStr).lte("shopify_created_at", endDateStr);
     }
+  } else if (params.status === "partial_delivery") {
+    query = query.eq("is_archived", false).ilike("pathao_delivery_status", "%partial%");
+    if (startDateStr && endDateStr) {
+      query = query.gte("shopify_created_at", startDateStr).lte("shopify_created_at", endDateStr);
+    }
   } else if (params.status === "cancelled") {
     query = query
       .eq("is_archived", false)
@@ -154,6 +159,12 @@ export default async function OrdersPage({
     .eq("is_archived", false)
     .or("internal_status.eq.cancelled,cancel_reason.not.is.null,financial_status.eq.voided");
 
+  const { count: partialDeliveryCount } = await supabase
+    .from("orders")
+    .select("*", { count: "exact", head: true })
+    .eq("is_archived", false)
+    .ilike("pathao_delivery_status", "%partial%");
+
   // Get Pathao location lists for dispatch modal
   const { data: settings } = await supabase.from("app_settings").select("pathao_store_id").single();
 
@@ -166,6 +177,7 @@ export default async function OrdersPage({
       dispatchedCount={dispatchedCount || 0}
       onHoldCount={onHoldCount || 0}
       cancelledCount={cancelledCount || 0}
+      partialDeliveryCount={partialDeliveryCount || 0}
       page={page}
       pageSize={pageSize}
       currentStatus={params.status}

@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { markShopifyOrderAsDelivered, markShopifyOrderAsPartialDelivered } from "@/lib/shopify/client";
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,13 +19,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing orderIds" }, { status: 400 });
     }
 
-    if (delivery_type === "partial") {
-      return NextResponse.json(
-        { error: "Partial delivery is strictly disabled by system policy. Only full deliveries are permitted." },
-        { status: 400 }
-      );
-    }
-
     const supabase = createServiceClient();
     let processedCount = 0;
     const errors: any[] = [];
@@ -33,7 +27,7 @@ export async function POST(request: NextRequest) {
       // Fetch the order
       const { data: order, error: fetchErr } = await supabase
         .from("orders")
-        .select("id, internal_status, total_price, pathao_consignment_id, shopify_order_name, line_items")
+        .select("id, internal_status, pathao_delivery_status, total_price, pathao_consignment_id, shopify_order_id, shopify_fulfillment_id, shopify_order_name, line_items")
         .eq("id", orderId)
         .single();
 
@@ -50,6 +44,14 @@ export async function POST(request: NextRequest) {
 
       const now = new Date().toISOString();
       const isPartial = delivery_type === "partial";
+
+      // Find the dispatch record if any
+      const { data: dispatch } = await supabase
+        .from("dispatches")
+        .select("id, consignment_id")
+        .eq("order_id", orderId)
+        .eq("is_cancelled", false)
+        .maybeSingle();
 
       let returnedItemsValue = 0;
       let updatedLineItems = order.line_items;
@@ -75,14 +77,6 @@ export async function POST(request: NextRequest) {
             };
           });
         }
-
-        // Find the dispatch record if any
-        const { data: dispatch } = await supabase
-          .from("dispatches")
-          .select("id, consignment_id")
-          .eq("order_id", orderId)
-          .eq("is_cancelled", false)
-          .maybeSingle();
 
         // Check if a return record already exists
         const { data: existingReturn } = await supabase
@@ -118,9 +112,18 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Update dispatch record if exists
+      if (dispatch?.id) {
+        await supabase.from("dispatches").update({
+          pathao_order_status: isPartial ? "Partial Delivered" : "Delivered",
+          updated_at: now,
+        }).eq("id", dispatch.id);
+      }
+
       // Mark the order as delivered and adjust total_price for partial delivery
       const orderUpdates: any = {
         internal_status: "delivered",
+        pathao_delivery_status: isPartial ? "Partial Delivered" : "Delivered",
         delivered_at: now,
       };
 
@@ -135,6 +138,28 @@ export async function POST(request: NextRequest) {
       if (updateErr) {
         errors.push({ orderId, error: `Failed to update order status: ${updateErr.message}` });
         continue;
+      }
+
+      // Auto-sync with Shopify
+      try {
+        if (order.shopify_order_id) {
+          const consignmentId = dispatch?.consignment_id || order.pathao_consignment_id;
+          if (isPartial) {
+            await markShopifyOrderAsPartialDelivered({
+              shopifyOrderId: order.shopify_order_id,
+              shopifyFulfillmentId: order.shopify_fulfillment_id,
+              consignmentId,
+            });
+          } else {
+            await markShopifyOrderAsDelivered({
+              shopifyOrderId: order.shopify_order_id,
+              shopifyFulfillmentId: order.shopify_fulfillment_id,
+              consignmentId,
+            });
+          }
+        }
+      } catch (shopifyErr) {
+        console.error("[Manual Delivery] Failed to sync status with Shopify:", shopifyErr);
       }
 
       processedCount++;
