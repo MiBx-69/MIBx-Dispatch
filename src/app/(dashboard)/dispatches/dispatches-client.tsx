@@ -297,8 +297,15 @@ export function DispatchesClient({
           ) {
             friendlyStatus = "Delivered";
           }
-          // 5. Holds & Failures
-          else if (rawStatus.toLowerCase().includes("failed")) {
+          // 5. Holds & Failures (Pathao & Shopify)
+          const isOrderOnHold = 
+            order?.internal_status === "hold" ||
+            order?.fulfillment_status === "on_hold" ||
+            order?.fulfillment_status === "hold";
+
+          if (isOrderOnHold && friendlyStatus !== "Delivered" && friendlyStatus !== "Return Completed") {
+            friendlyStatus = "Hold";
+          } else if (rawStatus.toLowerCase().includes("failed")) {
             friendlyStatus = "Pickup Failed";
           } else if (rawStatus.toLowerCase().includes("hold")) {
             friendlyStatus = "Pickup On Hold";

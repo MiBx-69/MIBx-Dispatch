@@ -52,11 +52,9 @@ export default async function OrdersPage({
     query = query
       .eq("is_archived", false)
       .or("internal_status.in.(hold,on_hold),fulfillment_status.in.(on_hold,hold)")
-      .neq("internal_status", "dispatched")
       .neq("internal_status", "cancelled")
       .is("cancel_reason", null)
-      .neq("financial_status", "voided")
-      .is("pathao_consignment_id", null);
+      .neq("financial_status", "voided");
   } else if (params.status === "dispatched") {
     query = query
       .eq("is_archived", false)
@@ -147,11 +145,9 @@ export default async function OrdersPage({
     .select("*", { count: "exact", head: true })
     .eq("is_archived", false)
     .or("internal_status.in.(hold,on_hold),fulfillment_status.in.(on_hold,hold)")
-    .neq("internal_status", "dispatched")
     .neq("internal_status", "cancelled")
     .is("cancel_reason", null)
-    .neq("financial_status", "voided")
-    .is("pathao_consignment_id", null);
+    .neq("financial_status", "voided");
 
   const { count: cancelledCount } = await supabase
     .from("orders")

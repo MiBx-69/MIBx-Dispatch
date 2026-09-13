@@ -327,28 +327,15 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload, i
       try {
         const { data: settings } = await supabase.from("app_settings").select("shopify_shop_domain, shopify_access_token").single();
         if (settings?.shopify_shop_domain && settings?.shopify_access_token) {
-          const q = `{ order(id: "gid://shopify/Order/${payload.id}") { displayFulfillmentStatus, fulfillmentOrders(first: 10) { edges { node { status } } } } }`;
+          const q = `{ order(id: "gid://shopify/Order/${payload.id}") { displayFulfillmentStatus, displayFinancialStatus, tags } }`;
           const res = await fetch(`https://${settings.shopify_shop_domain}/admin/api/2024-07/graphql.json`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": settings.shopify_access_token },
             body: JSON.stringify({ query: q })
           });
           const json = await res.json();
-          if (json.data?.order) {
-            if (json.data.order.displayFulfillmentStatus) {
-              trueFulfillmentStatus = json.data.order.displayFulfillmentStatus.toLowerCase();
-            }
-            
-            // Fallback: Check underlying fulfillment orders for immediate status changes
-            const foEdges = json.data.order.fulfillmentOrders?.edges || [];
-            const hasInProgress = foEdges.some((e: any) => e.node.status === "IN_PROGRESS");
-            const hasOnHold = foEdges.some((e: any) => e.node.status === "ON_HOLD");
-            
-            if (hasOnHold) {
-              trueFulfillmentStatus = "on_hold";
-            } else if (hasInProgress) {
-              trueFulfillmentStatus = "in_progress";
-            }
+          if (json.data?.order?.displayFulfillmentStatus) {
+            trueFulfillmentStatus = json.data.order.displayFulfillmentStatus.toLowerCase();
           }
         }
       } catch (err) {
@@ -373,39 +360,54 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload, i
       currency: payload.currency || "BDT",
       financial_status: payload.financial_status,
       fulfillment_status: trueFulfillmentStatus,
-    shopify_tags: payload.tags ? payload.tags.split(",").map((t) => t.trim()) : [],
-    note: payload.note || null,
-    shopify_created_at: payload.created_at,
-    shopify_updated_at: payload.updated_at,
-    synced_at: new Date().toISOString(),
-  };
+      shopify_tags: payload.tags ? payload.tags.split(",").map((t: string) => t.trim()) : [],
+      note: payload.note || null,
+      shopify_created_at: payload.created_at,
+      shopify_updated_at: payload.updated_at,
+      synced_at: new Date().toISOString(),
+    };
 
-  if (payload.cancelled_at) {
-    orderPayload.internal_status = "cancelled";
-    orderPayload.cancel_reason = payload.cancel_reason || "Cancelled via Shopify";
-  } else if (
-    !existingOrder ||
-    (!["dispatched", "delivered", "returned", "cancelled"].includes(existingOrder.internal_status) &&
-      !existingOrder.pathao_consignment_id)
-  ) {
     const fs = (trueFulfillmentStatus || "").toLowerCase();
-    if (fs === "on_hold" || fs === "hold") {
-      orderPayload.internal_status = "hold";
-    } else if (fs === "in_progress" || fs === "partial" || fs === "partially_fulfilled") {
-      orderPayload.internal_status = "preparing";
-    } else if (fs === "fulfilled") {
-      orderPayload.internal_status = "dispatched";
-    } else if (isNew) {
-      orderPayload.internal_status = "pending";
-    }
-  }
+    const tagsList = payload.tags ? payload.tags.split(",").map((t: string) => t.trim().toLowerCase()) : [];
+    const isShopifyHold = fs === "on_hold" || fs === "hold" || tagsList.some((t: string) => t === "hold" || t === "on hold");
 
-  // Save the order record immediately to lock it in Supabase so that any concurrent
-  // webhook requests or retries immediately recognize that the order already exists (isNew = false)
-  await supabase.from("orders").upsert(
-    orderPayload,
-    { onConflict: "shopify_order_id" }
-  );
+    if (payload.cancelled_at) {
+      orderPayload.internal_status = "cancelled";
+      orderPayload.cancel_reason = payload.cancel_reason || "Cancelled via Shopify";
+    } else if (isShopifyHold) {
+      orderPayload.internal_status = "hold";
+      orderPayload.fulfillment_status = "on_hold";
+    } else if (
+      !existingOrder ||
+      (!["delivered", "returned", "cancelled"].includes(existingOrder.internal_status))
+    ) {
+      if (fs === "in_progress" || fs === "partial" || fs === "partially_fulfilled") {
+        orderPayload.internal_status = "preparing";
+      } else if (fs === "fulfilled") {
+        orderPayload.internal_status = "dispatched";
+      } else if (existingOrder?.internal_status === "hold" && !isShopifyHold) {
+        // Hold was released in Shopify
+        orderPayload.internal_status = existingOrder.pathao_consignment_id ? "dispatched" : "pending";
+      } else if (isNew) {
+        orderPayload.internal_status = "pending";
+      }
+    }
+
+    // If order was marked on hold, update any active dispatches row as well
+    if (isShopifyHold && existingOrder?.id) {
+      await supabase
+        .from("dispatches")
+        .update({ pathao_order_status: "Hold", updated_at: new Date().toISOString() })
+        .eq("order_id", existingOrder.id)
+        .not("pathao_order_status", "in", '("Delivered","Returned","Return","Paid Return","Return Completed","Cancelled")');
+    }
+
+    // Save the order record immediately to lock it in Supabase so that any concurrent
+    // webhook requests or retries immediately recognize that the order already exists (isNew = false)
+    await supabase.from("orders").upsert(
+      orderPayload,
+      { onConflict: "shopify_order_id" }
+    );
 
   // Perform fraud check if this is a new order
   if (isNew) {

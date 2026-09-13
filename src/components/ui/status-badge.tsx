@@ -135,17 +135,10 @@ export function ShopifyFulfillmentBadge({
     dot = "bg-zinc-500";
     label = "Fulfilled";
   } else if (s === "on_hold" || s === "hold") {
-    if (isTerminalOrDispatched) {
-      bg = "bg-zinc-800/50";
-      text = "text-zinc-400";
-      dot = "bg-zinc-500";
-      label = "Shopify: On hold";
-    } else {
-      bg = "bg-orange-500/15";
-      text = "text-orange-400";
-      dot = "bg-orange-500";
-      label = "On hold";
-    }
+    bg = "bg-orange-500/15 border border-orange-500/25";
+    text = "text-orange-400";
+    dot = "bg-orange-400 animate-pulse";
+    label = "On hold";
   } else if (s === "not_required") {
     bg = "bg-zinc-500/15";
     text = "text-zinc-400";

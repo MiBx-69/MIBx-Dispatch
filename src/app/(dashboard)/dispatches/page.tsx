@@ -47,7 +47,9 @@ export default async function DispatchesPage({
       .neq("orders.internal_status", "cancelled")
       .eq("orders.is_archived", false);
 
-    if (params.status) {
+    if (params.status === "Hold") {
+      query = query.or("pathao_order_status.in.(Hold,order.hold,order.failed,Pickup On Hold,Pickup Failed,order.pickup-failed),orders.internal_status.in.(hold,on_hold),orders.fulfillment_status.in.(on_hold,hold)");
+    } else if (params.status) {
       const mapped = STATUS_MAP[params.status] || [params.status];
       query = query.in("pathao_order_status", mapped);
     }

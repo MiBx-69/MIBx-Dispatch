@@ -18,14 +18,15 @@ export function getOrderDisplayStatus(order: {
     return "partial_delivery";
   }
   if (order.internal_status === "delivered" || Boolean(order.delivered_at)) return "delivered";
-  if (order.internal_status === "dispatched" || !!order.pathao_consignment_id) return "dispatched";
   if (
     order.internal_status === "hold" ||
     order.fulfillment_status === "on_hold" ||
-    order.fulfillment_status === "hold"
+    order.fulfillment_status === "hold" ||
+    order.pathao_delivery_status?.toLowerCase().includes("hold")
   ) {
     return "hold";
   }
+  if (order.internal_status === "dispatched" || !!order.pathao_consignment_id) return "dispatched";
   if (
     order.internal_status === "preparing" ||
     order.fulfillment_status === "in_progress" ||

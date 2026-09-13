@@ -184,24 +184,39 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
     .eq("shopify_order_id", orderPayload.shopify_order_id)
     .maybeSingle();
 
+  const fs = (orderPayload.fulfillment_status || "").toLowerCase();
+  const tagsStr = (shopifyOrder.tags || []).join(" ").toLowerCase();
+  const isShopifyHold = fs === "on_hold" || fs === "hold" || tagsStr.includes("hold");
+
   if (shopifyOrder.cancelledAt) {
     orderPayload.internal_status = "cancelled";
     orderPayload.cancel_reason = shopifyOrder.cancelReason || "Cancelled via Shopify";
+  } else if (isShopifyHold) {
+    orderPayload.internal_status = "hold";
+    orderPayload.fulfillment_status = "on_hold";
   } else if (
     !existingOrder ||
-    (!["dispatched", "delivered", "returned", "cancelled"].includes(existingOrder.internal_status) &&
-      !existingOrder.pathao_consignment_id)
+    (!["delivered", "returned", "cancelled"].includes(existingOrder.internal_status))
   ) {
-    const fs = (orderPayload.fulfillment_status || "").toLowerCase();
-    if (fs === "on_hold" || fs === "hold") {
-      orderPayload.internal_status = "hold";
-    } else if (fs === "in_progress" || fs === "partial" || fs === "partially_fulfilled") {
+    if (fs === "in_progress" || fs === "partial" || fs === "partially_fulfilled") {
       orderPayload.internal_status = "preparing";
     } else if (fs === "fulfilled") {
       orderPayload.internal_status = "dispatched";
+    } else if (existingOrder?.internal_status === "hold" && !isShopifyHold) {
+      // Hold was released in Shopify
+      orderPayload.internal_status = existingOrder.pathao_consignment_id ? "dispatched" : "pending";
     } else if (!existingOrder) {
       orderPayload.internal_status = "pending";
     }
+  }
+
+  // If order is marked on hold, update any active dispatches row as well
+  if (isShopifyHold && existingOrder?.id) {
+    await supabase
+      .from("dispatches")
+      .update({ pathao_order_status: "Hold", updated_at: new Date().toISOString() })
+      .eq("order_id", existingOrder.id)
+      .not("pathao_order_status", "in", '("Delivered","Returned","Return","Paid Return","Return Completed","Cancelled")');
   }
 
   if (!existingOrder) {
