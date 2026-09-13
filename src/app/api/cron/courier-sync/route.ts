@@ -230,24 +230,28 @@ async function handleCron(request: NextRequest) {
                 newStatus: "Delivered",
               });
             }
-            // 3. Out for Delivery / Assigned for Delivery
+            // 3. Ready for Delivery / Assigned for Delivery / Out for Delivery
             else if (
               newStatus.includes("out_for_delivery") ||
               newStatus.includes("out for delivery") ||
               newStatus.includes("assigned for delivery") ||
-              newStatus.includes("assigned_for_delivery")
+              newStatus.includes("assigned_for_delivery") ||
+              newStatus.includes("ready for delivery") ||
+              newStatus.includes("ready_for_delivery")
             ) {
+              const label = newStatus.includes("out") ? "Out for Delivery" : "Ready for Delivery";
               if (d.id) {
                 await supabase.from("dispatches").update({
-                  pathao_order_status: "Assigned for Delivery",
+                  pathao_order_status: label,
                   updated_at: now,
                 }).eq("id", d.id);
               }
 
               if (orderId) {
                 await supabase.from("orders").update({
-                  pathao_delivery_status: "Assigned for Delivery",
+                  pathao_delivery_status: label,
                   internal_status: "dispatched",
+                  delivered_at: null,
                 }).eq("id", orderId);
               }
               updatedCount++;
@@ -273,7 +277,26 @@ async function handleCron(request: NextRequest) {
               }
               updatedCount++;
             }
-            // 5. In Transit / Other
+            // 5. Pickup Holds & Failures
+            else if (newStatus.includes("hold") || newStatus.includes("failed")) {
+              const label = data.order_status;
+              if (d.id) {
+                await supabase.from("dispatches").update({
+                  pathao_order_status: label,
+                  updated_at: now,
+                }).eq("id", d.id);
+              }
+
+              if (orderId) {
+                await supabase.from("orders").update({
+                  internal_status: "hold",
+                  pathao_delivery_status: label,
+                  delivered_at: null,
+                }).eq("id", orderId);
+              }
+              updatedCount++;
+            }
+            // 6. In Transit / Other
             else {
               if (d.id) {
                 await supabase.from("dispatches").update({

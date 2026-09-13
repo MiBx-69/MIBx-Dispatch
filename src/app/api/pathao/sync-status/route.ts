@@ -231,23 +231,32 @@ export async function POST(request: NextRequest) {
               updatedCount++;
               updatedDetails.push({ consignment_id: d.consignment_id, order: d.shopify_order_name, oldStatus: currentStatus, newStatus: "Delivered" });
             }
-            // 3. Out for Delivery / Assigned for Delivery
-            else if (newStatus.includes("out_for_delivery") || newStatus.includes("out for delivery") || newStatus.includes("assigned for delivery") || newStatus.includes("assigned_for_delivery")) {
+            // 3. Ready for Delivery / Assigned for Delivery / Out for Delivery
+            else if (
+              newStatus.includes("out_for_delivery") ||
+              newStatus.includes("out for delivery") ||
+              newStatus.includes("assigned for delivery") ||
+              newStatus.includes("assigned_for_delivery") ||
+              newStatus.includes("ready for delivery") ||
+              newStatus.includes("ready_for_delivery")
+            ) {
+              const label = newStatus.includes("out") ? "Out for Delivery" : "Ready for Delivery";
               if (d.id) {
                 await supabase.from("dispatches").update({
-                  pathao_order_status: "Assigned for Delivery",
+                  pathao_order_status: label,
                   updated_at: now,
                 }).eq("id", d.id);
               }
 
               if (orderId) {
                 await supabase.from("orders").update({
-                  pathao_delivery_status: "Assigned for Delivery",
+                  pathao_delivery_status: label,
                   internal_status: "dispatched",
+                  delivered_at: null,
                 }).eq("id", orderId);
               }
               updatedCount++;
-              updatedDetails.push({ consignment_id: d.consignment_id, order: d.shopify_order_name, oldStatus: currentStatus, newStatus: "Assigned for Delivery" });
+              updatedDetails.push({ consignment_id: d.consignment_id, order: d.shopify_order_name, oldStatus: currentStatus, newStatus: label });
             }
             // 4. Cancelled
             else if (newStatus.includes("cancel") || newStatus.includes("cancelled")) {
@@ -271,7 +280,27 @@ export async function POST(request: NextRequest) {
               updatedCount++;
               updatedDetails.push({ consignment_id: d.consignment_id, order: d.shopify_order_name, oldStatus: currentStatus, newStatus: "Cancelled" });
             }
-            // 5. In Transit / Hub / other
+            // 5. Pickup Holds & Failures
+            else if (newStatus.includes("hold") || newStatus.includes("failed")) {
+              const label = data.order_status;
+              if (d.id) {
+                await supabase.from("dispatches").update({
+                  pathao_order_status: label,
+                  updated_at: now,
+                }).eq("id", d.id);
+              }
+
+              if (orderId) {
+                await supabase.from("orders").update({
+                  internal_status: "hold",
+                  pathao_delivery_status: label,
+                  delivered_at: null,
+                }).eq("id", orderId);
+              }
+              updatedCount++;
+              updatedDetails.push({ consignment_id: d.consignment_id, order: d.shopify_order_name, oldStatus: currentStatus, newStatus: label });
+            }
+            // 6. In Transit / Hub / other
             else {
               if (d.id) {
                 await supabase.from("dispatches").update({

@@ -351,14 +351,21 @@ async function processPathaoWebhook(payload: any, storedSecret: string, logId?: 
         orderUpdate.returned_at = new Date().toISOString();
         orderUpdate.return_reason = newEvent.toLowerCase().includes("paid") ? "Paid Return via Pathao" : "Returned via Pathao";
       }
-      // ─── OTHER STATUSES (Assigned for Delivery / In Transit / On Hold) ─────
+      // ─── OTHER STATUSES (Ready / Assigned for Delivery / In Transit / On Hold) ─────
       else {
-        if (newEvent.toLowerCase().includes("assigned-for-delivery") || newEvent.toLowerCase().includes("assigned for delivery")) {
-          orderUpdate.pathao_delivery_status = "Assigned for Delivery";
-        }
-        // Don't overwrite if order was already explicitly delivered
-        if (order.internal_status === "delivered") {
-          delete orderUpdate.internal_status;
+        if (
+          newEvent.toLowerCase().includes("assigned-for-delivery") ||
+          newEvent.toLowerCase().includes("assigned for delivery") ||
+          newEvent.toLowerCase().includes("ready for delivery") ||
+          newEvent.toLowerCase().includes("ready-for-delivery") ||
+          newEvent.toLowerCase().includes("ready_for_delivery")
+        ) {
+          orderUpdate.pathao_delivery_status = "Ready for Delivery";
+          orderUpdate.internal_status = "dispatched";
+          orderUpdate.delivered_at = null;
+        } else if (newEvent.toLowerCase().includes("hold") || newEvent.toLowerCase().includes("failed")) {
+          orderUpdate.pathao_delivery_status = newEvent;
+          orderUpdate.internal_status = "hold";
         }
       }
 

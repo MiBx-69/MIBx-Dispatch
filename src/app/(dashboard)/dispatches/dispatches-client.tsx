@@ -16,7 +16,8 @@ const PATHAO_STATUS_COLORS: Record<string, string> = {
   "Pending": "bg-zinc-800 text-zinc-400 border-zinc-700",
   "Picked Up": "bg-blue-500/10 text-blue-400 border-blue-500/20",
   "In Transit": "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
-  "Out for Delivery": "bg-violet-500/10 text-violet-400 border-violet-500/20",
+  "Out for Delivery": "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
+  "Ready for Delivery": "bg-violet-500/10 text-violet-400 border-violet-500/20",
   "Delivered": "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
   "Partial Delivered": "bg-teal-500/10 text-teal-400 border-teal-500/20",
   "Return": "bg-red-500/10 text-red-400 border-red-500/20",
@@ -24,10 +25,12 @@ const PATHAO_STATUS_COLORS: Record<string, string> = {
   "Return Completed": "bg-orange-500/10 text-orange-400 border-orange-500/20",
   "Cancelled": "bg-red-500/10 text-red-400 border-red-500/20",
   "Hold": "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  "Pickup On Hold": "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  "Pickup Failed": "bg-rose-500/10 text-rose-400 border-rose-500/20",
 };
 
 const statusFilters = [
-  "All", "Pending", "Picked Up", "In Transit", "Out for Delivery",
+  "All", "Pending", "Picked Up", "In Transit", "Ready for Delivery", "Out for Delivery",
   "Delivered", "Partial Delivered", "Return", "Paid Return", "Return Completed", "Hold", "Cancelled",
 ];
 
@@ -218,52 +221,90 @@ export function DispatchesClient({
           </div>
         )}
         {dispatches?.map((d: any) => {
-          const STATUS_MAP: Record<string, string> = {
+          const STATUS_NAME_MAP: Record<string, string> = {
             "order.assigned_for_pickup": "Pending",
+            "order.assigned-for-pickup": "Pending",
             "order.pickup_cancelled": "Pending",
             "order.pickup_collected": "Picked Up",
             "order.in_transit": "In Transit",
             "order.at_delivery_hub": "In Transit",
+            "On the Way To Delivery Hub": "In Transit",
+            "order.assigned_for_delivery": "Ready for Delivery",
+            "order.assigned-for-delivery": "Ready for Delivery",
+            "Assigned for Delivery": "Ready for Delivery",
+            "Assigned For Delivery": "Ready for Delivery",
+            "Ready for Delivery": "Ready for Delivery",
             "order.out_for_delivery": "Out for Delivery",
+            "Out for Delivery": "Out for Delivery",
             "order.delivered": "Delivered",
-            "order.partial_delivery": "Delivered",
-            "order.payment_received": "Delivered",
+            "Delivered": "Delivered",
+            "order.partial_delivery": "Partial Delivered",
+            "Partial Delivered": "Partial Delivered",
+            "Partial Delivery": "Partial Delivered",
+            "order.paid-return": "Paid Return",
+            "Paid Return": "Paid Return",
             "order.return_in_transit": "Return",
+            "Return": "Return",
             "order.returned": "Return Completed",
+            "order.returned-to-merchant": "Return Completed",
+            "Returned": "Return Completed",
+            "Return Completed": "Return Completed",
             "order.hold": "Hold",
             "order.failed": "Hold",
+            "Hold": "Hold",
+            "Pickup On Hold": "Pickup On Hold",
+            "Pickup Failed": "Pickup Failed",
+            "order.pickup-failed": "Pickup Failed",
             "order.cancelled": "Cancelled",
+            "Cancelled": "Cancelled",
           };
           
-          let friendlyStatus = STATUS_MAP[d.pathao_order_status] || d.pathao_order_status || "Pending";
-          let statusColor = PATHAO_STATUS_COLORS[friendlyStatus] || PATHAO_STATUS_COLORS["Pending"];
+          const rawStatus = (d.pathao_order_status || "").trim();
+          let friendlyStatus = STATUS_NAME_MAP[rawStatus] || rawStatus || "Pending";
           const order = d.orders;
-          
-          const isDelivered =
-            friendlyStatus === "Delivered" ||
-            (d.pathao_order_status && d.pathao_order_status.toLowerCase().includes("deliver")) ||
-            order?.internal_status === "delivered" ||
-            Boolean(order?.delivered_at);
+          const returnRecord = order?.returns?.[0];
 
-          if (isDelivered) {
-            friendlyStatus = "Delivered";
-            statusColor = PATHAO_STATUS_COLORS["Delivered"] || "text-emerald-400 border-emerald-400/30 bg-emerald-400/10";
-          } else {
-            // Override status if an authentic Shopify/verified return exists
-            const returnRecord = order?.returns?.[0];
-            if (returnRecord) {
-              if (returnRecord.return_type === "partial") {
-                friendlyStatus = "Partially Returned";
-                statusColor = "text-amber-400 border-amber-400/30 bg-amber-400/10";
-              } else {
-                friendlyStatus = "Returned";
-                statusColor = "text-rose-400 border-rose-400/30 bg-rose-400/10";
-              }
-            } else if (order?.internal_status === "returned") {
-              friendlyStatus = "Return Completed";
-              statusColor = "text-rose-400 border-rose-400/30 bg-rose-400/10";
-            }
+          // 1. Partial delivery / Partial return
+          if (
+            rawStatus.toLowerCase().includes("partial") ||
+            order?.pathao_delivery_status?.toLowerCase().includes("partial") ||
+            returnRecord?.return_type === "partial"
+          ) {
+            friendlyStatus = "Partial Delivered";
           }
+          // 2. Ready for Delivery / Assigned for Delivery (NEVER DELIVERED)
+          else if (
+            rawStatus.toLowerCase().includes("assigned") ||
+            rawStatus.toLowerCase().includes("ready for delivery")
+          ) {
+            friendlyStatus = "Ready for Delivery";
+          }
+          // 3. Paid Returns / Returns
+          else if (rawStatus.toLowerCase().includes("paid-return") || rawStatus.toLowerCase() === "paid return") {
+            friendlyStatus = "Paid Return";
+          } else if (
+            rawStatus.toLowerCase().includes("return") ||
+            order?.internal_status === "returned" ||
+            (returnRecord && returnRecord.return_type !== "partial")
+          ) {
+            friendlyStatus = rawStatus.toLowerCase().includes("transit") ? "Return" : "Return Completed";
+          }
+          // 4. Delivered (ONLY if the courier status actually says delivered)
+          else if (
+            rawStatus.toLowerCase() === "delivered" ||
+            rawStatus.toLowerCase() === "order.delivered" ||
+            rawStatus.toLowerCase() === "order.payment_received"
+          ) {
+            friendlyStatus = "Delivered";
+          }
+          // 5. Holds & Failures
+          else if (rawStatus.toLowerCase().includes("failed")) {
+            friendlyStatus = "Pickup Failed";
+          } else if (rawStatus.toLowerCase().includes("hold")) {
+            friendlyStatus = "Pickup On Hold";
+          }
+
+          const statusColor = PATHAO_STATUS_COLORS[friendlyStatus] || PATHAO_STATUS_COLORS["Pending"] || "bg-zinc-800 text-zinc-400 border-zinc-700";
 
           const trackingUrl = `https://merchant.pathao.com/tracking?consignment_id=${d.consignment_id}&phone=${encodeURIComponent(d.recipient_phone || order?.customer_phone || "")}`;
 

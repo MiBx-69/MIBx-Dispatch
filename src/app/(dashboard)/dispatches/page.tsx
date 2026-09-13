@@ -25,16 +25,17 @@ export default async function DispatchesPage({
     .range(offset, offset + pageSize - 1);
 
   const STATUS_MAP: Record<string, string[]> = {
-    "Pending": ["Pending", "order.assigned_for_pickup", "order.pickup_cancelled"],
+    "Pending": ["Pending", "order.assigned_for_pickup", "order.pickup_cancelled", "order.assigned-for-pickup"],
     "Picked Up": ["Picked Up", "order.pickup_collected"],
-    "In Transit": ["In Transit", "order.in_transit", "order.at_delivery_hub"],
+    "In Transit": ["In Transit", "order.in_transit", "order.at_delivery_hub", "On the Way To Delivery Hub"],
+    "Ready for Delivery": ["Ready for Delivery", "Assigned for Delivery", "Assigned For Delivery", "order.assigned_for_delivery", "order.assigned-for-delivery"],
     "Out for Delivery": ["Out for Delivery", "order.out_for_delivery"],
     "Delivered": ["Delivered", "order.delivered", "order.payment_received"],
-    "Partial Delivered": ["Partial Delivered", "order.partial_delivery"],
+    "Partial Delivered": ["Partial Delivered", "Partial Delivery", "order.partial_delivery"],
     "Return": ["Return", "order.return_in_transit"],
     "Paid Return": ["Paid Return", "order.paid-return"],
-    "Return Completed": ["Return Completed", "Returned", "order.returned"],
-    "Hold": ["Hold", "order.hold", "order.failed"],
+    "Return Completed": ["Return Completed", "Returned", "order.returned", "order.returned-to-merchant"],
+    "Hold": ["Hold", "order.hold", "order.failed", "Pickup On Hold", "Pickup Failed", "order.pickup-failed"],
     "Cancelled": ["Cancelled", "order.cancelled"],
   };
 
