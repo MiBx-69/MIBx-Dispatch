@@ -112,10 +112,11 @@ async function pathaoFetch<T = any>(
 
   let currentResponse = response;
   let attempts = 0;
-  while (currentResponse.status === 429 && attempts < 3) {
+  while (currentResponse.status === 429 && attempts < 5) {
     attempts++;
-    const backoff = attempts * 1500;
-    console.warn(`[Pathao API] Rate limited on ${endpoint}. Attempt ${attempts}, backing off ${backoff}ms...`);
+    // Exponential backoff with random jitter: 1.5s, 3s, 4.5s... + jitter
+    const backoff = attempts * 1200 + Math.floor(Math.random() * 600);
+    console.warn(`[Pathao API] Rate limited on ${endpoint}. Attempt ${attempts}/5, backing off ${backoff}ms...`);
     await new Promise((resolve) => setTimeout(resolve, backoff));
     currentResponse = await fetch(`${PATHAO_BASE_URL}${endpoint}`, {
       ...options,

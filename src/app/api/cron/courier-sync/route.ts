@@ -88,8 +88,8 @@ async function handleCron(request: NextRequest) {
     const errors: any[] = [];
     const updatedDetails: any[] = [];
 
-    // Process in batches of 5 with concurrency limit to respect Pathao API rate limits
-    const BATCH_SIZE = 5;
+    // Process in batches of 2 with concurrency limit to respect Pathao API rate limits
+    const BATCH_SIZE = 2;
     for (let i = 0; i < (dispatches?.length || 0); i += BATCH_SIZE) {
       const batch = dispatches!.slice(i, i + BATCH_SIZE);
       await Promise.all(
@@ -237,6 +237,9 @@ async function handleCron(request: NextRequest) {
           }
         })
       );
+      if (i + BATCH_SIZE < (dispatches?.length || 0)) {
+        await new Promise((resolve) => setTimeout(resolve, 350));
+      }
     }
 
     const durationMs = Date.now() - startTime;

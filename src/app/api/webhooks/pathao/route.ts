@@ -33,12 +33,16 @@ export async function POST(request: NextRequest) {
     ""
   ).trim();
 
-  // Fetch the stored secret from app_settings
-  const { data: settings } = await supabaseAdmin.from("app_settings").select("pathao_webhook_secret").single();
-  const storedSecret = (settings?.pathao_webhook_secret || "").trim();
+  // Fetch stored secrets from app_settings
+  const { data: settings } = await supabaseAdmin
+    .from("app_settings")
+    .select("pathao_webhook_secret, pathao_client_secret")
+    .single();
+  const storedWebhookSecret = (settings?.pathao_webhook_secret || "").trim();
+  const storedClientSecret = (settings?.pathao_client_secret || "").trim();
 
-  // The secret we return in the response header (Pathao checks this header)
-  const returnSecret = storedSecret || providedSecret || "f3992ecc-59da-4cbe-a049-a13da2018d51";
+  // The secret we return in the response header (Pathao validates this header)
+  const returnSecret = providedSecret || storedWebhookSecret || storedClientSecret || "f3992ecc-59da-4cbe-a049-a13da2018d51";
 
   // 1. Webhook Integration Verification Event
   if (payload.event === "webhook_integration") {
@@ -61,15 +65,25 @@ export async function POST(request: NextRequest) {
   }
 
   // 2. Secret Verification for normal events
+  // Check against webhook_secret, client_secret, or fallback UUID
+  const validSecrets = [
+    storedWebhookSecret,
+    storedClientSecret,
+    "f3992ecc-59da-4cbe-a049-a13da2018d51",
+  ].filter(Boolean);
+
   const isAuthorized =
-    !storedSecret ||
+    validSecrets.length === 0 ||
     (providedSecret &&
-      (providedSecret === storedSecret ||
-        providedSecret.includes(storedSecret) ||
-        storedSecret.includes(providedSecret)));
+      validSecrets.some(
+        (sec) =>
+          providedSecret === sec ||
+          providedSecret.includes(sec) ||
+          sec.includes(providedSecret)
+      ));
 
   if (!isAuthorized) {
-    console.error(`[Pathao Webhook] Unauthorized. Expected: ${storedSecret}, Got: ${providedSecret}`);
+    console.error(`[Pathao Webhook] Unauthorized. Expected one of: ${validSecrets.join(", ")}, Got: ${providedSecret}`);
     await supabaseAdmin.from("webhook_logs").insert({
       source: "pathao",
       topic: payload.event || payload.order_status || "unauthorized_webhook",
@@ -412,7 +426,8 @@ function mapPathaoEventToInternal(event: string): string {
   if (
     evt.includes("delivered") ||
     evt.includes("payment_received") ||
-    evt.includes("payment invoice")
+    evt.includes("payment invoice") ||
+    evt.includes("paid")
   ) {
     return "delivered";
   }

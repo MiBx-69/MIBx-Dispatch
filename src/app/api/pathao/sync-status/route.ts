@@ -104,8 +104,8 @@ export async function POST(request: NextRequest) {
     const { data: settings } = await supabase.from("app_settings").select("*").single();
     const smsEnabled = !!settings?.sms_api_key;
 
-    // Process in chunks of 3 parallel requests with smooth delay to avoid rate limits
-    const CHUNK_SIZE = 3;
+    // Process in chunks of 2 parallel requests with smooth delay to avoid rate limits
+    const CHUNK_SIZE = 2;
     for (let i = 0; i < activeList.length; i += CHUNK_SIZE) {
       const chunk = activeList.slice(i, i + CHUNK_SIZE);
       await Promise.all(
@@ -247,7 +247,7 @@ export async function POST(request: NextRequest) {
         })
       );
       if (i + CHUNK_SIZE < activeList.length) {
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        await new Promise((resolve) => setTimeout(resolve, 350));
       }
     }
 
