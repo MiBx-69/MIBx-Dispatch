@@ -104,10 +104,10 @@ export function DispatchesReportingHeader({
   const handleSyncCourier = async () => {
     setIsSyncing(true);
     try {
-      const res = await fetch("/api/pathao/sync-status?days=7", { method: "POST" });
+      const res = await fetch("/api/pathao/sync-status", { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to sync");
-      toast.success(`Courier scan complete! Checked ${data.totalChecked} parcels from last 7 days, updated ${data.updatedCount}.`);
+      toast.success(`Pending courier scan complete! Checked ${data.checked || data.totalChecked || 0} active parcels in ${data.durationMs ? (data.durationMs / 1000).toFixed(1) + 's' : 'seconds'}, updated ${data.updated || data.updatedCount || 0}.`);
       router.refresh();
     } catch (err: any) {
       toast.error(err.message || "Failed to sync with courier");
@@ -128,14 +128,11 @@ export function DispatchesReportingHeader({
   return (
     <div className="bg-zinc-900/90 border border-zinc-800/80 rounded-xl p-2 sm:p-2.5 space-y-2 text-xs">
       {/* Top row: Title + Export/Import */}
-      <div className="flex items-center justify-between gap-2 flex-wrap">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
-          <span className="p-1 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-            <Truck size={13} />
-          </span>
-          <span className="text-xs font-semibold text-zinc-200">Dispatches Report</span>
-          <span className="text-[10px] text-indigo-400/90 bg-indigo-500/10 px-1.5 py-0.5 rounded-full border border-indigo-500/20 font-medium flex items-center gap-1">
-            <CheckCircle2 size={10} />
+          <Truck size={14} className="text-indigo-400 shrink-0" />
+          <span className="font-semibold text-zinc-100 text-sm">Dispatches Report</span>
+          <span className="text-[11px] text-zinc-400 bg-zinc-800 px-2 py-0.5 rounded-full border border-zinc-700/60">
             {activeLabel}
           </span>
         </div>
@@ -146,10 +143,10 @@ export function DispatchesReportingHeader({
             onClick={handleSyncCourier}
             disabled={isSyncing}
             className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-indigo-300 bg-indigo-600/15 hover:bg-indigo-600/25 border border-indigo-500/25 transition-colors disabled:opacity-50"
-            title="Scan Pathao API to update all active consignments from the last 7 days"
+            title="Scan Pathao API to update all active pending consignments"
           >
             <RefreshCw size={11} className={`text-indigo-400 ${isSyncing ? "animate-spin" : ""}`} />
-            <span>{isSyncing ? "Scanning 7d..." : "Sync Courier (7d)"}</span>
+            <span>{isSyncing ? "Syncing..." : "Sync Pending"}</span>
           </button>
 
           <button

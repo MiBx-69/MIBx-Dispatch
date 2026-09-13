@@ -93,8 +93,12 @@ async function handleCron(request: NextRequest) {
     const errors: any[] = [];
     const updatedDetails: any[] = [];
 
-    // Process strictly sequentially with a polite 200ms spacing to completely eliminate 429 rate limit errors
-    const dispatchList = dispatches || [];
+    // Filter out any dispatch whose linked order already has a terminal status
+    const dispatchList = (dispatches || []).filter((d: any) => {
+      const order = Array.isArray(d.orders) ? d.orders[0] : d.orders;
+      const orderStatus = (order?.internal_status || "").toLowerCase().trim();
+      return !["delivered", "returned", "cancelled", "partial_delivered"].includes(orderStatus);
+    });
     for (let i = 0; i < dispatchList.length; i++) {
       const d = dispatchList[i];
       try {

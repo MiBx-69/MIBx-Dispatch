@@ -30,14 +30,14 @@ export function DashboardHeader() {
   const handleQuickSync = async () => {
     if (isSyncing) return;
     setIsSyncing(true);
-    const toastId = toast.loading("Syncing with Pathao Courier...");
+    const toastId = toast.loading("Syncing active pending parcels with Pathao...");
     try {
-      const res = await fetch("/api/pathao/sync-status?days=this_month&force=true", { method: "POST" });
+      const res = await fetch("/api/pathao/sync-status", { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Sync failed");
       toast.success("Pathao Sync Completed!", {
         id: toastId,
-        description: `Checked ${data.checked || data.totalChecked || 0} parcels. Updated ${data.updated || data.updatedCount || 0} orders.`,
+        description: `Checked ${data.checked || data.totalChecked || 0} active parcels in ${data.durationMs ? (data.durationMs / 1000).toFixed(1) + 's' : 'seconds'}. Updated ${data.updated || data.updatedCount || 0} orders.`,
       });
       router.refresh();
     } catch (err: any) {
@@ -60,10 +60,10 @@ export function DashboardHeader() {
           onClick={handleQuickSync}
           disabled={isSyncing}
           className="flex items-center gap-1.5 px-3 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 border border-amber-500/25 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-          title="Scan & sync all Pathao statuses for this month"
+          title="Quick sync pending & in-transit parcels with Pathao"
         >
           <RefreshCw size={14} className={isSyncing ? "animate-spin text-amber-400" : "text-amber-400"} />
-          <span className="hidden sm:inline">{isSyncing ? "Syncing..." : "Sync Pathao"}</span>
+          <span className="hidden sm:inline">{isSyncing ? "Syncing..." : "Sync Pending"}</span>
         </button>
 
         <div className="relative">

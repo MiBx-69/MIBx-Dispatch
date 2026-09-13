@@ -38,9 +38,9 @@ export function PathaoReconciliationWidget({ metrics }: Props) {
   const handleManualSync = async () => {
     if (isSyncing) return;
     setIsSyncing(true);
-    const toastId = toast.loading("Syncing with Pathao Courier Hermes API...");
+    const toastId = toast.loading("Syncing active pending parcels with Pathao...");
     try {
-      const res = await fetch("/api/pathao/sync-status?days=this_month&force=true", {
+      const res = await fetch("/api/pathao/sync-status", {
         method: "POST",
       });
       const data = await res.json();
@@ -48,7 +48,7 @@ export function PathaoReconciliationWidget({ metrics }: Props) {
 
       toast.success("Pathao Sync Completed!", {
         id: toastId,
-        description: `Checked ${data.checked || data.totalChecked || 0} parcels. Updated ${data.updated || data.updatedCount || 0} statuses.`,
+        description: `Checked ${data.checked || data.totalChecked || 0} active parcels in ${data.durationMs ? (data.durationMs / 1000).toFixed(1) + 's' : 'seconds'}. Updated ${data.updated || data.updatedCount || 0} statuses.`,
       });
       setLastSyncTime(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
       router.refresh();
@@ -59,21 +59,21 @@ export function PathaoReconciliationWidget({ metrics }: Props) {
     }
   };
 
-  // Automatically sync on every refresh / page load
+  // Lightweight periodic pending-only sync with a strict 10-minute cooldown
   useEffect(() => {
     if (hasAutoSyncedRef.current) return;
     hasAutoSyncedRef.current = true;
 
     const last = sessionStorage.getItem("last_pathao_auto_sync");
     const now = Date.now();
-    // Auto-sync on refresh (cooldown 15s to prevent loops)
-    if (!last || now - Number(last) > 15000) {
+    // Auto-sync only every 10 minutes (600,000ms) to avoid unnecessary API queries
+    if (!last || now - Number(last) > 600000) {
       sessionStorage.setItem("last_pathao_auto_sync", String(now));
 
       const autoSync = async () => {
         try {
           setIsSyncing(true);
-          const res = await fetch("/api/pathao/sync-status?days=this_month", {
+          const res = await fetch("/api/pathao/sync-status", {
             method: "POST",
           });
           const data = await res.json();
@@ -164,10 +164,10 @@ export function PathaoReconciliationWidget({ metrics }: Props) {
             onClick={handleManualSync}
             disabled={isSyncing}
             className="text-xs font-semibold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50"
-            title="Force immediate synchronization with Pathao"
+            title="Sync active pending parcels with Pathao"
           >
             <RefreshCw size={13} className={isSyncing ? "animate-spin text-amber-400" : "text-amber-400"} />
-            <span>{isSyncing ? "Syncing..." : "Sync with Pathao"}</span>
+            <span>{isSyncing ? "Syncing..." : "Sync Pending"}</span>
           </button>
 
           <Link

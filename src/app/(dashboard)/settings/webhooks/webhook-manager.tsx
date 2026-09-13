@@ -47,29 +47,21 @@ export function WebhookManager({
     }
   };
 
-  const [syncType, setSyncType] = useState<"7d" | "all" | null>(null);
-
-  const syncActiveDispatches = async (days: number | "all" = 7) => {
+  const syncActiveDispatches = async () => {
     setIsSyncing(true);
-    setSyncType(days === "all" ? "all" : "7d");
-    const toastId = toast.loading(
-      days === "all"
-        ? "Running Full History Scan of all Pathao dispatches..."
-        : "Scanning courier orders for the last 7 days..."
-    );
+    const toastId = toast.loading("Scanning active pending courier orders with Pathao...");
     try {
-      const res = await fetch(`/api/pathao/sync-status?days=${days}`, { method: "POST" });
+      const res = await fetch(`/api/pathao/sync-status`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Sync failed");
       toast.success(
-        `Courier Sync Complete! Checked ${data.checked || data.totalChecked} parcels, updated ${data.updated || data.updatedCount} orders.`,
+        `Courier Sync Complete! Checked ${data.checked || data.totalChecked || 0} active pending parcels in ${data.durationMs ? (data.durationMs / 1000).toFixed(1) + 's' : 'seconds'}, updated ${data.updated || data.updatedCount || 0} orders.`,
         { id: toastId, duration: 5000 }
       );
     } catch (err: any) {
       toast.error(err.message || "Failed to sync with Pathao", { id: toastId });
     } finally {
       setIsSyncing(false);
-      setSyncType(null);
     }
   };
 
@@ -112,22 +104,13 @@ export function WebhookManager({
 
           <div className="flex items-center gap-2 flex-wrap">
             <button
-              onClick={() => syncActiveDispatches(7)}
+              onClick={syncActiveDispatches}
               disabled={isSyncing}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-amber-300 bg-amber-600/15 hover:bg-amber-600/25 border border-amber-500/25 transition-colors disabled:opacity-50"
-              title="Scan Pathao status for dispatches in the last 7 days"
+              title="Fast scan of pending and in-transit parcels that have no return or delivered status"
             >
-              <RefreshCw size={12} className={isSyncing && syncType === "7d" ? "animate-spin text-amber-400" : "text-amber-400"} />
-              <span>{isSyncing && syncType === "7d" ? "Scanning 7d..." : "Scan Last 7 Days"}</span>
-            </button>
-            <button
-              onClick={() => syncActiveDispatches("all")}
-              disabled={isSyncing}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-300 bg-red-600/15 hover:bg-red-600/25 border border-red-500/25 transition-colors disabled:opacity-50"
-              title="Scan all dispatches on Pathao across full history"
-            >
-              <RefreshCw size={12} className={isSyncing && syncType === "all" ? "animate-spin text-red-400" : "text-red-400"} />
-              <span>{isSyncing && syncType === "all" ? "Scanning All..." : "Full Scan (All Dispatches)"}</span>
+              <RefreshCw size={12} className={isSyncing ? "animate-spin text-amber-400" : "text-amber-400"} />
+              <span>{isSyncing ? "Syncing..." : "Sync Pending Parcels"}</span>
             </button>
           </div>
         </div>

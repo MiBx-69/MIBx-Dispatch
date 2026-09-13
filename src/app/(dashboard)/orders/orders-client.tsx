@@ -486,21 +486,17 @@ export function OrdersClient({
   const [isCourierSyncing, setIsCourierSyncing] = useState(false);
   const [courierMenuOpen, setCourierMenuOpen] = useState(false);
 
-  const handleCourierSync = async (days: number | "all" = 7) => {
+  const handleCourierSync = async () => {
     setCourierMenuOpen(false);
     setIsCourierSyncing(true);
-    const toastId = toast.loading(
-      days === "all"
-        ? "Scanning all Pathao courier dispatches (Full History)..."
-        : "Scanning courier orders for the last 7 days..."
-    );
+    const toastId = toast.loading("Scanning active pending courier parcels with Pathao...");
     try {
-      const res = await fetch(`/api/pathao/sync-status?days=${days}`, { method: "POST" });
+      const res = await fetch(`/api/pathao/sync-status`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to scan courier status");
 
       toast.success(
-        `Courier Sync Complete: Checked ${data.checked || data.totalChecked} parcels (${days === "all" ? "All History" : "Last 7 Days"}), updated ${data.updated || data.updatedCount} orders.`,
+        `Courier Sync Complete: Checked ${data.checked || data.totalChecked || 0} active parcels in ${data.durationMs ? (data.durationMs / 1000).toFixed(1) + 's' : 'seconds'}, updated ${data.updated || data.updatedCount || 0} orders.`,
         { id: toastId, duration: 5000 }
       );
       router.refresh();
@@ -578,52 +574,17 @@ export function OrdersClient({
                 `Select All (${total})`
               )}
             </button>
-            {/* Sync Courier (7d or All) Dropdown */}
-            <div className="relative flex items-center flex-1 sm:flex-initial">
-              <button
-                type="button"
-                onClick={() => handleCourierSync(7)}
-                disabled={isCourierSyncing}
-                className="flex-1 sm:flex-initial px-3 py-2 sm:py-2.5 bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-l-xl text-xs sm:text-sm font-medium hover:bg-blue-600/30 transition-colors whitespace-nowrap flex items-center justify-center gap-1.5 disabled:opacity-50"
-                title="Scan Pathao courier status for all orders in the last 7 days and update DB + Shopify"
-              >
-                <RotateCcw className={`w-3.5 h-3.5 shrink-0 ${isCourierSyncing ? "animate-spin" : ""}`} />
-                <span>{isCourierSyncing ? "Syncing..." : "Sync Courier (7d)"}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setCourierMenuOpen(!courierMenuOpen)}
-                disabled={isCourierSyncing}
-                className="px-2 py-2 sm:py-2.5 bg-blue-600/20 text-blue-400 border-t border-r border-b border-l-0 border-blue-500/30 rounded-r-xl text-xs sm:text-sm font-medium hover:bg-blue-600/30 transition-colors disabled:opacity-50"
-                title="Options: 7 Days or Complete Scan"
-              >
-                <ChevronDown size={14} />
-              </button>
-
-              {courierMenuOpen && (
-                <div className="absolute right-0 top-full mt-1.5 w-60 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95">
-                  <div className="px-2.5 py-1 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
-                    Courier Scan Range
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleCourierSync(7)}
-                    className="w-full text-left px-2.5 py-2 rounded-lg text-xs text-zinc-200 hover:text-white hover:bg-zinc-800 transition-colors"
-                  >
-                    <div className="font-medium text-blue-400">Scan Last 7 Days (Default)</div>
-                    <div className="text-[10px] text-zinc-400">Fast scan of recent deliveries</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleCourierSync("all")}
-                    className="w-full text-left px-2.5 py-2 rounded-lg text-xs text-zinc-200 hover:text-white hover:bg-zinc-800 transition-colors"
-                  >
-                    <div className="font-medium text-indigo-400">Complete Scan (All Dispatches)</div>
-                    <div className="text-[10px] text-zinc-400">Scan all past orders on Pathao</div>
-                  </button>
-                </div>
-              )}
-            </div>
+            {/* Sync Pending Courier Button */}
+            <button
+              type="button"
+              onClick={handleCourierSync}
+              disabled={isCourierSyncing}
+              className="flex-1 sm:flex-initial px-3 py-2 sm:py-2.5 bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-xl text-xs sm:text-sm font-medium hover:bg-blue-600/30 transition-colors whitespace-nowrap flex items-center justify-center gap-1.5 disabled:opacity-50"
+              title="Quick scan pending & in-transit orders with Pathao and update DB + Shopify"
+            >
+              <RotateCcw className={`w-3.5 h-3.5 shrink-0 ${isCourierSyncing ? "animate-spin" : ""}`} />
+              <span>{isCourierSyncing ? "Syncing..." : "Sync Pending"}</span>
+            </button>
             <button
               type="button"
               onClick={() => setBulkImportDeliveriesOpen(true)}
