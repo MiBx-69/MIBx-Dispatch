@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { Truck, CheckCircle2, ArrowDownLeft, RotateCcw, Clock, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import type { UnifiedReportMetrics } from "@/lib/reporting-engine";
@@ -15,7 +15,6 @@ export function PathaoReconciliationWidget({ metrics }: Props) {
   const router = useRouter();
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
-  const hasAutoSyncedRef = useRef(false);
 
   const {
     courierDeliveredCount = 0,
@@ -59,38 +58,7 @@ export function PathaoReconciliationWidget({ metrics }: Props) {
     }
   };
 
-  // Lightweight periodic pending-only sync with a strict 10-minute cooldown
-  useEffect(() => {
-    if (hasAutoSyncedRef.current) return;
-    hasAutoSyncedRef.current = true;
-
-    const last = sessionStorage.getItem("last_pathao_auto_sync");
-    const now = Date.now();
-    // Auto-sync only every 10 minutes (600,000ms) to avoid unnecessary API queries
-    if (!last || now - Number(last) > 600000) {
-      sessionStorage.setItem("last_pathao_auto_sync", String(now));
-
-      const autoSync = async () => {
-        try {
-          setIsSyncing(true);
-          const res = await fetch("/api/pathao/sync-status", {
-            method: "POST",
-          });
-          const data = await res.json();
-          setLastSyncTime(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
-          if (data.updated && data.updated > 0) {
-            router.refresh();
-          }
-        } catch (e) {
-          console.error("Pathao auto-sync error:", e);
-        } finally {
-          setIsSyncing(false);
-        }
-      };
-
-      autoSync();
-    }
-  }, [router]);
+  // Sync is exclusively manual on-click or via background webhooks
 
   // Calculate percentages based on active orders (Delivered + Paid Return + Returned + Processing)
   const totalOrders = courierActiveTotalCount || 1;
@@ -144,15 +112,15 @@ export function PathaoReconciliationWidget({ metrics }: Props) {
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Live Synced {lastSyncTime ? `(${lastSyncTime})` : ""}
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  {lastSyncTime ? `Synced at ${lastSyncTime}` : "Active"}
                 </span>
               )}
             </div>
             <p className="text-xs text-zinc-400 mt-0.5 flex items-center gap-1.5">
               <span>📅 {dateLabel}</span>
               <span className="text-zinc-600">•</span>
-              <span>Auto-synced with Pathao Hermes API</span>
+              <span>Real-time Webhook & On-demand Sync</span>
             </p>
           </div>
         </div>
