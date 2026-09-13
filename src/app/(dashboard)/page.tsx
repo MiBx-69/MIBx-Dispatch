@@ -14,6 +14,7 @@ import { FraudWidget } from "@/components/dashboard/fraud-widget";
 import { DispatchedProductsToday } from "@/components/dashboard/dispatched-today";
 import type { Order } from "@/types/database";
 import { getUnifiedReportMetrics, resolveDateRange } from "@/lib/reporting-engine";
+import { PathaoReconciliationWidget } from "@/components/dashboard/pathao-reconciliation-widget";
 
 export const metadata = { title: "Dashboard" };
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ dateFilter?: string }> }) {
   const supabase = createServiceClient();
   const params = await searchParams;
-  const dateFilter = params.dateFilter || "last_30_days";
+  const dateFilter = params.dateFilter || "this_month";
 
   const unifiedMetrics = await getUnifiedReportMetrics({
     dateFilter,
@@ -262,15 +263,21 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   liveStats.returned_revenue += partialDeductions;
   returnedCOD += partialDeductions;
 
-  const courierStats = Array.from(statusCountMap.entries()).map(([status, count]) => ({ status, count }));
+  const courierStats = [
+    { status: "Delivered", count: unifiedMetrics.courierDeliveredCount },
+    { status: "Paid Return", count: unifiedMetrics.courierPaidReturnCount },
+    { status: "Returned", count: unifiedMetrics.courierReturnedCount },
+    { status: "In Transit", count: unifiedMetrics.courierProcessingCount },
+    { status: "Pending", count: unifiedMetrics.courierPickupIssueCount },
+  ];
 
   const statCards = [
     { label: "Pending Orders", value: unifiedMetrics.pendingOrdersCount, icon: Clock, color: "text-zinc-400", bg: "bg-zinc-800/50", href: "/orders?status=pending" },
     { label: "Preparing", value: liveStats.preparing_orders || 0, icon: Package, color: "text-amber-400", bg: "bg-amber-500/10", href: "/orders?status=preparing" },
-    { label: "Dispatched", value: unifiedMetrics.dispatchedCount, icon: Truck, color: "text-indigo-400", bg: "bg-indigo-500/10", href: "/dispatches" },
-    { label: "Delivered", value: unifiedMetrics.deliveredCount, icon: CheckCircle, color: "text-emerald-400", bg: "bg-emerald-500/10", href: "/orders?status=delivered" },
+    { label: "Dispatched", value: unifiedMetrics.courierActiveTotalCount || unifiedMetrics.dispatchedCount, icon: Truck, color: "text-indigo-400", bg: "bg-indigo-500/10", href: "/dispatches" },
+    { label: "Delivered", value: unifiedMetrics.courierDeliveredCount || unifiedMetrics.deliveredCount, icon: CheckCircle, color: "text-emerald-400", bg: "bg-emerald-500/10", href: "/orders?status=delivered" },
     { label: "On Hold", value: liveStats.hold_orders || 0, icon: AlertCircle, color: "text-orange-400", bg: "bg-orange-500/10", href: "/orders?status=hold" },
-    { label: "Net Revenue", value: `৳${Number(unifiedMetrics.netRevenue || unifiedMetrics.deliveredRevenue).toLocaleString()}`, subValue: `৳${Number(unifiedMetrics.deliveredRevenue).toLocaleString()} delivered`, icon: TrendingUp, color: "text-violet-400", bg: "bg-violet-500/10", isText: true },
+    { label: "Net Revenue", value: `৳${Number(unifiedMetrics.netRevenue || unifiedMetrics.deliveredRevenue).toLocaleString()}`, subValue: `৳${Number(unifiedMetrics.courierDeliveredValue || unifiedMetrics.deliveredRevenue).toLocaleString()} delivered`, icon: TrendingUp, color: "text-violet-400", bg: "bg-violet-500/10", isText: true },
   ];
 
   return (
@@ -294,8 +301,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             <TrendingUp className="w-16 h-16 text-emerald-400" />
           </div>
           <p className="text-xs text-emerald-400/80 font-medium uppercase tracking-wider relative z-10">Delivered Sales</p>
-          <p className="text-2xl lg:text-4xl font-bold text-emerald-400 mt-2 relative z-10 truncate" title={`৳${Number(unifiedMetrics.deliveredRevenue).toLocaleString()}`}>
-            ৳{Number(unifiedMetrics.deliveredRevenue).toLocaleString()}
+          <p className="text-2xl lg:text-4xl font-bold text-emerald-400 mt-2 relative z-10 truncate" title={`৳${Number(unifiedMetrics.courierDeliveredValue || unifiedMetrics.deliveredRevenue).toLocaleString()}`}>
+            ৳{Number(unifiedMetrics.courierDeliveredValue || unifiedMetrics.deliveredRevenue).toLocaleString()}
           </p>
         </div>
 
@@ -306,7 +313,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </div>
           <p className="text-xs text-indigo-400/80 font-medium uppercase tracking-wider relative z-10">Dispatched</p>
           <div className="flex items-center gap-2 relative z-10 mt-2 truncate">
-            <p className="text-2xl lg:text-4xl font-bold text-indigo-400 truncate">{unifiedMetrics.dispatchedCount}</p>
+            <p className="text-2xl lg:text-4xl font-bold text-indigo-400 truncate">{unifiedMetrics.courierActiveTotalCount || unifiedMetrics.dispatchedCount}</p>
             <Link href="/dispatches" className="text-[10px] text-indigo-500/60 hover:text-indigo-400 transition-colors uppercase tracking-widest font-semibold border border-indigo-500/20 px-2 py-0.5 rounded-full shrink-0">
               View
             </Link>
@@ -322,6 +329,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <p className="text-2xl lg:text-4xl font-bold text-rose-400 mt-2 relative z-10 truncate">{unifiedMetrics.cancelledOrdersCount}</p>
         </div>
       </div>
+
+      {/* Pathao Courier Reconciliation Widget */}
+      <PathaoReconciliationWidget metrics={unifiedMetrics} />
 
       {/* Advanced Metrics */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -343,7 +353,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <FraudWidget stats={fraudStats} />
         </div>
         <div className="lg:col-span-2 rounded-2xl p-5 border border-zinc-800/50 bg-zinc-900 flex flex-col justify-center">
-          <FinancialsWidget pendingCOD={pendingCOD} deliveredCOD={deliveredCOD} returnedCOD={returnedCOD} />
+          <FinancialsWidget
+            pendingCOD={unifiedMetrics.courierProcessingValue || pendingCOD}
+            deliveredCOD={unifiedMetrics.courierDeliveredValue || deliveredCOD}
+            returnedCOD={unifiedMetrics.courierReturnedValue + unifiedMetrics.courierPaidReturnValue || returnedCOD}
+          />
         </div>
         <div className="lg:col-span-3 h-80 rounded-2xl p-5 border border-zinc-800/50 bg-zinc-900">
           <CourierPerformanceChart data={courierStats} />

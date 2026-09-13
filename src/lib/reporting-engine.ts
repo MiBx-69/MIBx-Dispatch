@@ -21,6 +21,23 @@ export interface UnifiedReportMetrics {
   dispatchedCount: number;
   amountToCollect: number;
 
+  // Courier Reconciliation (Pathao Live Hermes Data)
+  courierDeliveredCount: number;
+  courierDeliveredValue: number;
+  courierPaidReturnCount: number;
+  courierPaidReturnValue: number;
+  courierPaidReturnFee: number;
+  courierReturnedCount: number;
+  courierReturnedValue: number;
+  courierProcessingCount: number;
+  courierProcessingValue: number;
+  courierPickupIssueCount: number;
+  courierPickupIssueValue: number;
+  courierActiveTotalCount: number;
+  courierActiveTotalValue: number;
+  courierTotalCount: number;
+  courierTotalValue: number;
+
   // Overall
   totalOrders: number;
   pendingOrdersCount: number;
@@ -59,13 +76,11 @@ export async function getUnifiedReportMetrics(params: {
     .select("id, shopify_order_name, customer_name, customer_phone, pathao_consignment_id, total_price, internal_status, line_items, shopify_created_at, delivered_at, returned_at")
     .eq("is_archived", false);
 
-  // 2. Fetch Dispatches (non-cancelled and non-archived)
+  // 2. Fetch Dispatches (all consignments with optional order info)
   const dispatchesQuery = supabase
     .from("dispatches")
-    .select("id, order_id, shopify_order_name, recipient_name, recipient_phone, consignment_id, amount_to_collect, is_cancelled, pathao_order_status, dispatched_at, orders!inner(internal_status, is_archived)")
-    .eq("is_cancelled", false)
-    .neq("orders.internal_status", "cancelled")
-    .eq("orders.is_archived", false);
+    .select("id, order_id, shopify_order_name, recipient_name, recipient_phone, consignment_id, amount_to_collect, delivery_fee, is_cancelled, pathao_order_status, dispatched_at, orders(id, internal_status, is_archived, total_price)")
+    .not("consignment_id", "is", null);
 
   // 3. Fetch Returns
   const returnsQuery = supabase
@@ -84,9 +99,6 @@ export async function getUnifiedReportMetrics(params: {
 
   let allOrders: any[] = ordersData || [];
   let allDispatches: any[] = (dispatchesData || []).filter((d: any) => {
-    if (d.is_cancelled) return false;
-    if (d.pathao_order_status && d.pathao_order_status.toLowerCase().includes("cancel")) return false;
-    if (d.orders?.internal_status === "cancelled") return false;
     if (d.orders?.is_archived) return false;
     return true;
   });
@@ -169,21 +181,73 @@ export async function getUnifiedReportMetrics(params: {
     r.status === "pending_verification" || (r.return_type === "partial" && r.is_verified === false)
   ).length;
 
-  // Dispatches Calculations
-  const dispatchedCount = filteredDispatches.length;
+  // Courier Reconciliation Calculations (matching Pathao Hermes metrics 1:1)
+  let courierDeliveredCount = 0;
+  let courierDeliveredValue = 0;
+  let courierPaidReturnCount = 0;
+  let courierPaidReturnValue = 0;
+  let courierPaidReturnFee = 0;
+  let courierReturnedCount = 0;
+  let courierReturnedValue = 0;
+  let courierProcessingCount = 0;
+  let courierProcessingValue = 0;
+  let courierPickupIssueCount = 0;
+  let courierPickupIssueValue = 0;
+  let courierTotalCount = 0;
+  let courierTotalValue = 0;
+
+  filteredDispatches.forEach((d: any) => {
+    const st = (d.pathao_order_status || "").toLowerCase().trim();
+    const val = Number(d.amount_to_collect || d.orders?.total_price || 0);
+    const fee = Number(d.delivery_fee || 110);
+
+    courierTotalCount++;
+    courierTotalValue += val;
+
+    if (st === "delivered" || st.includes("partial")) {
+      courierDeliveredCount++;
+      courierDeliveredValue += val;
+    } else if (st === "paid return") {
+      courierPaidReturnCount++;
+      courierPaidReturnValue += val;
+      courierPaidReturnFee += fee;
+    } else if (st.includes("return")) {
+      courierReturnedCount++;
+      courierReturnedValue += val;
+    } else if (st.includes("pickup")) {
+      courierPickupIssueCount++;
+      courierPickupIssueValue += val;
+    } else {
+      courierProcessingCount++;
+      courierProcessingValue += val;
+    }
+  });
+
+  const courierActiveTotalCount = courierDeliveredCount + courierPaidReturnCount + courierReturnedCount + courierProcessingCount;
+  const courierActiveTotalValue = Math.round(courierDeliveredValue + courierPaidReturnFee + courierReturnedValue + courierProcessingValue);
+
+  // Dispatches Calculations (active, non-pickup-cancelled)
+  const activeDispatches = filteredDispatches.filter((d: any) => {
+    const st = (d.pathao_order_status || "").toLowerCase();
+    if (st === "delivered" || st.includes("partial") || st.includes("return")) return true;
+    if (d.is_cancelled) return false;
+    if (st.includes("pickup cancel")) return false;
+    return true;
+  });
+  const dispatchedCount = activeDispatches.length;
   const amountToCollect = Math.round(
-    filteredDispatches.reduce((sum: number, d: any) => sum + (Number(d.amount_to_collect) || 0), 0)
+    activeDispatches.reduce((sum: number, d: any) => sum + (Number(d.amount_to_collect) || 0), 0)
   );
 
   // Overall counts
   const totalOrders = filteredOrders.length;
   const pendingOrdersCount = filteredOrders.filter((o: any) => o.internal_status === "pending").length;
   const cancelledOrdersCount = filteredOrders.filter((o: any) => o.internal_status === "cancelled").length;
-  const netRevenue = Math.max(0, deliveredRevenue - returnFees);
+  const netRevenue = Math.max(0, (courierDeliveredValue || deliveredRevenue) - returnFees);
 
   return {
-    deliveredCount,
-    deliveredRevenue,
+    deliveredCount: courierDeliveredCount || deliveredCount,
+    deliveredRevenue: courierDeliveredValue || deliveredRevenue,
     deliveredItems,
     deliveredAOV,
     returnedCount,
@@ -194,6 +258,21 @@ export async function getUnifiedReportMetrics(params: {
     needsAttentionCount,
     dispatchedCount,
     amountToCollect,
+    courierDeliveredCount,
+    courierDeliveredValue,
+    courierPaidReturnCount,
+    courierPaidReturnValue,
+    courierPaidReturnFee,
+    courierReturnedCount,
+    courierReturnedValue,
+    courierProcessingCount,
+    courierProcessingValue,
+    courierPickupIssueCount,
+    courierPickupIssueValue,
+    courierActiveTotalCount,
+    courierActiveTotalValue,
+    courierTotalCount,
+    courierTotalValue,
     totalOrders,
     pendingOrdersCount,
     cancelledOrdersCount,

@@ -51,21 +51,23 @@ export function TopBar({ profile }: TopBarProps) {
 
   const [courierDropdownOpen, setCourierDropdownOpen] = useState(false);
 
-  const handleCourierSync = async (days: number | "all" = 7) => {
+  const handleCourierSync = async (days: number | "all" | "this_month" = "this_month") => {
     setCourierDropdownOpen(false);
     setSyncingCourier(true);
     const toastId = toast.loading(
       days === "all"
         ? "Scanning all Pathao courier dispatches (Full History)..."
-        : "Scanning courier orders for the last 7 days..."
+        : days === "this_month"
+        ? "Scanning all Pathao courier dispatches for This Month..."
+        : `Scanning courier orders for the last ${days} days...`
     );
     try {
-      const res = await fetch(`/api/pathao/sync-status?days=${days}`, { method: "POST" });
+      const res = await fetch(`/api/pathao/sync-status?days=${days}&force=true`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Courier sync failed");
       toast.success(`Courier Scan Complete!`, {
         id: toastId,
-        description: `Checked ${data.checked || data.totalChecked} parcels (${days === "all" ? "All History" : "Last 7 Days"}). Updated ${data.updated || data.updatedCount} orders.`,
+        description: `Checked ${data.checked || data.totalChecked} parcels. Updated ${data.updated || data.updatedCount} orders.`,
         duration: 5000,
       });
       window.location.reload();
@@ -90,24 +92,24 @@ export function TopBar({ profile }: TopBarProps) {
 
       {/* Actions */}
       <div className="flex items-center gap-2">
-        {/* Sync Courier (7 Days or All) Dropdown Button */}
+        {/* Sync Courier Dropdown Button */}
         <div className="relative flex items-center">
           <button
-            onClick={() => handleCourierSync(7)}
+            onClick={() => handleCourierSync("this_month")}
             disabled={syncingCourier}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-l-lg text-xs font-medium
                        text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/15 border border-amber-500/25 transition-colors disabled:opacity-50"
-            title="Scan Pathao courier status for all orders from the last 7 days"
+            title="Scan Pathao courier status for all orders in This Month"
           >
             <Truck size={13} className={syncingCourier ? "animate-bounce text-amber-400" : "text-amber-400"} />
-            <span className="hidden sm:inline">{syncingCourier ? "Scanning..." : "Sync Courier (7d)"}</span>
+            <span className="hidden sm:inline">{syncingCourier ? "Scanning..." : "Sync Courier"}</span>
           </button>
           <button
             type="button"
             onClick={() => setCourierDropdownOpen(!courierDropdownOpen)}
             disabled={syncingCourier}
             className="px-1.5 py-1.5 rounded-r-lg text-xs font-medium text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/15 border-t border-r border-b border-l-0 border-amber-500/25 transition-colors disabled:opacity-50"
-            title="Options: 7 Days or Complete Scan"
+            title="Options: This Month, 7 Days or Complete Scan"
           >
             <ChevronDown size={12} />
           </button>
@@ -119,11 +121,19 @@ export function TopBar({ profile }: TopBarProps) {
               </div>
               <button
                 type="button"
+                onClick={() => handleCourierSync("this_month")}
+                className="w-full text-left px-2.5 py-2 rounded-lg text-xs text-zinc-200 hover:text-white hover:bg-zinc-800 transition-colors"
+              >
+                <div className="font-medium text-amber-400">Scan This Month (Default)</div>
+                <div className="text-[10px] text-zinc-400">Align all orders in current month with Pathao</div>
+              </button>
+              <button
+                type="button"
                 onClick={() => handleCourierSync(7)}
                 className="w-full text-left px-2.5 py-2 rounded-lg text-xs text-zinc-200 hover:text-white hover:bg-zinc-800 transition-colors"
               >
-                <div className="font-medium text-amber-400">Scan Last 7 Days (Default)</div>
-                <div className="text-[10px] text-zinc-400">Quick scan of all recent orders</div>
+                <div className="font-medium text-zinc-300">Scan Last 7 Days</div>
+                <div className="text-[10px] text-zinc-400">Quick scan of recent orders</div>
               </button>
               <button
                 type="button"

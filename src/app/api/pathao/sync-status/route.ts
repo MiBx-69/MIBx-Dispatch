@@ -11,15 +11,18 @@ export async function POST(request: NextRequest) {
     const supabase = createServiceClient();
     const { searchParams } = new URL(request.url);
 
-    // Support "all" or specific number of days (defaults to 7)
+    // Support "all", "this_month", or specific number of days (defaults to 7)
     const daysParam = searchParams.get("days");
     const isAll = daysParam === "all" || searchParams.get("all") === "true";
-    const days = daysParam && !isAll ? Math.max(1, Number(daysParam) || 7) : 7;
-    const daysAgo = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const isThisMonth = daysParam === "this_month";
+    const days = daysParam && !isAll && !isThisMonth ? Math.max(1, Number(daysParam) || 7) : 7;
+    const startDate = isThisMonth 
+      ? "2026-08-31T18:00:00.000Z" 
+      : new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
     const isForce = searchParams.get("force") === "true";
     const requestedLimit = Number(searchParams.get("limit"));
-    const batchLimit = requestedLimit && requestedLimit > 0 ? Math.min(requestedLimit, 1000) : (isAll ? 600 : 250);
+    const batchLimit = requestedLimit && requestedLimit > 0 ? Math.min(requestedLimit, 1000) : (isAll || isThisMonth ? 600 : 250);
 
     // 1. Fetch active dispatches
     let q = supabase
@@ -45,11 +48,14 @@ export async function POST(request: NextRequest) {
         )
       `)
       .not("consignment_id", "is", null)
-      .eq("is_cancelled", false)
       .order("dispatched_at", { ascending: false });
 
+    if (!isForce && !isThisMonth && !isAll) {
+      q = q.eq("is_cancelled", false);
+    }
+
     if (!isAll) {
-      q = q.gte("dispatched_at", daysAgo);
+      q = q.gte("dispatched_at", startDate);
     }
 
     if (!isForce) {
@@ -72,7 +78,7 @@ export async function POST(request: NextRequest) {
       .not("pathao_consignment_id", "is", null);
 
     if (!isAll) {
-      extraOrdersQuery = extraOrdersQuery.gte("created_at", daysAgo);
+      extraOrdersQuery = extraOrdersQuery.gte("created_at", startDate);
     }
 
     if (!isForce) {

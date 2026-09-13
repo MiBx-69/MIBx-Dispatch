@@ -9,10 +9,11 @@ type StatusCount = {
 
 export function CourierPerformanceChart({ data }: { data: StatusCount[] }) {
   const chartData = [
-    { name: "Pending", count: data.find(d => d.status === "Pending")?.count || 0, color: "#94a3b8" },
-    { name: "In Transit", count: data.find(d => d.status === "In Transit")?.count || 0, color: "#3b82f6" },
-    { name: "Delivered", count: data.find(d => d.status === "Delivered")?.count || 0, color: "#22c55e" },
-    { name: "Returned", count: data.find(d => d.status === "Return")?.count || data.find(d => d.status === "Returned")?.count || 0, color: "#ef4444" },
+    { name: "Delivered", count: data.find(d => d.status === "Delivered")?.count || 0, color: "#10b981" },
+    { name: "Paid Return", count: data.find(d => d.status === "Paid Return")?.count || 0, color: "#3b82f6" },
+    { name: "Returned", count: data.find(d => d.status === "Return" || d.status === "Returned")?.count || 0, color: "#ef4444" },
+    { name: "Processing", count: data.find(d => d.status === "In Transit" || d.status === "Processing")?.count || 0, color: "#f97316" },
+    { name: "Pickup Hold", count: data.find(d => d.status === "Pending" || d.status === "Pickup Issues")?.count || 0, color: "#71717a" },
   ];
 
   return (
