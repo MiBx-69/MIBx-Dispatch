@@ -5,11 +5,18 @@ import { toast } from "sonner";
 import { X, Truck, MapPin, Package, DollarSign, Weight, AlertTriangle, CheckCircle2 } from "lucide-react";
 import type { Order } from "@/types/database";
 import { analyzeCustomerRisk } from "@/lib/risk-analytics";
+import {
+  getInitialStoreId,
+  resolveDefaultStoreId,
+  recordStoreUsage,
+  getMostFrequentStoreId,
+  type PathaoStore,
+} from "@/lib/pickup-store-preference";
 
 interface City { city_id: number; city_name: string; }
 interface Zone { zone_id: number; zone_name: string; }
 interface Area { area_id: number; area_name: string; }
-interface Store { store_id: number; store_name: string; store_address: string; }
+type Store = PathaoStore;
 
 interface DispatchModalProps {
   order: Order;
@@ -30,7 +37,7 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
   const [loadingLocations, setLoadingLocations] = useState(true);
 
   const [form, setForm] = useState({
-    store_id: String(storeId || ""),
+    store_id: getInitialStoreId(storeId),
     recipient_name: order.customer_name || shippingAddr?.name || "",
     recipient_phone: order.customer_phone || shippingAddr?.phone || "",
     recipient_address: shippingAddr?.address1 || "",
@@ -58,8 +65,19 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
 
     fetch("/api/pathao/stores")
       .then((r) => r.json())
-      .then((d) => setStores(d.stores || []));
-  }, []);
+      .then((d) => {
+        const list: Store[] = d.stores || [];
+        setStores(list);
+        setForm((f) => {
+          const resolved = resolveDefaultStoreId({
+            stores: list,
+            propStoreId: storeId || d.default_store_id,
+            currentValue: f.store_id,
+          });
+          return { ...f, store_id: resolved };
+        });
+      });
+  }, [storeId]);
 
   // Load zones when city changes
   useEffect(() => {
@@ -123,6 +141,8 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Dispatch failed");
+
+      recordStoreUsage(form.store_id, 1);
 
       toast.success(`Dispatched! Consignment: ${data.consignment_id}`, {
         description: `Delivery fee: ৳${data.delivery_fee}`,
@@ -230,10 +250,16 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
           <Section icon={<MapPin size={14} />} title="Pickup Store">
             <Field label="Store *">
               <select value={form.store_id} onChange={(e) => set("store_id", e.target.value)} className={selectCls}>
-                <option value="">Select a store</option>
-                {stores.map((s) => (
-                  <option key={s.store_id} value={s.store_id}>{s.store_name} {s.store_address ? `- ${s.store_address}` : ""}</option>
-                ))}
+                {stores.length === 0 && <option value="">Loading stores...</option>}
+                {stores.map((s) => {
+                  const defaultId = getMostFrequentStoreId(stores) || (storeId ? String(storeId) : "") || String(stores.find((st) => st.is_default_store)?.store_id || "");
+                  const isDefault = String(s.store_id) === defaultId;
+                  return (
+                    <option key={s.store_id} value={s.store_id}>
+                      {s.store_name} {isDefault ? "★ (Default)" : ""} {s.store_address ? `- ${s.store_address}` : ""}
+                    </option>
+                  );
+                })}
               </select>
             </Field>
           </Section>

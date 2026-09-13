@@ -156,7 +156,16 @@ export function analyzeCustomerRisk(input: RiskInputData | any): CustomerRiskAna
       reasons.push(`${delivered} delivered, ${returned} returned (${successRatio}% success)`);
     }
   } 
-  // C. No courier data, but existing fraud_status/fraud_score from DB
+  // C. Checked on FraudSpy with clean record (0 courier history, 0 complaints)
+  else if (data?.ok || data?.fraud_reports) {
+    riskLevel = "safe";
+    riskScore = 0;
+    ratingLabel = "New Customer (Clean Record)";
+    badgeText = "Clean Record";
+    recommendation = "Verified on FraudSpy: 0 merchant complaint reports, clean delivery record.";
+    reasons.push("Clean record with 0 complaints or refusal flags on FraudSpy");
+  }
+  // D. No courier data, but existing fraud_status/fraud_score from DB
   else if (input?.fraud_status && input.fraud_status !== "unchecked") {
     riskLevel = input.fraud_status as any;
     riskScore = Number(input.fraud_score || 0);

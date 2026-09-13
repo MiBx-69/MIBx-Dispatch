@@ -2,18 +2,9 @@ import { searchFraud } from "@/lib/fraudspy";
 import { updateShopifyCustomer, updateShopifyOrder } from "@/lib/shopify/client";
 import { analyzeCustomerRisk, type CustomerRiskAnalysis } from "@/lib/risk-analytics";
 
-export function buildFraudSpyCustomAttributes(fraudData: any, riskAnalysis: CustomerRiskAnalysis) {
-  const overall = fraudData.overall || {};
-  const delivered = Number(overall.delivered || 0);
-  const returned = Number(overall.returned || 0);
-  const total = Number(overall.total || (delivered + returned));
-  const successRatio = riskAnalysis.successRatio;
-  const returnRatio = riskAnalysis.returnRatio;
-  const reportsCount = fraudData.fraud_reports?.count || 0;
-
-  // Format courier breakdown string e.g. STEADFAST: 10/10, PATHAO: 4/5
+export function formatCourierSummary(fraudData: any): string {
   const courierParts: string[] = [];
-  if (fraudData.couriers && typeof fraudData.couriers === "object") {
+  if (fraudData?.couriers && typeof fraudData.couriers === "object") {
     for (const [name, stats] of Object.entries(fraudData.couriers as Record<string, any>)) {
       if (stats && (stats.total > 0 || stats.successful > 0 || stats.delivered > 0)) {
         const dlv = stats.successful ?? stats.delivered ?? 0;
@@ -22,44 +13,118 @@ export function buildFraudSpyCustomAttributes(fraudData: any, riskAnalysis: Cust
       }
     }
   }
-  const couriersSummary = courierParts.length > 0 ? courierParts.join(", ") : "No courier data";
+  return courierParts.length > 0 ? courierParts.join(", ") : "No courier data";
+}
 
-  // Format customer complaints summary
-  let customerReportSummary = "None (Clean Record)";
+export function formatCustomerReportsSummary(fraudData: any): string {
+  const reportsCount = fraudData?.fraud_reports?.count || 0;
   if (reportsCount > 0) {
     const reportDetails = fraudData.fraud_reports?.reports?.map((r: any) => 
       `${r.complain_details || r.category || 'Complaint'}`
     ).filter(Boolean).slice(0, 2).join("; ");
-    customerReportSummary = `${reportsCount} Complaint(s)${reportDetails ? `: ${reportDetails}` : ''}`;
+    return `${reportsCount} Complaint(s)${reportDetails ? `: ${reportDetails}` : ''}`;
   }
+  return "None (Clean Record)";
+}
+
+export function buildFraudSpyCustomAttributes(fraudData: any, riskAnalysis: CustomerRiskAnalysis) {
+  const overall = fraudData?.overall || {};
+  const delivered = Number(overall.delivered || 0);
+  const returned = Number(overall.returned || 0);
+  const total = Number(overall.total || (delivered + returned));
+  const successRatio = riskAnalysis.successRatio;
+  const returnRatio = riskAnalysis.returnRatio;
+
+  const couriersSummary = formatCourierSummary(fraudData);
+  const customerReportSummary = formatCustomerReportsSummary(fraudData);
 
   return [
-    { key: "FraudSpy Status", value: riskAnalysis.riskLevel.toUpperCase() },
-    { key: "FraudSpy Score", value: riskAnalysis.riskScore.toString() },
-    { key: "FraudSpy Rating", value: riskAnalysis.ratingLabel },
-    { key: "FraudSpy Total Parcels", value: total.toString() },
-    { key: "FraudSpy Delivered", value: delivered.toString() },
-    { key: "FraudSpy Returned", value: returned.toString() },
-    { key: "FraudSpy Success Ratio", value: `${successRatio}%` },
-    { key: "FraudSpy Return Ratio", value: `${returnRatio}%` },
-    { key: "FraudSpy Customer Reports", value: customerReportSummary },
-    { key: "FraudSpy Couriers", value: couriersSummary },
-    { key: "FraudSpy Recommendation", value: riskAnalysis.recommendation },
-    { key: "FraudSpy Last Checked", value: new Date().toLocaleString() }
+    { key: "Fraud Status", value: riskAnalysis.riskLevel.toUpperCase() },
+    { key: "Risk Score", value: `${riskAnalysis.riskScore}/100` },
+    { key: "Rating", value: riskAnalysis.ratingLabel },
+    { key: "Delivery Success Rate", value: `${successRatio}% (${delivered} Delivered, ${returned} Returned)` },
+    { key: "Return Rate", value: `${returnRatio}%` },
+    { key: "Total Parcels", value: total.toString() },
+    { key: "Courier Breakdown", value: couriersSummary },
+    { key: "Merchant Complaints", value: customerReportSummary },
+    { key: "Recommendation", value: riskAnalysis.recommendation },
+    { key: "Last Fraud Check", value: new Date().toLocaleString() }
   ];
 }
 
 export function buildFraudSpyCustomerNote(fraudData: any, riskAnalysis: CustomerRiskAnalysis) {
-  const reportsCount = fraudData.fraud_reports?.count || 0;
+  const reportsCount = fraudData?.fraud_reports?.count || 0;
+  const couriersSummary = formatCourierSummary(fraudData);
+
   return `[FraudSpy Assessment]
 Status: ${riskAnalysis.riskLevel.toUpperCase()} (Score: ${riskAnalysis.riskScore}/100) - ${riskAnalysis.ratingLabel}
-Delivery Rate: ${riskAnalysis.successRatio}% (${fraudData.overall?.delivered || 0} delivered, ${fraudData.overall?.returned || 0} returned of ${fraudData.overall?.total || 0} total)
+Delivery Rate: ${riskAnalysis.successRatio}% (${fraudData?.overall?.delivered || 0} delivered, ${fraudData?.overall?.returned || 0} returned of ${fraudData?.overall?.total || 0} total)
 Merchant Reports: ${reportsCount > 0 ? `${reportsCount} complaint(s) filed` : 'Clean record (0 complaints)'}
+Couriers: ${couriersSummary}
 Recommendation: ${riskAnalysis.recommendation}
 Checked: ${new Date().toLocaleString()}`;
 }
 
-export async function performFraudCheck(orderIdentifier: string, supabase: any) {
+export function buildDispatchCustomAttributes({
+  consignmentId,
+  trackingUrl,
+  fraudData,
+  riskAnalysis,
+}: {
+  consignmentId: string;
+  trackingUrl: string;
+  fraudData?: any;
+  riskAnalysis?: CustomerRiskAnalysis;
+}) {
+  const attrs: Array<{ key: string; value: string }> = [
+    { key: "Pathao Consignment", value: consignmentId },
+    { key: "Tracking URL", value: trackingUrl },
+    { key: "Dispatched At", value: new Date().toLocaleString() },
+  ];
+
+  if (fraudData && riskAnalysis) {
+    attrs.push(...buildFraudSpyCustomAttributes(fraudData, riskAnalysis));
+  }
+
+  return attrs;
+}
+
+export function buildDispatchCombinedNote({
+  consignmentId,
+  trackingUrl,
+  existingNote,
+  fraudData,
+  riskAnalysis,
+}: {
+  consignmentId: string;
+  trackingUrl: string;
+  existingNote?: string | null;
+  fraudData?: any;
+  riskAnalysis?: CustomerRiskAnalysis;
+}): string {
+  const parts: string[] = [
+    `Pathao Consignment: ${consignmentId}`,
+    `Tracking: ${trackingUrl}`,
+  ];
+
+  if (fraudData && riskAnalysis) {
+    parts.push(
+      `\n[Customer Courier & Fraud Report]\nStatus: ${riskAnalysis.riskLevel.toUpperCase()} (Score: ${riskAnalysis.riskScore}/100) - ${riskAnalysis.ratingLabel}\nDelivery Rate: ${riskAnalysis.successRatio}% (${fraudData?.overall?.delivered || 0} Delivered, ${fraudData?.overall?.returned || 0} Returned of ${fraudData?.overall?.total || 0} Total)\nCouriers: ${formatCourierSummary(fraudData)}\nReports: ${formatCustomerReportsSummary(fraudData)}\nRecommendation: ${riskAnalysis.recommendation}`
+    );
+  }
+
+  if (existingNote && !existingNote.includes("Pathao Consignment")) {
+    parts.push(`\n[Order Note]\n${existingNote}`);
+  }
+
+  return parts.join("\n");
+}
+
+export async function performFraudCheck(
+  orderIdentifier: string,
+  supabase: any,
+  options?: { force?: boolean }
+) {
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderIdentifier);
   
   // 1. Get settings and order
@@ -80,24 +145,48 @@ export async function performFraudCheck(orderIdentifier: string, supabase: any) 
     throw new Error("Order has no customer phone number");
   }
 
-  // 2. Query FraudSpy
-  const fraudData = await searchFraud(order.customer_phone, settings.fraudspy_api_key);
+  // 2. Check cache: order's existing valid fraud_data
+  let fraudData = !options?.force && order.fraud_data && (order.fraud_data as any).ok ? order.fraud_data : null;
+
+  // 3. Check cache: any other recent order in DB with same phone number
+  if (!fraudData && !options?.force) {
+    const { data: recentWithPhone } = await supabase
+      .from("orders")
+      .select("fraud_data")
+      .eq("customer_phone", order.customer_phone)
+      .not("fraud_data", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (recentWithPhone?.fraud_data && (recentWithPhone.fraud_data as any).ok) {
+      fraudData = recentWithPhone.fraud_data;
+    }
+  }
+
+  // 4. Query FraudSpy API (fast with in-memory cache and 4.5s timeout)
+  if (!fraudData) {
+    fraudData = await searchFraud(order.customer_phone, settings.fraudspy_api_key, options?.force);
+  }
+
   if (!fraudData || !fraudData.ok) {
     throw new Error("Failed to fetch data from FraudSpy");
   }
 
-  // 3. Determine status and score using proportional delivery analytics
+  // 5. Determine status and score using proportional delivery analytics
   const riskAnalysis = analyzeCustomerRisk(fraudData);
   const fraud_status = riskAnalysis.riskLevel;
   const fraud_score = riskAnalysis.riskScore;
 
-  // 4. Update Supabase Order
+  // 6. Update Supabase Order immediately
   await supabase
     .from("orders")
     .update({
       fraud_status,
       fraud_score,
-      fraud_data: fraudData
+      fraud_data: fraudData,
+      fraud_risk_score: fraud_score,
+      fraud_risk_level: fraud_status,
     })
     .eq("id", order.id);
 
@@ -105,38 +194,62 @@ export async function performFraudCheck(orderIdentifier: string, supabase: any) 
   const customAttributes = buildFraudSpyCustomAttributes(fraudData, riskAnalysis);
   const customerNote = buildFraudSpyCustomerNote(fraudData, riskAnalysis);
 
-  // 5. Update Shopify Customer Profile (Tags & Note)
-  if (order.shopify_customer_id) {
+  // 7. Non-blocking Background Sync for Shopify & Audit Logs
+  // Allows the API response to return to the UI INSTANTLY (<100ms)
+  (async () => {
     try {
-      const { data: customerData } = await supabase.from("customers").select("shopify_tags").eq("shopify_id", order.shopify_customer_id).single();
-      const existingTags = customerData?.shopify_tags || [];
-      const mergedTags = Array.from(new Set([...existingTags, tag, 'FraudSpy Verified']));
+      const tasks: Promise<any>[] = [];
 
-      await updateShopifyCustomer({
-        id: `gid://shopify/Customer/${order.shopify_customer_id}`,
-        tags: mergedTags,
-        note: customerNote,
-      });
-    } catch (shopifyError) {
-      console.error("Failed to update Shopify customer profile:", shopifyError);
+      // Update Shopify Customer Profile
+      if (order.shopify_customer_id) {
+        tasks.push(
+          (async () => {
+            const { data: customerData } = await supabase
+              .from("customers")
+              .select("shopify_tags")
+              .eq("shopify_customer_id", order.shopify_customer_id)
+              .maybeSingle();
+            const existingTags = customerData?.shopify_tags || [];
+            const mergedTags = Array.from(new Set([...existingTags, tag, 'FraudSpy Verified']));
+
+            return updateShopifyCustomer({
+              id: `gid://shopify/Customer/${order.shopify_customer_id}`,
+              tags: mergedTags,
+              note: customerNote,
+            });
+          })().catch((err) => console.error("[FraudCheck] Customer sync error (non-fatal):", err))
+        );
+      }
+
+      // Update Shopify Order Profile (Custom Attributes for "Additional details" & Tags)
+      if (order.shopify_order_id) {
+        tasks.push(
+          updateShopifyOrder({
+            id: `gid://shopify/Order/${order.shopify_order_id}`,
+            tags: [tag, 'FraudSpy Verified'],
+            customAttributes: customAttributes,
+          }).catch((err) => console.error("[FraudCheck] Order sync error (non-fatal):", err))
+        );
+      }
+
+      // Log Audit Event
+      tasks.push(
+        (async () => {
+          const { logOrderEvent } = await import("@/lib/audit");
+          return logOrderEvent(
+            order.id,
+            "FRAUD_CHECK",
+            `Fraud Check: ${riskAnalysis.ratingLabel} (${fraud_status.toUpperCase()}, Score: ${fraud_score}) - ${riskAnalysis.recommendation}`,
+            fraudData
+          );
+        })().catch((err) => console.error("[FraudCheck] Audit log error (non-fatal):", err))
+      );
+
+      await Promise.allSettled(tasks);
+    } catch (bgErr) {
+      console.error("[FraudCheck] Background execution error:", bgErr);
     }
-  }
-
-  // 6. Update Shopify Order Profile (Custom Attributes & Tags)
-  if (order.shopify_order_id) {
-    try {
-      await updateShopifyOrder({
-        id: `gid://shopify/Order/${order.shopify_order_id}`,
-        tags: [tag, 'FraudSpy Verified'],
-        customAttributes: customAttributes,
-      });
-    } catch (shopifyError) {
-      console.error("Failed to update Shopify order:", shopifyError);
-    }
-  }
-
-  const { logOrderEvent } = await import("@/lib/audit");
-  await logOrderEvent(order.id, "FRAUD_CHECK", `Fraud Check: ${riskAnalysis.ratingLabel} (${fraud_status.toUpperCase()}, Score: ${fraud_score}) - ${riskAnalysis.recommendation}`, fraudData);
+  })();
 
   return { fraud_status, fraud_score, data: fraudData, analysis: riskAnalysis };
 }

@@ -24,16 +24,48 @@ export interface FraudReportPayload {
   is_anonymous?: boolean;
 }
 
-export async function searchFraud(phone: string, apiKey: string): Promise<FraudSpySearchResponse | null> {
+// In-memory fast cache for search results (6 hours TTL)
+const fraudMemoryCache = new Map<string, { data: FraudSpySearchResponse; timestamp: number }>();
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * Standardizes BD phone numbers to 11 digits (e.g. 01XXXXXXXXX)
+ */
+export function normalizePhoneBD(phone: string): string {
+  if (!phone) return "";
+  let formatted = phone.replace(/\D/g, "");
+  if (formatted.startsWith("880")) formatted = formatted.substring(3);
+  else if (formatted.startsWith("80")) formatted = formatted.substring(2);
+  if (!formatted.startsWith("0") && formatted.length === 10) formatted = "0" + formatted;
+  if (formatted.length > 11) formatted = formatted.substring(formatted.length - 11);
+  return formatted;
+}
+
+/**
+ * Perform instant fraud check with in-memory caching and fast timeout guard.
+ */
+export async function searchFraud(
+  phone: string,
+  apiKey: string,
+  forceRefresh: boolean = false
+): Promise<FraudSpySearchResponse | null> {
   if (!apiKey || !phone) return null;
 
-  try {
-    let formattedPhone = phone.replace(/\D/g, "");
-    if (formattedPhone.startsWith("880")) {
-      formattedPhone = formattedPhone.substring(2);
-    } else if (formattedPhone.startsWith("1")) {
-      formattedPhone = "0" + formattedPhone;
+  const formattedPhone = normalizePhoneBD(phone);
+  if (!formattedPhone || formattedPhone.length < 10) return null;
+
+  // 1. Return from in-memory cache if available and fresh
+  if (!forceRefresh) {
+    const cached = fraudMemoryCache.get(formattedPhone);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      return cached.data;
     }
+  }
+
+  // 2. Fetch with 4.5s timeout to prevent UI hanging
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4500);
 
     const res = await fetch(`${FRAUDSPY_BASE_URL}/search`, {
       method: "POST",
@@ -43,7 +75,9 @@ export async function searchFraud(phone: string, apiKey: string): Promise<FraudS
         "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify({ phone: formattedPhone }),
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
 
     const data = await res.json();
     if (!res.ok) {
@@ -51,9 +85,17 @@ export async function searchFraud(phone: string, apiKey: string): Promise<FraudS
       return null;
     }
 
+    if (data && data.ok) {
+      fraudMemoryCache.set(formattedPhone, { data, timestamp: Date.now() });
+    }
+
     return data;
-  } catch (error) {
-    console.error("[FraudSpy] Search network error:", error);
+  } catch (error: any) {
+    if (error?.name === "AbortError") {
+      console.warn(`[FraudSpy] Search timed out for phone: ${formattedPhone}`);
+    } else {
+      console.error("[FraudSpy] Search network error:", error);
+    }
     return null;
   }
 }

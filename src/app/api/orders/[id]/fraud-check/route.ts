@@ -9,8 +9,19 @@ export async function POST(
   try {
     const { id } = await params;
     const supabase = createServiceClient();
+
+    const url = new URL(req.url);
+    let force = url.searchParams.get("force") === "true";
+    try {
+      const body = await req.json();
+      if (body?.force !== undefined) {
+        force = Boolean(body.force);
+      }
+    } catch {
+      // Body may be empty on standard POST
+    }
     
-    const result = await performFraudCheck(id, supabase);
+    const result = await performFraudCheck(id, supabase, { force });
 
     return NextResponse.json({ 
       success: true, 

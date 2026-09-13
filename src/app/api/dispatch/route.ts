@@ -69,6 +69,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Keep default store in sync with active usage
+  if (pathaoStoreId && (!settings?.pathao_store_id || settings.pathao_store_id !== pathaoStoreId)) {
+    supabase
+      .from("app_settings")
+      .update({ pathao_store_id: pathaoStoreId })
+      .neq("id", "00000000-0000-0000-0000-000000000000")
+      .then(() => {});
+  }
+
   try {
     let finalAddress = recipient_address || (order.shipping_address as any)?.address1 || "";
     const cityProv = `${(order.shipping_address as any)?.city || ""} ${(order.shipping_address as any)?.province || ""}`.trim();
@@ -131,6 +140,26 @@ export async function POST(request: NextRequest) {
     const { consignment_id, delivery_fee } = pathaoResponse.data;
 
     // 2. Save dispatch record to DB
+    const fraudData = order.fraud_data;
+    let riskAnalysis: any = null;
+    if (fraudData) {
+      const { analyzeCustomerRisk } = await import("@/lib/risk-analytics");
+      riskAnalysis = analyzeCustomerRisk(fraudData);
+    }
+
+    const pathaoResponseWithFraud = {
+      ...(pathaoResponse as any),
+      fraud_summary: riskAnalysis ? {
+        status: riskAnalysis.riskLevel,
+        score: riskAnalysis.riskScore,
+        rating: riskAnalysis.ratingLabel,
+        success_ratio: riskAnalysis.successRatio,
+        delivered: fraudData?.overall?.delivered || 0,
+        returned: fraudData?.overall?.returned || 0,
+        total: fraudData?.overall?.total || 0,
+      } : null,
+    };
+
     await supabase.from("dispatches").insert({
       order_id: order.id,
       shopify_order_id: order.shopify_order_id,
@@ -153,7 +182,7 @@ export async function POST(request: NextRequest) {
       delivery_type,
       item_type,
       item_description,
-      pathao_response: pathaoResponse as any,
+      pathao_response: pathaoResponseWithFraud as any,
       dispatched_by: profile?.id,
     });
 
@@ -170,7 +199,13 @@ export async function POST(request: NextRequest) {
       })
       .eq("id", order.id);
 
-    await logOrderEvent(order.id, "DISPATCHED", `Order dispatched via Pathao (Consignment: ${consignment_id})`, { consignment_id });
+    const fraudAuditSuffix = riskAnalysis ? ` | Fraud: ${riskAnalysis.ratingLabel} (${riskAnalysis.successRatio}% DLV)` : "";
+    await logOrderEvent(
+      order.id,
+      "DISPATCHED",
+      `Order dispatched via Pathao (Consignment: ${consignment_id})${fraudAuditSuffix}`,
+      { consignment_id, trackingUrl, fraud_summary: pathaoResponseWithFraud.fraud_summary }
+    );
 
     // 4. Create Shopify fulfillment with tracking
     let shopifyFulfillmentId: string | null = null;
@@ -200,20 +235,40 @@ export async function POST(request: NextRequest) {
       console.error("[Dispatch] Shopify fulfillment error (non-fatal):", shopifyErr);
     }
 
-    // 5. Add Pathao consignment ID as Shopify order note/tag
+    // 5. Attach tracking & fraud report to Shopify Order Note, Tags & Additional Details (customAttributes)
     try {
+      const { buildDispatchCustomAttributes, buildDispatchCombinedNote } = await import("@/lib/fraud-checker");
+      const customAttributes = buildDispatchCustomAttributes({
+        consignmentId: consignment_id,
+        trackingUrl,
+        fraudData,
+        riskAnalysis,
+      });
+
+      const combinedNote = buildDispatchCombinedNote({
+        consignmentId: consignment_id,
+        trackingUrl,
+        existingNote: order.note,
+        fraudData,
+        riskAnalysis,
+      });
+
+      const fraudTag = riskAnalysis ? `FraudSpy: ${riskAnalysis.riskLevel === 'fraud' ? 'High Risk' : riskAnalysis.riskLevel === 'risky' ? 'Medium Risk' : 'Safe'}` : null;
+
       await updateShopifyOrder({
         id: `gid://shopify/Order/${order.shopify_order_id}`,
-        note: `Pathao Consignment: ${consignment_id}\nTracking: ${trackingUrl}`,
-        tags: [
+        note: combinedNote,
+        tags: Array.from(new Set([
           ...(order.shopify_tags || []),
           "Dispatched via Pathao",
           `pathao:${consignment_id}`,
           "dispatched",
-        ],
+          ...(fraudTag ? [fraudTag, 'FraudSpy Verified'] : []),
+        ])),
+        customAttributes,
       });
     } catch (tagErr) {
-      console.error("[Dispatch] Shopify tag update error (non-fatal):", tagErr);
+      console.error("[Dispatch] Shopify tag/attributes update error (non-fatal):", tagErr);
     }
 
     // 6. Automated SMS on Dispatch

@@ -3,8 +3,15 @@
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { X, Truck, MapPin, Package, Weight } from "lucide-react";
+import {
+  getInitialStoreId,
+  resolveDefaultStoreId,
+  recordStoreUsage,
+  getMostFrequentStoreId,
+  type PathaoStore,
+} from "@/lib/pickup-store-preference";
 
-interface Store { store_id: number; store_name: string; store_address: string; }
+type Store = PathaoStore;
 
 interface BulkDispatchModalProps {
   orderIds: string[];
@@ -19,7 +26,7 @@ export function BulkDispatchModal({ orderIds, storeId, onClose, onSuccess }: Bul
   const [dispatchedIds, setDispatchedIds] = useState<string[]>([]);
 
   const [form, setForm] = useState({
-    store_id: String(storeId || ""),
+    store_id: getInitialStoreId(storeId),
     delivery_type: "48",
     item_type: "2",
     item_weight: "0.5",
@@ -28,8 +35,19 @@ export function BulkDispatchModal({ orderIds, storeId, onClose, onSuccess }: Bul
   useEffect(() => {
     fetch("/api/pathao/stores")
       .then((r) => r.json())
-      .then((d) => setStores(d.stores || []));
-  }, []);
+      .then((d) => {
+        const list: Store[] = d.stores || [];
+        setStores(list);
+        setForm((f) => {
+          const resolved = resolveDefaultStoreId({
+            stores: list,
+            propStoreId: storeId || d.default_store_id,
+            currentValue: f.store_id,
+          });
+          return { ...f, store_id: resolved };
+        });
+      });
+  }, [storeId]);
 
   const set = (field: string, value: string) =>
     setForm((f) => ({ ...f, [field]: value }));
@@ -70,6 +88,7 @@ export function BulkDispatchModal({ orderIds, storeId, onClose, onSuccess }: Bul
       }
       
       if (successes.length > 0) {
+        recordStoreUsage(form.store_id, successes.length);
         const successIds = successes.map((s: any) => s.order_id);
         setDispatchedIds(successIds);
         onSuccess();
@@ -148,10 +167,16 @@ export function BulkDispatchModal({ orderIds, storeId, onClose, onSuccess }: Bul
               <Section icon={<MapPin size={14} />} title="Pickup Store">
                 <Field label="Store *">
                   <select value={form.store_id} onChange={(e) => set("store_id", e.target.value)} className={selectCls}>
-                    <option value="">Select a store</option>
-                    {stores.map((s) => (
-                      <option key={s.store_id} value={s.store_id}>{s.store_name} {s.store_address ? `- ${s.store_address}` : ""}</option>
-                    ))}
+                    {stores.length === 0 && <option value="">Loading stores...</option>}
+                    {stores.map((s) => {
+                      const defaultId = getMostFrequentStoreId(stores) || (storeId ? String(storeId) : "") || String(stores.find((st) => st.is_default_store)?.store_id || "");
+                      const isDefault = String(s.store_id) === defaultId;
+                      return (
+                        <option key={s.store_id} value={s.store_id}>
+                          {s.store_name} {isDefault ? "★ (Default)" : ""} {s.store_address ? `- ${s.store_address}` : ""}
+                        </option>
+                      );
+                    })}
                   </select>
                 </Field>
               </Section>
