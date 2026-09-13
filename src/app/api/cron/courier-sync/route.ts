@@ -78,6 +78,11 @@ async function handleCron(request: NextRequest) {
       `)
       .not("consignment_id", "is", null)
       .eq("is_cancelled", false)
+      .not(
+        "pathao_order_status",
+        "in",
+        '("Delivered","Returned","Return","Paid Return","Partial Delivered","Pickup Cancel","Pickup Failed","Cancelled","order.delivered","order.returned","order.cancelled")'
+      )
       .gte("dispatched_at", cutoffISO)
       .order("dispatched_at", { ascending: false });
 
@@ -88,22 +93,31 @@ async function handleCron(request: NextRequest) {
     const errors: any[] = [];
     const updatedDetails: any[] = [];
 
-    // Process in batches of 2 with concurrency limit to respect Pathao API rate limits
-    const BATCH_SIZE = 2;
-    for (let i = 0; i < (dispatches?.length || 0); i += BATCH_SIZE) {
-      const batch = dispatches!.slice(i, i + BATCH_SIZE);
-      await Promise.all(
-        batch.map(async (d: any) => {
-          try {
-            scannedCount++;
-            const infoRes = await getPathaoOrderStatus(d.consignment_id);
-            const data = infoRes?.data;
-            if (!data?.order_status) return;
+    // Process strictly sequentially with a polite 200ms spacing to completely eliminate 429 rate limit errors
+    const dispatchList = dispatches || [];
+    for (let i = 0; i < dispatchList.length; i++) {
+      const d = dispatchList[i];
+      try {
+        scannedCount++;
+        const infoRes = await getPathaoOrderStatus(d.consignment_id);
+        const data = infoRes?.data;
+        if (!data?.order_status) {
+          if (i + 1 < dispatchList.length) {
+            await new Promise((resolve) => setTimeout(resolve, 200));
+          }
+          continue;
+        }
 
-            const currentStatus = (d.pathao_order_status || "").toLowerCase().trim();
-            const newStatus = (data.order_status || "").toLowerCase().trim();
+        const normalizeStatus = (s: string) => (s || "").toLowerCase().replace(/[_\s]+/g, " ").trim();
+        const currentStatus = normalizeStatus(d.pathao_order_status || "");
+        const newStatus = normalizeStatus(data.order_status || "");
 
-            if (currentStatus === newStatus) return;
+        if (currentStatus === newStatus) {
+          if (i + 1 < dispatchList.length) {
+            await new Promise((resolve) => setTimeout(resolve, 200));
+          }
+          continue;
+        }
 
             const now = new Date().toISOString();
             const orderId = (d.orders as any)?.id;
@@ -239,7 +253,17 @@ async function handleCron(request: NextRequest) {
               newStatus.includes("ready for delivery") ||
               newStatus.includes("ready_for_delivery")
             ) {
-              const label = newStatus.includes("out") ? "Out for Delivery" : "Ready for Delivery";
+              let label = data.order_status;
+              if (newStatus.includes("out")) label = "Out for Delivery";
+              else if (newStatus.includes("assigned")) label = "Assigned for Delivery";
+              else if (newStatus.includes("ready")) label = "Ready for Delivery";
+
+              if (normalizeStatus(label) === currentStatus) {
+                if (i + 1 < dispatchList.length) {
+                  await new Promise((resolve) => setTimeout(resolve, 200));
+                }
+                continue;
+              }
               if (d.id) {
                 await supabase.from("dispatches").update({
                   pathao_order_status: label,
@@ -314,12 +338,11 @@ async function handleCron(request: NextRequest) {
           } catch (err: any) {
             errors.push({ consignment_id: d.consignment_id, error: err.message });
           }
-        })
-      );
-      if (i + BATCH_SIZE < (dispatches?.length || 0)) {
-        await new Promise((resolve) => setTimeout(resolve, 350));
-      }
-    }
+
+          if (i + 1 < dispatchList.length) {
+            await new Promise((resolve) => setTimeout(resolve, 200));
+          }
+        }
 
     const durationMs = Date.now() - startTime;
 

@@ -22,7 +22,11 @@ export async function POST(request: NextRequest) {
 
     const isForce = searchParams.get("force") === "true";
     const requestedLimit = Number(searchParams.get("limit"));
-    const batchLimit = requestedLimit && requestedLimit > 0 ? Math.min(requestedLimit, 1000) : (isAll || isThisMonth ? 600 : 250);
+    const batchLimit = requestedLimit && requestedLimit > 0 
+      ? Math.min(requestedLimit, 1000) 
+      : isForce 
+        ? (isAll || isThisMonth ? 600 : 250) 
+        : 60;
 
     // 1. Fetch active dispatches
     let q = supabase
@@ -62,7 +66,7 @@ export async function POST(request: NextRequest) {
       q = q.not(
         "pathao_order_status",
         "in",
-        '("Delivered","Returned","Cancelled","order.delivered","order.returned","order.cancelled")'
+        '("Delivered","Returned","Return","Paid Return","Partial Delivered","Pickup Cancel","Pickup Failed","Cancelled","order.delivered","order.returned","order.cancelled")'
       );
     }
 
@@ -82,7 +86,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!isForce) {
-      extraOrdersQuery = extraOrdersQuery.not("internal_status", "in", '("delivered","returned","cancelled")');
+      extraOrdersQuery = extraOrdersQuery.not("internal_status", "in", '("delivered","returned","cancelled","hold")');
     }
 
     const { data: extraOrders } = await extraOrdersQuery.limit(isAll ? 300 : 100);
@@ -110,228 +114,245 @@ export async function POST(request: NextRequest) {
     const { data: settings } = await supabase.from("app_settings").select("*").single();
     const smsEnabled = !!settings?.sms_api_key;
 
-    // Process in chunks of 2 parallel requests with smooth delay to avoid rate limits
-    const CHUNK_SIZE = 2;
-    for (let i = 0; i < activeList.length; i += CHUNK_SIZE) {
-      const chunk = activeList.slice(i, i + CHUNK_SIZE);
-      await Promise.all(
-        chunk.map(async (d: any) => {
-          if (!d.consignment_id) return;
+    // Process strictly sequentially with a polite 200ms spacing to completely eliminate 429 rate limit errors
+    for (let i = 0; i < activeList.length; i++) {
+      const d = activeList[i];
+      if (!d.consignment_id) continue;
 
-          try {
-            const infoRes = await getPathaoOrderStatus(d.consignment_id);
-            const data = infoRes?.data;
-            if (!data || !data.order_status) return;
-
-            const currentStatus = (d.pathao_order_status || "").toLowerCase().trim();
-            const newStatus = (data.order_status || "").toLowerCase().trim();
-
-            if (currentStatus === newStatus) return;
-
-            const now = new Date().toISOString();
-            const orderId = (d.orders as any)?.id;
-            const shopifyOrderId = (d.orders as any)?.shopify_order_id;
-            const shopifyFulfillmentId = (d.orders as any)?.shopify_fulfillment_id;
-
-            // 1. Partial Delivery
-            if (newStatus.includes("partial")) {
-              if (d.id) {
-                await supabase.from("dispatches").update({
-                  pathao_order_status: "Partial Delivered",
-                  updated_at: now,
-                }).eq("id", d.id);
-              }
-
-              if (orderId) {
-                await supabase.from("orders").update({
-                  internal_status: "delivered",
-                  pathao_delivery_status: "Partial Delivered",
-                  delivered_at: now,
-                }).eq("id", orderId);
-
-                // Create return record in returns if not already present
-                const { data: existingReturn } = await supabase
-                  .from("returns")
-                  .select("id")
-                  .eq("order_id", orderId)
-                  .maybeSingle();
-
-                if (!existingReturn) {
-                  await supabase.from("returns").insert({
-                    order_id: orderId,
-                    dispatch_id: d.id || null,
-                    consignment_id: d.consignment_id,
-                    return_type: "partial",
-                    return_source: "pathao_sync",
-                    order_total: Number(d.amount_to_collect || (d.orders as any)?.total_price) || 0,
-                    return_delivery_fee: 0,
-                    status: "pending_verification",
-                    is_verified: false,
-                    return_reason: "Pathao Partial Delivery",
-                    returned_at: now,
-                  });
-                }
-
-                // Auto-sync with Shopify
-                try {
-                  await markShopifyOrderAsPartialDelivered({
-                    shopifyOrderId,
-                    shopifyFulfillmentId,
-                    consignmentId: d.consignment_id,
-                  });
-                } catch (shopifySyncErr) {
-                  console.error("[Sync] Failed to mark order partial delivery on Shopify:", shopifySyncErr);
-                }
-              }
-              updatedCount++;
-              updatedDetails.push({ consignment_id: d.consignment_id, order: d.shopify_order_name, oldStatus: currentStatus, newStatus: "Partial Delivered" });
-            }
-            // 2. Returns & Paid Returns
-            else if (newStatus.includes("return") || newStatus.includes("returned")) {
-              const returnLabel = newStatus.includes("paid") ? "Paid Return" : "Returned";
-              if (d.id) {
-                await supabase.from("dispatches").update({
-                  pathao_order_status: returnLabel,
-                  updated_at: now,
-                }).eq("id", d.id);
-              }
-
-              if (orderId) {
-                await supabase.from("orders").update({
-                  pathao_delivery_status: returnLabel,
-                  internal_status: "returned",
-                  returned_at: now,
-                  return_reason: returnLabel === "Paid Return" ? "Paid Return via Pathao" : "Returned via Pathao",
-                }).eq("id", orderId);
-              }
-              updatedCount++;
-              updatedDetails.push({ consignment_id: d.consignment_id, order: d.shopify_order_name, oldStatus: currentStatus, newStatus: returnLabel });
-            }
-            // 3. Delivered
-            else if (newStatus.includes("delivered") || newStatus.includes("payment_received") || newStatus.includes("payment invoice")) {
-              if (d.id) {
-                await supabase.from("dispatches").update({
-                  pathao_order_status: "Delivered",
-                  updated_at: now,
-                }).eq("id", d.id);
-              }
-
-              if (orderId) {
-                await supabase.from("orders").update({
-                  internal_status: "delivered",
-                  pathao_delivery_status: "Delivered",
-                  delivered_at: now,
-                }).eq("id", orderId);
-
-                // Mark as Delivered on Shopify
-                try {
-                  await markShopifyOrderAsDelivered({
-                    shopifyOrderId,
-                    shopifyFulfillmentId,
-                    consignmentId: d.consignment_id,
-                  });
-                } catch (shopifySyncErr) {
-                  console.error("[Sync] Failed to mark order delivered on Shopify:", shopifySyncErr);
-                }
-              }
-              updatedCount++;
-              updatedDetails.push({ consignment_id: d.consignment_id, order: d.shopify_order_name, oldStatus: currentStatus, newStatus: "Delivered" });
-            }
-            // 3. Ready for Delivery / Assigned for Delivery / Out for Delivery
-            else if (
-              newStatus.includes("out_for_delivery") ||
-              newStatus.includes("out for delivery") ||
-              newStatus.includes("assigned for delivery") ||
-              newStatus.includes("assigned_for_delivery") ||
-              newStatus.includes("ready for delivery") ||
-              newStatus.includes("ready_for_delivery")
-            ) {
-              const label = newStatus.includes("out") ? "Out for Delivery" : "Ready for Delivery";
-              if (d.id) {
-                await supabase.from("dispatches").update({
-                  pathao_order_status: label,
-                  updated_at: now,
-                }).eq("id", d.id);
-              }
-
-              if (orderId) {
-                await supabase.from("orders").update({
-                  pathao_delivery_status: label,
-                  internal_status: "dispatched",
-                  delivered_at: null,
-                }).eq("id", orderId);
-              }
-              updatedCount++;
-              updatedDetails.push({ consignment_id: d.consignment_id, order: d.shopify_order_name, oldStatus: currentStatus, newStatus: label });
-            }
-            // 4. Cancelled
-            else if (newStatus.includes("cancel") || newStatus.includes("cancelled")) {
-              if (d.id) {
-                await supabase.from("dispatches").update({
-                  pathao_order_status: "Cancelled",
-                  is_cancelled: true,
-                  cancelled_at: now,
-                  cancel_reason: "Cancelled via Pathao Courier Scan",
-                  updated_at: now,
-                }).eq("id", d.id);
-              }
-
-              if (orderId) {
-                await supabase.from("orders").update({
-                  internal_status: "cancelled",
-                  pathao_delivery_status: "Cancelled",
-                  cancel_reason: "Cancelled via Pathao Courier Scan",
-                }).eq("id", orderId);
-              }
-              updatedCount++;
-              updatedDetails.push({ consignment_id: d.consignment_id, order: d.shopify_order_name, oldStatus: currentStatus, newStatus: "Cancelled" });
-            }
-            // 5. Pickup Holds & Failures
-            else if (newStatus.includes("hold") || newStatus.includes("failed")) {
-              const label = data.order_status;
-              if (d.id) {
-                await supabase.from("dispatches").update({
-                  pathao_order_status: label,
-                  updated_at: now,
-                }).eq("id", d.id);
-              }
-
-              if (orderId) {
-                await supabase.from("orders").update({
-                  internal_status: "hold",
-                  pathao_delivery_status: label,
-                  delivered_at: null,
-                }).eq("id", orderId);
-              }
-              updatedCount++;
-              updatedDetails.push({ consignment_id: d.consignment_id, order: d.shopify_order_name, oldStatus: currentStatus, newStatus: label });
-            }
-            // 6. In Transit / Hub / other
-            else {
-              if (d.id) {
-                await supabase.from("dispatches").update({
-                  pathao_order_status: data.order_status,
-                  updated_at: now,
-                }).eq("id", d.id);
-              }
-
-              if (orderId) {
-                await supabase.from("orders").update({
-                  pathao_delivery_status: data.order_status,
-                  internal_status: "dispatched",
-                }).eq("id", orderId);
-              }
-
-              updatedCount++;
-              updatedDetails.push({ consignment_id: d.consignment_id, order: d.shopify_order_name, oldStatus: currentStatus, newStatus: data.order_status });
-            }
-          } catch (err: any) {
-            errors.push({ consignment_id: d.consignment_id, error: err.message });
+      try {
+        const infoRes = await getPathaoOrderStatus(d.consignment_id);
+        const data = infoRes?.data;
+        if (!data || !data.order_status) {
+          if (i + 1 < activeList.length) {
+            await new Promise((resolve) => setTimeout(resolve, 200));
           }
-        })
-      );
-      if (i + CHUNK_SIZE < activeList.length) {
-        await new Promise((resolve) => setTimeout(resolve, 350));
+          continue;
+        }
+
+        const normalizeStatus = (s: string) => (s || "").toLowerCase().replace(/[_\s]+/g, " ").trim();
+        const currentStatus = normalizeStatus(d.pathao_order_status || "");
+        const newStatus = normalizeStatus(data.order_status || "");
+
+        if (currentStatus === newStatus) {
+          if (i + 1 < activeList.length) {
+            await new Promise((resolve) => setTimeout(resolve, 200));
+          }
+          continue;
+        }
+
+        const now = new Date().toISOString();
+        const orderId = (d.orders as any)?.id;
+        const shopifyOrderId = (d.orders as any)?.shopify_order_id;
+        const shopifyFulfillmentId = (d.orders as any)?.shopify_fulfillment_id;
+
+        // 1. Partial Delivery
+        if (newStatus.includes("partial")) {
+          if (d.id) {
+            await supabase.from("dispatches").update({
+              pathao_order_status: "Partial Delivered",
+              updated_at: now,
+            }).eq("id", d.id);
+          }
+
+          if (orderId) {
+            await supabase.from("orders").update({
+              internal_status: "delivered",
+              pathao_delivery_status: "Partial Delivered",
+              delivered_at: now,
+            }).eq("id", orderId);
+
+            // Create return record in returns if not already present
+            const { data: existingReturn } = await supabase
+              .from("returns")
+              .select("id")
+              .eq("order_id", orderId)
+              .maybeSingle();
+
+            if (!existingReturn) {
+              await supabase.from("returns").insert({
+                order_id: orderId,
+                dispatch_id: d.id || null,
+                consignment_id: d.consignment_id,
+                return_type: "partial",
+                return_source: "pathao_sync",
+                order_total: Number(d.amount_to_collect || (d.orders as any)?.total_price) || 0,
+                return_delivery_fee: 0,
+                status: "pending_verification",
+                is_verified: false,
+                return_reason: "Pathao Partial Delivery",
+                returned_at: now,
+              });
+            }
+
+            // Auto-sync with Shopify
+            try {
+              await markShopifyOrderAsPartialDelivered({
+                shopifyOrderId,
+                shopifyFulfillmentId,
+                consignmentId: d.consignment_id,
+              });
+            } catch (shopifySyncErr) {
+              console.error("[Sync] Failed to mark order partial delivery on Shopify:", shopifySyncErr);
+            }
+          }
+          updatedCount++;
+          updatedDetails.push({ consignment_id: d.consignment_id, order: d.shopify_order_name, oldStatus: currentStatus, newStatus: "Partial Delivered" });
+        }
+        // 2. Returns & Paid Returns
+        else if (newStatus.includes("return") || newStatus.includes("returned")) {
+          const returnLabel = newStatus.includes("paid") ? "Paid Return" : "Returned";
+          if (d.id) {
+            await supabase.from("dispatches").update({
+              pathao_order_status: returnLabel,
+              updated_at: now,
+            }).eq("id", d.id);
+          }
+
+          if (orderId) {
+            await supabase.from("orders").update({
+              pathao_delivery_status: returnLabel,
+              internal_status: "returned",
+              returned_at: now,
+              return_reason: returnLabel === "Paid Return" ? "Paid Return via Pathao" : "Returned via Pathao",
+            }).eq("id", orderId);
+          }
+          updatedCount++;
+          updatedDetails.push({ consignment_id: d.consignment_id, order: d.shopify_order_name, oldStatus: currentStatus, newStatus: returnLabel });
+        }
+        // 3. Delivered
+        else if (newStatus.includes("delivered") || newStatus.includes("payment_received") || newStatus.includes("payment invoice")) {
+          if (d.id) {
+            await supabase.from("dispatches").update({
+              pathao_order_status: "Delivered",
+              updated_at: now,
+            }).eq("id", d.id);
+          }
+
+          if (orderId) {
+            await supabase.from("orders").update({
+              internal_status: "delivered",
+              pathao_delivery_status: "Delivered",
+              delivered_at: now,
+            }).eq("id", orderId);
+
+            // Mark as Delivered on Shopify
+            try {
+              await markShopifyOrderAsDelivered({
+                shopifyOrderId,
+                shopifyFulfillmentId,
+                consignmentId: d.consignment_id,
+              });
+            } catch (shopifySyncErr) {
+              console.error("[Sync] Failed to mark order delivered on Shopify:", shopifySyncErr);
+            }
+          }
+          updatedCount++;
+          updatedDetails.push({ consignment_id: d.consignment_id, order: d.shopify_order_name, oldStatus: currentStatus, newStatus: "Delivered" });
+        }
+        // 4. Ready for Delivery / Assigned for Delivery / Out for Delivery
+        else if (
+          newStatus.includes("out_for_delivery") ||
+          newStatus.includes("out for delivery") ||
+          newStatus.includes("assigned for delivery") ||
+          newStatus.includes("assigned_for_delivery") ||
+          newStatus.includes("ready for delivery") ||
+          newStatus.includes("ready_for_delivery")
+        ) {
+          let label = data.order_status;
+          if (newStatus.includes("out")) label = "Out for Delivery";
+          else if (newStatus.includes("assigned")) label = "Assigned for Delivery";
+          else if (newStatus.includes("ready")) label = "Ready for Delivery";
+
+          if (normalizeStatus(label) === currentStatus) {
+            if (i + 1 < activeList.length) {
+              await new Promise((resolve) => setTimeout(resolve, 200));
+            }
+            continue;
+          }
+          if (d.id) {
+            await supabase.from("dispatches").update({
+              pathao_order_status: label,
+              updated_at: now,
+            }).eq("id", d.id);
+          }
+
+          if (orderId) {
+            await supabase.from("orders").update({
+              pathao_delivery_status: label,
+              internal_status: "dispatched",
+              delivered_at: null,
+            }).eq("id", orderId);
+          }
+          updatedCount++;
+          updatedDetails.push({ consignment_id: d.consignment_id, order: d.shopify_order_name, oldStatus: currentStatus, newStatus: label });
+        }
+        // 5. Cancelled
+        else if (newStatus.includes("cancel") || newStatus.includes("cancelled")) {
+          if (d.id) {
+            await supabase.from("dispatches").update({
+              pathao_order_status: "Cancelled",
+              is_cancelled: true,
+              cancelled_at: now,
+              cancel_reason: "Cancelled via Pathao Courier Scan",
+              updated_at: now,
+            }).eq("id", d.id);
+          }
+
+          if (orderId) {
+            await supabase.from("orders").update({
+              internal_status: "cancelled",
+              pathao_delivery_status: "Cancelled",
+              cancel_reason: "Cancelled via Pathao Courier Scan",
+            }).eq("id", orderId);
+          }
+          updatedCount++;
+          updatedDetails.push({ consignment_id: d.consignment_id, order: d.shopify_order_name, oldStatus: currentStatus, newStatus: "Cancelled" });
+        }
+        // 6. Pickup Holds & Failures
+        else if (newStatus.includes("hold") || newStatus.includes("failed")) {
+          const label = data.order_status;
+          if (d.id) {
+            await supabase.from("dispatches").update({
+              pathao_order_status: label,
+              updated_at: now,
+            }).eq("id", d.id);
+          }
+
+          if (orderId) {
+            await supabase.from("orders").update({
+              internal_status: "hold",
+              pathao_delivery_status: label,
+              delivered_at: null,
+            }).eq("id", orderId);
+          }
+          updatedCount++;
+          updatedDetails.push({ consignment_id: d.consignment_id, order: d.shopify_order_name, oldStatus: currentStatus, newStatus: label });
+        }
+        // 7. In Transit / Hub / other
+        else {
+          if (d.id) {
+            await supabase.from("dispatches").update({
+              pathao_order_status: data.order_status,
+              updated_at: now,
+            }).eq("id", d.id);
+          }
+
+          if (orderId) {
+            await supabase.from("orders").update({
+              pathao_delivery_status: data.order_status,
+              internal_status: "dispatched",
+            }).eq("id", orderId);
+          }
+
+          updatedCount++;
+          updatedDetails.push({ consignment_id: d.consignment_id, order: d.shopify_order_name, oldStatus: currentStatus, newStatus: data.order_status });
+        }
+      } catch (err: any) {
+        errors.push({ consignment_id: d.consignment_id, error: err.message });
+      }
+
+      if (i + 1 < activeList.length) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
       }
     }
 
