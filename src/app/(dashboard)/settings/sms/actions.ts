@@ -91,6 +91,48 @@ export async function toggleMasterSMSAction(enabled: boolean) {
   return { success: true, enabled };
 }
 
+export async function toggleSettingFieldAction(field: string, value: boolean | string) {
+  const allowedFields = new Set([
+    "sms_master_enabled",
+    "sms_sender_id_enabled",
+    "sms_non_sender_id_enabled",
+    "sms_auto_order_enabled",
+    "sms_auto_dispatch_enabled",
+    "sms_auto_out_for_delivery_enabled",
+    "sms_auto_delivered_enabled",
+    "sms_auto_on_hold_enabled",
+    "sms_auto_returned_enabled",
+    "sms_auto_cancelled_enabled",
+    "sms_sender_id_event_types",
+  ]);
+
+  if (!allowedFields.has(field)) {
+    throw new Error(`Field ${field} is not permitted for instant toggling`);
+  }
+
+  const supabase = createServiceClient();
+  const { data: currentSettings } = await supabase.from("app_settings").select("id").single();
+
+  if (currentSettings?.id) {
+    const { error } = await supabase
+      .from("app_settings")
+      .update({ [field]: value })
+      .eq("id", currentSettings.id);
+
+    if (error) throw error;
+  } else {
+    const { error } = await supabase
+      .from("app_settings")
+      .insert({ system_name: "MiBx Dispatch", [field]: value });
+
+    if (error) throw error;
+  }
+
+  revalidatePath("/settings");
+  revalidatePath("/settings/sms");
+  return { success: true, field, value };
+}
+
 export async function sendTestSMS(formData: FormData) {
   const phone = formData.get("test_phone") as string;
   

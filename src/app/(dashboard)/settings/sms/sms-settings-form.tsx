@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { ActionForm, SubmitButton } from "@/components/ui/action-form";
-import { updateSMSSettings, toggleMasterSMSAction } from "./actions";
+import { updateSMSSettings, toggleMasterSMSAction, toggleSettingFieldAction } from "./actions";
+import { toast } from "sonner";
 import {
   PackagePlus,
   Truck,
@@ -230,7 +231,20 @@ export function SMSSettingsForm({ settings }: SMSSettingsFormProps) {
   };
 
   const handleToggle = (id: string) => {
-    setToggles((prev) => ({ ...prev, [id]: !prev[id] }));
+    const item = NOTIFICATIONS.find((n) => n.id === id);
+    if (!item) return;
+    const nextState = !toggles[id];
+    setToggles((prev) => ({ ...prev, [id]: nextState }));
+
+    startTransition(async () => {
+      try {
+        await toggleSettingFieldAction(item.nameKey, nextState);
+        toast.success(`${item.title} SMS: ${nextState ? "Enabled" : "Disabled"}`);
+      } catch (err: any) {
+        setToggles((prev) => ({ ...prev, [id]: !nextState }));
+        toast.error(`Failed to update ${item.title}: ${err.message}`);
+      }
+    });
   };
 
   const handleMasterToggleInstant = () => {
@@ -239,18 +253,58 @@ export function SMSSettingsForm({ settings }: SMSSettingsFormProps) {
     startTransition(async () => {
       try {
         await toggleMasterSMSAction(nextState);
-      } catch (err) {
-        console.error("Failed to toggle master SMS:", err);
+        toast.success(
+          nextState
+            ? "Master SMS: Customer notifications live"
+            : "Master SMS: All customer notifications paused"
+        );
+      } catch (err: any) {
+        setMasterEnabled(!nextState);
+        toast.error(`Failed to toggle master SMS: ${err.message}`);
+      }
+    });
+  };
+
+  const handleSenderIdToggle = () => {
+    const nextState = !senderIdEnabled;
+    setSenderIdEnabled(nextState);
+    startTransition(async () => {
+      try {
+        await toggleSettingFieldAction("sms_sender_id_enabled", nextState);
+        toast.success(`Sender ID (Masking) SMS: ${nextState ? "Enabled" : "Disabled"}`);
+      } catch (err: any) {
+        setSenderIdEnabled(!nextState);
+        toast.error(`Failed to update Sender ID: ${err.message}`);
+      }
+    });
+  };
+
+  const handleNonSenderIdToggle = () => {
+    const nextState = !nonSenderIdEnabled;
+    setNonSenderIdEnabled(nextState);
+    startTransition(async () => {
+      try {
+        await toggleSettingFieldAction("sms_non_sender_id_enabled", nextState);
+        toast.success(`Non-Sender ID SMS: ${nextState ? "Enabled" : "Disabled"}`);
+      } catch (err: any) {
+        setNonSenderIdEnabled(!nextState);
+        toast.error(`Failed to update Non-Sender ID: ${err.message}`);
       }
     });
   };
 
   const toggleSenderIdType = (typeId: string) => {
-    setSenderIdTypes((prev) => {
-      if (prev.includes(typeId)) {
-        return prev.filter((t) => t !== typeId);
-      } else {
-        return [...prev, typeId];
+    const nextTypes = senderIdTypes.includes(typeId)
+      ? senderIdTypes.filter((t) => t !== typeId)
+      : [...senderIdTypes, typeId];
+    setSenderIdTypes(nextTypes);
+    startTransition(async () => {
+      try {
+        await toggleSettingFieldAction("sms_sender_id_event_types", nextTypes.join(","));
+        toast.success(`Sender ID routing updated for ${typeId}`);
+      } catch (err: any) {
+        setSenderIdTypes(senderIdTypes);
+        toast.error(`Failed to update routing: ${err.message}`);
       }
     });
   };
@@ -419,7 +473,7 @@ export function SMSSettingsForm({ settings }: SMSSettingsFormProps) {
               <input
                 type="checkbox"
                 checked={senderIdEnabled}
-                onChange={() => setSenderIdEnabled((prev) => !prev)}
+                onChange={handleSenderIdToggle}
                 className="sr-only peer"
               />
               <div className="w-10 h-5 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-violet-600"></div>
@@ -439,7 +493,7 @@ export function SMSSettingsForm({ settings }: SMSSettingsFormProps) {
               <input
                 type="checkbox"
                 checked={nonSenderIdEnabled}
-                onChange={() => setNonSenderIdEnabled((prev) => !prev)}
+                onChange={handleNonSenderIdToggle}
                 className="sr-only peer"
               />
               <div className="w-10 h-5 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>

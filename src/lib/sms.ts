@@ -30,13 +30,45 @@ export async function sendSMS(
     else if (keyLower.includes("order")) rawEventType = "order";
     else if (keyLower.includes("test")) rawEventType = "test";
   }
+
+  // Deep content keyword fallback if eventType is still not known
+  if (!rawEventType && msg) {
+    const msgLower = msg.toLowerCase();
+    if (msgLower.includes("ডেলিভারি হয়েছে") || msgLower.includes("সফলভাবে ডেলিভারি") || msgLower.includes("delivered")) {
+      rawEventType = "delivered";
+    } else if (msgLower.includes("রাইডারের কাছে") || msgLower.includes("out for delivery")) {
+      rawEventType = "out_for_delivery";
+    } else if (msgLower.includes("ডিসপ্যাচ") || msgLower.includes("dispatched")) {
+      rawEventType = "dispatch";
+    } else if (msgLower.includes("বাতিল") || msgLower.includes("cancelled")) {
+      rawEventType = "cancelled";
+    } else if (msgLower.includes("রিটার্ন") || msgLower.includes("returned")) {
+      rawEventType = "returned";
+    } else if (msgLower.includes("হোল্ড") || msgLower.includes("on hold")) {
+      rawEventType = "on_hold";
+    } else if (msgLower.includes("কনফার্ম") || msgLower.includes("প্লেস") || msgLower.includes("অর্ডার প্লেস")) {
+      rawEventType = "order";
+    }
+  }
   const eventType = (rawEventType || "manual").toLowerCase();
 
-  // 1. Fetch SMS settings from app_settings
+  // 1. Fetch all SMS settings & section switches from app_settings
   const { data: settings } = await supabase
     .from("app_settings")
     .select(
-      "sms_api_key, sms_sender_id, sms_master_enabled, sms_sender_id_enabled, sms_non_sender_id_enabled, sms_sender_id_event_types"
+      `sms_api_key,
+       sms_sender_id,
+       sms_master_enabled,
+       sms_sender_id_enabled,
+       sms_non_sender_id_enabled,
+       sms_sender_id_event_types,
+       sms_auto_order_enabled,
+       sms_auto_dispatch_enabled,
+       sms_auto_out_for_delivery_enabled,
+       sms_auto_delivered_enabled,
+       sms_auto_returned_enabled,
+       sms_auto_on_hold_enabled,
+       sms_auto_cancelled_enabled`
     )
     .single();
 
@@ -63,6 +95,42 @@ export async function sendSMS(
       console.error("[SMS Logging Error]", dbErr);
     }
     return { success: false, message: "Master SMS notifications are globally disabled in Settings" };
+  }
+
+  // 2B. Section-Level Switch: Check if the merchant turned off SMS for this specific event section
+  const isSectionEnabled = (() => {
+    if (eventType === "delivered") return settings?.sms_auto_delivered_enabled !== false;
+    if (eventType === "dispatch") return settings?.sms_auto_dispatch_enabled !== false;
+    if (eventType === "out_for_delivery") return settings?.sms_auto_out_for_delivery_enabled !== false;
+    if (eventType === "order") return settings?.sms_auto_order_enabled !== false;
+    if (eventType === "returned") return settings?.sms_auto_returned_enabled !== false;
+    if (eventType === "on_hold") return settings?.sms_auto_on_hold_enabled !== false;
+    if (eventType === "cancelled") return settings?.sms_auto_cancelled_enabled !== false;
+    return true; // "manual" or "test"
+  })();
+
+  if (!isSectionEnabled) {
+    console.warn(`[SMS Section Guard] Automated SMS for '${eventType}' is disabled in Settings.`);
+    try {
+      await supabase.from("webhook_logs").insert({
+        source: "sms",
+        topic: "sms/section_disabled",
+        shopify_order_id: parsedOrderId,
+        payload: {
+          to,
+          msg,
+          eventType,
+          idempotencyKey,
+          orderName: metadata?.orderName,
+          reason: `Automated SMS for '${eventType}' is turned OFF in Settings`,
+        },
+        processed: false,
+        error: `SMS notifications for '${eventType}' are disabled in Settings`,
+      });
+    } catch (dbErr) {
+      console.error("[SMS Logging Error]", dbErr);
+    }
+    return { success: false, message: `Automated SMS for '${eventType}' is disabled in Settings` };
   }
 
   // 3. Robust Deduplication & Idempotency check:

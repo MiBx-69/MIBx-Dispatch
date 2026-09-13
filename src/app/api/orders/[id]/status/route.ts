@@ -58,7 +58,7 @@ export async function PATCH(
   try {
     if (status === "dispatched" || status === "delivered") {
       const { data: settings } = await supabase.from("app_settings").select("*").single();
-      if (settings?.sms_api_key) {
+      if (settings?.sms_api_key && settings?.sms_master_enabled !== false) {
         const phone = order?.customer_phone || order?.customers?.phone;
         
         if (phone) {
@@ -88,7 +88,18 @@ export async function PATCH(
               msg = msg.replace("{{total_price}}", "0");
             }
 
-            await sendSMS(phone, msg);
+            await sendSMS(
+              phone,
+              msg,
+              false,
+              `status_${order.id}_${status}`,
+              {
+                orderId: order.shopify_order_id || order.id,
+                orderName: order.shopify_order_name,
+                customerName: order.customers?.name,
+                eventType: status,
+              }
+            );
             await logOrderEvent(id, "SMS_SENT", `Automated SMS sent: ${msg}`);
           }
         }

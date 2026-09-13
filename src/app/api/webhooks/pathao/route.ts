@@ -404,7 +404,7 @@ async function processPathaoWebhook(payload: any, storedSecret: string, logId?: 
           isOutForDelivery
         ) {
           const { data: appSettings } = await supabase.from("app_settings").select("*").single();
-          if (appSettings?.sms_api_key) {
+          if (appSettings?.sms_api_key && appSettings?.sms_master_enabled !== false) {
             const phone = order?.customer_phone || order?.customers?.phone;
             if (phone) {
               const { sendSMS } = await import("@/lib/sms");

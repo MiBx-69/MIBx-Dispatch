@@ -64,7 +64,12 @@ export async function processAutoDeliveredOrders() {
       .in("id", orderIds);
 
     // 5. Send automated SMS if enabled
-    if (settings.sms_api_key && settings.sms_auto_delivered_enabled && settings.sms_auto_delivered_template) {
+    if (
+      settings.sms_api_key &&
+      settings.sms_master_enabled !== false &&
+      settings.sms_auto_delivered_enabled &&
+      settings.sms_auto_delivered_template
+    ) {
       const { sendSMS } = await import("@/lib/sms");
       
       for (const order of ordersToUpdate) {
@@ -75,7 +80,18 @@ export async function processAutoDeliveredOrders() {
               .replace("{{order_id}}", order.shopify_order_name || order.id)
               .replace("{{customer_name}}", (order.customers as any)?.name || "Customer");
             
-            await sendSMS(phone, msg, false, `order_delivered_${order.id}`);
+            await sendSMS(
+              phone,
+              msg,
+              false,
+              `order_delivered_${order.id}`,
+              {
+                orderId: order.id,
+                orderName: order.shopify_order_name,
+                customerName: (order.customers as any)?.name,
+                eventType: "delivered",
+              }
+            );
           } catch (smsErr) {
             console.error(`[Auto-Deliver SMS] Error for order ${order.id}:`, smsErr);
           }
