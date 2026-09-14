@@ -33,11 +33,30 @@ export function BulkDispatchModal({ orderIds, storeId, onClose, onSuccess }: Bul
   });
 
   useEffect(() => {
+    const cachedStores = localStorage.getItem("pathao_stores_cache");
+    const cachedDefaultStoreId = localStorage.getItem("pathao_default_store_id");
+    if (cachedStores) {
+      const list = JSON.parse(cachedStores);
+      setStores(list);
+      setForm((f) => ({
+        ...f,
+        store_id: resolveDefaultStoreId({
+          stores: list,
+          propStoreId: storeId || (cachedDefaultStoreId ? Number(cachedDefaultStoreId) : undefined),
+          currentValue: f.store_id,
+        }),
+      }));
+    }
+
     fetch("/api/pathao/stores")
       .then((r) => r.json())
       .then((d) => {
         const list: Store[] = d.stores || [];
         setStores(list);
+        localStorage.setItem("pathao_stores_cache", JSON.stringify(list));
+        if (d.default_store_id) {
+          localStorage.setItem("pathao_default_store_id", String(d.default_store_id));
+        }
         setForm((f) => {
           const resolved = resolveDefaultStoreId({
             stores: list,
