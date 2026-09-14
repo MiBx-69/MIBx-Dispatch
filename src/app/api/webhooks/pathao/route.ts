@@ -217,15 +217,30 @@ async function processPathaoWebhook(payload: any, storedSecret: string, logId?: 
       });
 
       const isCancelled = newEvent.toLowerCase().includes("cancel");
+      const lowerEvent = newEvent.toLowerCase();
       let normalizedDispatchStatus = newEvent;
-      if (isPartialDelivery) {
+      
+      if (lowerEvent.includes("partial")) {
         normalizedDispatchStatus = "Partial Delivered";
-      } else if (newEvent.toLowerCase().includes("paid") && isReturnEvent) {
-        normalizedDispatchStatus = "Paid Return";
-      } else if (newEvent.toLowerCase() === "order.delivered" || newEvent.toLowerCase() === "delivered") {
+      } else if (lowerEvent.includes("return") || lowerEvent.includes("returned")) {
+        normalizedDispatchStatus = lowerEvent.includes("paid") ? "Paid Return" : "Returned";
+      } else if (lowerEvent.includes("delivered") || lowerEvent.includes("payment_received") || lowerEvent.includes("payment invoice")) {
         normalizedDispatchStatus = "Delivered";
-      } else if (newEvent.toLowerCase().includes("assigned-for-delivery") || newEvent.toLowerCase().includes("assigned for delivery")) {
-        normalizedDispatchStatus = "Assigned for Delivery";
+      } else if (
+        lowerEvent.includes("out_for_delivery") ||
+        lowerEvent.includes("out for delivery") ||
+        lowerEvent.includes("assigned for delivery") ||
+        lowerEvent.includes("assigned_for_delivery") ||
+        lowerEvent.includes("ready for delivery") ||
+        lowerEvent.includes("ready_for_delivery")
+      ) {
+        if (lowerEvent.includes("out")) normalizedDispatchStatus = "Out for Delivery";
+        else if (lowerEvent.includes("assigned")) normalizedDispatchStatus = "Assigned for Delivery";
+        else if (lowerEvent.includes("ready")) normalizedDispatchStatus = "Ready for Delivery";
+      } else if (lowerEvent.includes("cancel") || lowerEvent.includes("cancelled")) {
+        normalizedDispatchStatus = "Cancelled";
+      } else if (lowerEvent.includes("hold") || lowerEvent.includes("failed")) {
+        normalizedDispatchStatus = newEvent;
       }
 
       const dispatchUpdate: any = {

@@ -13,39 +13,29 @@ import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { FraudWidget } from "@/components/dashboard/fraud-widget";
 import { DispatchedProductsToday } from "@/components/dashboard/dispatched-today";
 import type { Order } from "@/types/database";
-import { getUnifiedReportMetrics, resolveDateRange } from "@/lib/reporting-engine";
+import { getUnifiedReportMetrics, resolveDateRange, UnifiedReportMetrics } from "@/lib/reporting-engine";
 import { PathaoReconciliationWidget } from "@/components/dashboard/pathao-reconciliation-widget";
+import { getCache, setCache, TTL } from "@/lib/redis";
 
 export const metadata = { title: "Dashboard" };
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ dateFilter?: string }> }) {
+async function getCachedDashboardData(dateFilter: string) {
+  const cacheKey = `dashboard:metrics:v1:${dateFilter}`;
+  const cached = await getCache<any>(cacheKey);
+  if (cached) return cached;
+
   const supabase = createServiceClient();
-  const params = await searchParams;
-  const dateFilter = params.dateFilter || "this_month";
-
-  const unifiedMetrics = await getUnifiedReportMetrics({
-    dateFilter,
-  });
-
+  const unifiedMetrics = await getUnifiedReportMetrics({ dateFilter });
   const { startDateStr: resolvedStart, endDateStr: resolvedEnd } = resolveDateRange(dateFilter);
   let startDateStr = resolvedStart || subDays(new Date(), 30).toISOString();
   let endDateStr = resolvedEnd || new Date().toISOString();
 
   const MIN_DATE = new Date("2026-08-31T18:00:00.000Z");
-  // Clamp startDateStr to MIN_DATE
   if (new Date(startDateStr) < MIN_DATE) {
     startDateStr = MIN_DATE.toISOString();
   }
 
-  // Fetch 10 most recent orders
-  const { data: recentOrders } = await supabase
-    .from("orders")
-    .select("*")
-    .order("shopify_created_at", { ascending: false })
-    .limit(10);
-
-  // Fetch orders matching the date filter
   const { data: recentMonthOrders } = await supabase
     .from("orders")
     .select("total_price, subtotal_price, shopify_created_at, created_at, line_items, financial_status, fulfillment_status, internal_status, fraud_status")
@@ -53,16 +43,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     .lte("shopify_created_at", endDateStr)
     .order("shopify_created_at", { ascending: false });
 
-  // --- Data Processing for Dashboards ---
   const orders = recentMonthOrders || [];
   
-  // 1. Revenue Chart
   const revenueMap = new Map<string, { total: number, subtotal: number }>();
-  
-  // Ensure we show at least a few days on the chart even if it's "Today"
   let daysDiff = differenceInDays(parseISO(endDateStr), parseISO(startDateStr));
   if (daysDiff < 7) {
-     const tempStart = subDays(parseISO(endDateStr), 6);
      for (let i = 6; i >= 0; i--) {
         revenueMap.set(format(subDays(parseISO(endDateStr), i), 'yyyy-MM-dd'), { total: 0, subtotal: 0 });
      }
@@ -85,13 +70,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     }
   });
   const revenueData = Array.from(revenueMap.entries()).map(([date, data]) => ({ 
-    date, 
-    displayDate: format(parseISO(date), "MMM d"),
-    revenue: data.total,
-    subtotal: data.subtotal
+    date, displayDate: format(parseISO(date), "MMM d"), revenue: data.total, subtotal: data.subtotal
   }));
 
-  // 2. Top Products
   const productMap = new Map<string, { id: string, title: string, variant: string, qty: number, revenue: number }>();
   orders.forEach((o: any) => {
     const items = o.line_items as any[];
@@ -99,13 +80,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       items.forEach((item: any) => {
         const key = `${item.product_id || item.title}-${item.variant_id || item.variant_title}`;
         if (!productMap.has(key)) {
-          productMap.set(key, { 
-            id: key, 
-            title: item.title || item.name || 'Unknown', 
-            variant: item.variant_title || '', 
-            qty: 0, 
-            revenue: 0 
-          });
+          productMap.set(key, { id: key, title: item.title || item.name || 'Unknown', variant: item.variant_title || '', qty: 0, revenue: 0 });
         }
         const p = productMap.get(key)!;
         p.qty += item.quantity || 1;
@@ -113,11 +88,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       });
     }
   });
-  const topProducts = Array.from(productMap.values())
-    .sort((a, b) => b.qty - a.qty)
-    .slice(0, 5);
+  const topProducts = Array.from(productMap.values()).sort((a, b) => b.qty - a.qty).slice(0, 5);
 
-  // 2b. Dispatched Products in Period
   const { data: dispatchesInPeriod } = await supabase
     .from("dispatches")
     .select("dispatched_at, is_cancelled, pathao_order_status, orders!inner(line_items, internal_status, is_archived)")
@@ -139,71 +111,30 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         items.forEach((item: any) => {
           const key = `${item.product_id || item.title}-${item.variant_id || item.variant_title}`;
           if (!dispatchedPeriodMap.has(key)) {
-            dispatchedPeriodMap.set(key, { 
-              id: key, 
-              title: item.title || item.name || 'Unknown', 
-              variant: item.variant_title || '', 
-              qty: 0
-            });
+            dispatchedPeriodMap.set(key, { id: key, title: item.title || item.name || 'Unknown', variant: item.variant_title || '', qty: 0 });
           }
           dispatchedPeriodMap.get(key)!.qty += item.quantity || 1;
         });
       }
     });
   }
-  
-  const topDispatchedPeriod = Array.from(dispatchedPeriodMap.values())
-    .sort((a, b) => b.qty - a.qty);
+  const topDispatchedPeriod = Array.from(dispatchedPeriodMap.values()).sort((a, b) => b.qty - a.qty);
 
-  // 3. Fulfillment Stats
-  const fStats = {
-    unfulfilled: 0,
-    partial: 0,
-    fulfilled: 0,
-    paid: 0,
-    pending_payment: 0,
-    total: orders.length
-  };
-  
-  // 4. Fraud Stats
+  const fStats = { unfulfilled: 0, partial: 0, fulfilled: 0, paid: 0, pending_payment: 0, total: orders.length };
   const fraudStats = { safe: 0, risky: 0, fraud: 0 };
+  const liveStats = { pending_orders: 0, preparing_orders: 0, dispatched_orders: 0, delivered_orders: 0, hold_orders: 0, orders_period: 0, dispatched_period: 0, cancelled_period: 0, returned_period: 0, returned_revenue: 0, revenue_period: 0, subtotal_period: 0 };
 
-  // 5. Live Dashboard Quick Stats
-  const liveStats = {
-    pending_orders: 0,
-    preparing_orders: 0,
-    dispatched_orders: 0,
-    delivered_orders: 0,
-    hold_orders: 0,
-    orders_period: 0,
-    dispatched_period: 0,
-    cancelled_period: 0,
-    returned_period: 0,
-    returned_revenue: 0,
-    revenue_period: 0,
-    subtotal_period: 0
-  };
-
-  let pendingCOD = 0;
-  let deliveredCOD = 0;
-  let returnedCOD = 0;
-  const statusCountMap = new Map<string, number>();
-
+  let pendingCOD = 0; let deliveredCOD = 0; let returnedCOD = 0;
   orders.forEach((o: any) => {
-    // Fulfillment
     if (o.fulfillment_status === 'fulfilled') fStats.fulfilled++;
     else if (o.fulfillment_status === 'partial') fStats.partial++;
     else fStats.unfulfilled++;
-    
     if (o.financial_status === 'paid') fStats.paid++;
     else fStats.pending_payment++;
-
-    // Fraud
     if (o.fraud_status === 'safe') fraudStats.safe++;
     else if (o.fraud_status === 'risky') fraudStats.risky++;
     else if (o.fraud_status === 'fraud') fraudStats.fraud++;
 
-    // Status counts
     const effectiveStatus = getOrderDisplayStatus(o);
     if (effectiveStatus === 'pending') liveStats.pending_orders++;
     else if (effectiveStatus === 'preparing') liveStats.preparing_orders++;
@@ -211,40 +142,24 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     else if (effectiveStatus === 'delivered') liveStats.delivered_orders++;
     else if (effectiveStatus === 'hold') liveStats.hold_orders++;
 
-    // Period counts (all orders in this array fall within the selected date period)
     liveStats.orders_period++;
-    // Only count revenue from non-cancelled and non-returned orders
     if (o.internal_status !== 'cancelled' && o.internal_status !== 'returned') {
       liveStats.revenue_period += Number(o.total_price) || 0;
       liveStats.subtotal_period += Number(o.subtotal_price) || 0;
     }
-    if (o.internal_status === 'cancelled') {
-      liveStats.cancelled_period++;
-    }
+    if (o.internal_status === 'cancelled') liveStats.cancelled_period++;
     if (o.internal_status === 'returned') {
       liveStats.returned_period++;
       liveStats.returned_revenue += Number(o.total_price) || 0;
     }
 
-    // Courier Stats
     const st = o.internal_status;
-    if (st === "dispatched") {
-       statusCountMap.set("In Transit", (statusCountMap.get("In Transit") || 0) + 1);
-       pendingCOD += Number(o.total_price);
-    } else if (st === "delivered") {
-       statusCountMap.set("Delivered", (statusCountMap.get("Delivered") || 0) + 1);
-       deliveredCOD += Number(o.total_price);
-    } else if (st === "returned") {
-       statusCountMap.set("Returned", (statusCountMap.get("Returned") || 0) + 1);
-       returnedCOD += Number(o.total_price);
-    } else if (st !== "cancelled" && st !== "archived") {
-       statusCountMap.set("Pending", (statusCountMap.get("Pending") || 0) + 1);
-    }
+    if (st === "dispatched") pendingCOD += Number(o.total_price);
+    else if (st === "delivered") deliveredCOD += Number(o.total_price);
+    else if (st === "returned") returnedCOD += Number(o.total_price);
   });
-
   liveStats.dispatched_period = unifiedMetrics.dispatchedCount;
 
-  // Fetch partial return deductions in this period
   const { data: partialReturnsData } = await supabase
     .from("returns")
     .select("refund_amount, order_total, returned_items")
@@ -252,16 +167,45 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     .gte("returned_at", startDateStr)
     .lte("returned_at", endDateStr);
 
-  const partialDeductions = (partialReturnsData || []).reduce(
-    (acc: number, r: any) => {
-      const val = Number(r.refund_amount) || 
-        (Array.isArray(r.returned_items) && r.returned_items.reduce((s: number, i: any) => s + (Number(i.price || 0) * Number(i.quantity || 1)), 0)) ||
-        (Number(r.order_total) || 0);
-      return acc + val;
-    }, 0
-  );
+  const partialDeductions = (partialReturnsData || []).reduce((acc: number, r: any) => {
+    const val = Number(r.refund_amount) || 
+      (Array.isArray(r.returned_items) && r.returned_items.reduce((s: number, i: any) => s + (Number(i.price || 0) * Number(i.quantity || 1)), 0)) ||
+      (Number(r.order_total) || 0);
+    return acc + val;
+  }, 0);
   liveStats.returned_revenue += partialDeductions;
   returnedCOD += partialDeductions;
+
+  const result = {
+    unifiedMetrics,
+    revenueData,
+    topProducts,
+    topDispatchedPeriod,
+    fStats,
+    fraudStats,
+    liveStats,
+    pendingCOD,
+    deliveredCOD,
+    returnedCOD,
+  };
+
+  await setCache(cacheKey, result, TTL.DASHBOARD_STATS);
+  return result;
+}
+
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ dateFilter?: string }> }) {
+  const supabase = createServiceClient();
+  const params = await searchParams;
+  const dateFilter = params.dateFilter || "this_month";
+
+  const data = await getCachedDashboardData(dateFilter);
+  const { unifiedMetrics, revenueData, topProducts, topDispatchedPeriod, fStats, fraudStats, liveStats, pendingCOD, deliveredCOD, returnedCOD } = data;
+
+  const { data: recentOrders } = await supabase
+    .from("orders")
+    .select("*")
+    .order("shopify_created_at", { ascending: false })
+    .limit(10);
 
   const courierStats = [
     { status: "Delivered", count: unifiedMetrics.courierDeliveredCount },
@@ -287,7 +231,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       {/* Period Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         {/* Orders */}
-        <div className="rounded-2xl p-4 lg:p-5 bg-zinc-900 border border-zinc-800/50 shadow-sm relative overflow-hidden group flex flex-col justify-center">
+        <div className="rounded-2xl p-4 lg:p-5 bg-zinc-900/60 backdrop-blur-md border border-zinc-800/50 shadow-sm hover:shadow-lg relative overflow-hidden group flex flex-col justify-center transition-all duration-300 hover:scale-[1.02] hover:bg-zinc-900/80">
           <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
             <Package className="w-16 h-16 text-zinc-100" />
           </div>
@@ -296,7 +240,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </div>
 
         {/* Sales */}
-        <div className="rounded-2xl p-4 lg:p-5 bg-emerald-500/5 border border-emerald-500/20 shadow-sm relative overflow-hidden group flex flex-col justify-center">
+        <div className="rounded-2xl p-4 lg:p-5 bg-emerald-500/10 backdrop-blur-md border border-emerald-500/20 shadow-sm hover:shadow-emerald-900/20 relative overflow-hidden group flex flex-col justify-center transition-all duration-300 hover:scale-[1.02] hover:bg-emerald-500/15">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <TrendingUp className="w-16 h-16 text-emerald-400" />
           </div>
@@ -307,7 +251,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </div>
 
         {/* Dispatched */}
-        <div className="rounded-2xl p-4 lg:p-5 bg-indigo-500/5 border border-indigo-500/20 shadow-sm relative overflow-hidden group flex flex-col justify-center">
+        <div className="rounded-2xl p-4 lg:p-5 bg-indigo-500/10 backdrop-blur-md border border-indigo-500/20 shadow-sm hover:shadow-indigo-900/20 relative overflow-hidden group flex flex-col justify-center transition-all duration-300 hover:scale-[1.02] hover:bg-indigo-500/15">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <Truck className="w-16 h-16 text-indigo-400" />
           </div>
@@ -321,7 +265,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </div>
 
         {/* Cancelled */}
-        <div className="rounded-2xl p-4 lg:p-5 bg-rose-500/5 border border-rose-500/20 shadow-sm relative overflow-hidden group flex flex-col justify-center">
+        <div className="rounded-2xl p-4 lg:p-5 bg-rose-500/10 backdrop-blur-md border border-rose-500/20 shadow-sm hover:shadow-rose-900/20 relative overflow-hidden group flex flex-col justify-center transition-all duration-300 hover:scale-[1.02] hover:bg-rose-500/15">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <XCircle className="w-16 h-16 text-rose-400" />
           </div>

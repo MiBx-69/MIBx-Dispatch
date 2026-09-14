@@ -28,73 +28,32 @@ export function formatCustomerReportsSummary(fraudData: any): string {
 }
 
 export function buildFraudSpyCustomAttributes(fraudData: any, riskAnalysis: CustomerRiskAnalysis) {
-  const overall = fraudData?.overall || {};
-  const delivered = Number(overall.delivered || 0);
-  const returned = Number(overall.returned || 0);
-  const total = Number(overall.total || (delivered + returned));
-  const successRatio = riskAnalysis.successRatio;
-  const returnRatio = riskAnalysis.returnRatio;
-
-  const couriersSummary = formatCourierSummary(fraudData);
-  const customerReportSummary = formatCustomerReportsSummary(fraudData);
-
   return [
     { key: "Fraud Status", value: riskAnalysis.riskLevel.toUpperCase() },
-    { key: "Risk Score", value: `${riskAnalysis.riskScore}/100` },
-    { key: "Rating", value: riskAnalysis.ratingLabel },
-    { key: "Delivery Success Rate", value: `${successRatio}% (${delivered} Delivered, ${returned} Returned)` },
-    { key: "Return Rate", value: `${returnRatio}%` },
-    { key: "Total Parcels", value: total.toString() },
-    { key: "Courier Breakdown", value: couriersSummary },
-    { key: "Merchant Complaints", value: customerReportSummary },
-    { key: "Recommendation", value: riskAnalysis.recommendation },
-    { key: "Last Fraud Check", value: new Date().toLocaleString() }
+    { key: "Risk Score", value: `${riskAnalysis.riskScore}/100` }
   ];
 }
 
 export function buildFraudSpyCustomerNote(fraudData: any, riskAnalysis: CustomerRiskAnalysis) {
-  const reportsCount = fraudData?.fraud_reports?.count || 0;
-  const couriersSummary = formatCourierSummary(fraudData);
-
-  return `[FraudSpy Assessment]
-Status: ${riskAnalysis.riskLevel.toUpperCase()} (Score: ${riskAnalysis.riskScore}/100) - ${riskAnalysis.ratingLabel}
-Delivery Rate: ${riskAnalysis.successRatio}% (${fraudData?.overall?.delivered || 0} delivered, ${fraudData?.overall?.returned || 0} returned of ${fraudData?.overall?.total || 0} total)
-Merchant Reports: ${reportsCount > 0 ? `${reportsCount} complaint(s) filed` : 'Clean record (0 complaints)'}
-Couriers: ${couriersSummary}
-Recommendation: ${riskAnalysis.recommendation}
-Checked: ${new Date().toLocaleString()}`;
+  return `Fraud Status: ${riskAnalysis.riskLevel.toUpperCase()} (Score: ${riskAnalysis.riskScore}/100)`;
 }
 
 export function buildDispatchCustomAttributes({
   consignmentId,
-  trackingUrl,
-  fraudData,
-  riskAnalysis,
 }: {
   consignmentId: string;
   trackingUrl: string;
   fraudData?: any;
   riskAnalysis?: CustomerRiskAnalysis;
 }) {
-  const attrs: Array<{ key: string; value: string }> = [
-    { key: "Pathao Consignment", value: consignmentId },
-    { key: "Tracking URL", value: trackingUrl },
-    { key: "Dispatched At", value: new Date().toLocaleString() },
+  return [
+    { key: "Pathao Consignment", value: consignmentId }
   ];
-
-  if (fraudData && riskAnalysis) {
-    attrs.push(...buildFraudSpyCustomAttributes(fraudData, riskAnalysis));
-  }
-
-  return attrs;
 }
 
 export function buildDispatchCombinedNote({
   consignmentId,
-  trackingUrl,
   existingNote,
-  fraudData,
-  riskAnalysis,
 }: {
   consignmentId: string;
   trackingUrl: string;
@@ -103,15 +62,8 @@ export function buildDispatchCombinedNote({
   riskAnalysis?: CustomerRiskAnalysis;
 }): string {
   const parts: string[] = [
-    `Pathao Consignment: ${consignmentId}`,
-    `Tracking: ${trackingUrl}`,
+    `Pathao Consignment: ${consignmentId}`
   ];
-
-  if (fraudData && riskAnalysis) {
-    parts.push(
-      `\n[Customer Courier & Fraud Report]\nStatus: ${riskAnalysis.riskLevel.toUpperCase()} (Score: ${riskAnalysis.riskScore}/100) - ${riskAnalysis.ratingLabel}\nDelivery Rate: ${riskAnalysis.successRatio}% (${fraudData?.overall?.delivered || 0} Delivered, ${fraudData?.overall?.returned || 0} Returned of ${fraudData?.overall?.total || 0} Total)\nCouriers: ${formatCourierSummary(fraudData)}\nReports: ${formatCustomerReportsSummary(fraudData)}\nRecommendation: ${riskAnalysis.recommendation}`
-    );
-  }
 
   if (existingNote && !existingNote.includes("Pathao Consignment")) {
     parts.push(`\n[Order Note]\n${existingNote}`);

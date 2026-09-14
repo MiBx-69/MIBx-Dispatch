@@ -656,9 +656,9 @@ export function OrdersClient({
 
       {/* Bulk Actions Floating Bar */}
       {selected.size > 0 && (
-          <div className="sticky top-2 z-50 w-full 
+          <div className="fixed bottom-4 left-4 right-4 sm:static sm:sticky sm:top-2 z-50 w-auto sm:w-full 
                           bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-2xl shadow-2xl p-3
-                          flex flex-col lg:flex-row items-center justify-between gap-3 animate-in slide-in-from-top-2">
+                          flex flex-col lg:flex-row items-center justify-between gap-3 animate-in slide-in-from-bottom-4 sm:slide-in-from-top-2">
             <div className="flex items-center gap-3 w-full lg:w-auto shrink-0">
               <span className="text-sm font-semibold text-zinc-100 bg-indigo-500/20 text-indigo-400 px-3 py-1.5 rounded-lg border border-indigo-500/20">
                 {selected.size} selected
@@ -1075,8 +1075,8 @@ export function OrdersClient({
           </div>
         )}
         
-        {/* Intersection Target */}
-        <div ref={observerTarget} className="h-4 w-full"></div>
+        {/* Intersection Target & Bottom Padding */}
+        <div ref={observerTarget} className="h-24 w-full"></div>
         
         {!hasMore && ordersList.length > 0 && (
           <div className="col-span-full py-6 text-center">

@@ -505,17 +505,25 @@ export function DispatchesClient({
 
       {/* Fixed Bulk Action Bar */}
       {selected.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-zinc-900 border border-zinc-800 p-3 rounded-2xl shadow-2xl flex items-center gap-4 z-50 animate-slide-up">
-          <div className="flex items-center gap-2 px-2">
-            <div className="bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded-md text-xs font-bold">
-              {selected.size}
+        <div className="fixed bottom-4 left-4 right-4 sm:left-1/2 sm:-translate-x-1/2 sm:right-auto sm:w-auto bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 p-3 rounded-2xl shadow-2xl flex flex-col sm:flex-row items-center gap-3 sm:gap-4 z-50 animate-in slide-in-from-bottom-4">
+          <div className="flex items-center gap-2 px-2 w-full sm:w-auto justify-between sm:justify-start">
+            <div className="flex items-center gap-2">
+              <div className="bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded-md text-xs font-bold">
+                {selected.size}
+              </div>
+              <span className="text-sm text-zinc-300 font-medium">selected</span>
             </div>
-            <span className="text-sm text-zinc-300 font-medium">selected</span>
+            <button
+                onClick={() => setSelected(new Set())}
+                className="text-xs text-zinc-400 hover:text-zinc-200 underline underline-offset-2 sm:hidden"
+              >
+                Clear
+              </button>
           </div>
           
-          <div className="h-6 w-px bg-zinc-800"></div>
+          <div className="hidden sm:block h-6 w-px bg-zinc-800"></div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-center gap-2 w-full sm:w-auto">
             <button
               onClick={() => {
                 const selectedOrders = dispatches.filter((d: any) => selected.has(d.id) && d.orders).map((d: any) => d.orders);
@@ -598,6 +606,9 @@ export function DispatchesClient({
           }}
         />
       )}
+      
+      {/* Bottom padding so floating bar doesn't cover last items */}
+      <div className="h-24 w-full"></div>
     </div>
   );
 }

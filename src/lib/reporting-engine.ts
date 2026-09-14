@@ -71,21 +71,38 @@ export async function getUnifiedReportMetrics(params: {
   }
 
   // 1. Fetch Orders (exclude archived/removed)
-  const ordersQuery = supabase
+  let ordersQuery = supabase
     .from("orders")
     .select("id, shopify_order_name, customer_name, customer_phone, pathao_consignment_id, total_price, internal_status, line_items, shopify_created_at, delivered_at, returned_at")
     .eq("is_archived", false);
 
   // 2. Fetch Dispatches (all consignments with optional order info)
-  const dispatchesQuery = supabase
+  let dispatchesQuery = supabase
     .from("dispatches")
     .select("id, order_id, shopify_order_name, recipient_name, recipient_phone, consignment_id, amount_to_collect, delivery_fee, is_cancelled, pathao_order_status, dispatched_at, orders(id, internal_status, is_archived, total_price)")
     .not("consignment_id", "is", null);
 
   // 3. Fetch Returns
-  const returnsQuery = supabase
+  let returnsQuery = supabase
     .from("returns")
     .select("id, order_id, consignment_id, order_total, refund_amount, return_type, returned_items, return_delivery_fee, status, is_verified, returned_at, orders!inner(shopify_order_name, customer_name, customer_phone, shopify_created_at)");
+
+  if (startDateStr && endDateStr) {
+    // For orders, we want items that were either created or delivered within the date range.
+    ordersQuery = ordersQuery.or(`shopify_created_at.gte.${startDateStr},delivered_at.gte.${startDateStr}`)
+                             .or(`shopify_created_at.lte.${endDateStr},delivered_at.lte.${endDateStr}`);
+    
+    // For dispatches, filter by dispatched_at
+    dispatchesQuery = dispatchesQuery.gte("dispatched_at", startDateStr).lte("dispatched_at", endDateStr);
+    
+    // For returns, we want items returned in this period or associated with orders created in this period
+    // Supabase JS doesn't support complex joined ORs easily in a single string if they span tables, 
+    // so we'll just pull a slightly wider net and let the JS filter handle the rest, or just filter by returned_at.
+    // For safety and exact match with previous logic, we will fetch without date filter for returns if it's too complex,
+    // OR we can just use returned_at since 99% of the time, that's what matters.
+    // Let's optimize just the main tables which are huge.
+    // returnsQuery = returnsQuery.gte("returned_at", startDateStr).lte("returned_at", endDateStr);
+  }
 
   const [
     { data: ordersData },
