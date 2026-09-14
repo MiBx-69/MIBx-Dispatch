@@ -51,8 +51,26 @@ async function runShopifySync(supabase: any, logId?: string, fullSync = false) {
   let errors = 0;
   let cursor: string | undefined;
 
-  const minCreatedAt = "2026-08-31T18:00:00Z";
-  let query = `created_at:>='${minCreatedAt}'`;
+  let query: string;
+  if (fullSync) {
+    query = `created_at:>='2026-08-31T18:00:00Z'`;
+  } else {
+    const { data: lastLog } = await supabase
+      .from("sync_logs")
+      .select("started_at")
+      .eq("status", "completed")
+      .eq("sync_type", "delta_shopify")
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (lastLog?.started_at) {
+      query = `updated_at:>='${lastLog.started_at}'`;
+    } else {
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      query = `updated_at:>='${yesterday}'`;
+    }
+  }
 
   try {
     const { data: settings } = await supabase
@@ -297,29 +315,35 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
     }
 
     await Promise.all(sideEffects);
-    return;
+    
+    if (upsertedOrder) {
+      const { logOrderEvent } = await import("@/lib/audit");
+      await logOrderEvent(upsertedOrder.id, "SYNCED", "Order synced manually from Shopify");
+    }
   }
 
-  const { data: upsertedOrder } = await supabase.from("orders").upsert(
-    orderPayload,
-    { onConflict: "shopify_order_id" }
-  ).select("id").single();
-
-  if (upsertedOrder && !existingOrder) {
-    const { logOrderEvent } = await import("@/lib/audit");
-    await logOrderEvent(upsertedOrder.id, "SYNCED", "Order synced manually from Shopify");
+  let targetOrderId = existingOrder?.id;
+  if (existingOrder) {
+    const { data: updateRes } = await supabase.from("orders").upsert(
+      orderPayload,
+      { onConflict: "shopify_order_id" }
+    ).select("id").single();
+    if (updateRes) targetOrderId = updateRes.id;
+  } else {
+    const { data: newRes } = await supabase.from("orders").select("id").eq("shopify_order_id", orderPayload.shopify_order_id).single();
+    if (newRes) targetOrderId = newRes.id;
   }
 
   // Check if order has been returned/refunded on Shopify (only for non-cancelled orders)
   if (shopifyOrder.cancelledAt) {
     // Ensure cancelled order has no returns table records
-    if (upsertedOrder?.id) {
-      await supabase.from("returns").delete().eq("order_id", upsertedOrder.id);
+    if (targetOrderId) {
+      await supabase.from("returns").delete().eq("order_id", targetOrderId);
       await supabase.from("dispatches").update({
         is_cancelled: true,
         cancelled_at: shopifyOrder.cancelledAt,
         cancel_reason: shopifyOrder.cancelReason || "Cancelled on Shopify",
-      }).eq("order_id", upsertedOrder.id);
+      }).eq("order_id", targetOrderId);
     }
   } else {
     const finStatus = (orderPayload.financial_status || "").toLowerCase();

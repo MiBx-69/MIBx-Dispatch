@@ -224,7 +224,7 @@ export async function getUnifiedReportMetrics(params: {
   });
 
   const courierActiveTotalCount = courierDeliveredCount + courierPaidReturnCount + courierReturnedCount + courierProcessingCount;
-  const courierActiveTotalValue = Math.round(courierDeliveredValue + courierPaidReturnFee + courierReturnedValue + courierProcessingValue);
+  const courierActiveTotalValue = Math.round(courierDeliveredValue + courierPaidReturnValue + courierReturnedValue + courierProcessingValue);
 
   // Dispatches Calculations (active, non-pickup-cancelled)
   const activeDispatches = filteredDispatches.filter((d: any) => {
