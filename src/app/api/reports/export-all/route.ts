@@ -40,7 +40,8 @@ export async function GET(request: NextRequest) {
           pathao_consignment_id,
           returned_at,
           return_reason,
-          return_delivery_fee
+          return_delivery_fee,
+          dispatches(pathao_order_status, dispatched_at, is_cancelled)
         `)
         .gte("shopify_created_at", queryStart)
         .lte("shopify_created_at", queryEnd)
@@ -203,6 +204,8 @@ export async function GET(request: NextRequest) {
       "Fulfillment Status",
       "Fraud Status",
       "Consignment ID",
+      "Courier Status",
+      "Dispatch Date",
       "Items Count",
       "Products",
       "Returned At",
@@ -223,6 +226,19 @@ export async function GET(request: NextRequest) {
         itemsCount = items.reduce((sum, i) => sum + (i.quantity || 1), 0);
         productsList = items.map(i => `${i.quantity}x ${i.title || i.name}`).join(" | ");
       }
+      
+      let courierStatus = "";
+      let dispatchDate = "";
+      
+      if (o.dispatches && Array.isArray(o.dispatches)) {
+        const activeDispatch = o.dispatches.find((d: any) => !d.is_cancelled) || o.dispatches[0];
+        if (activeDispatch) {
+          courierStatus = activeDispatch.pathao_order_status || "";
+          if (activeDispatch.dispatched_at) {
+            dispatchDate = new Date(activeDispatch.dispatched_at).toLocaleString();
+          }
+        }
+      }
 
       return [
         escapeCsv(o.shopify_order_name),
@@ -237,6 +253,8 @@ export async function GET(request: NextRequest) {
         escapeCsv(o.fulfillment_status),
         escapeCsv(o.fraud_status),
         escapeCsv(o.pathao_consignment_id),
+        escapeCsv(courierStatus),
+        escapeCsv(dispatchDate),
         itemsCount,
         escapeCsv(productsList),
         o.returned_at ? escapeCsv(new Date(o.returned_at).toLocaleString()) : '""',

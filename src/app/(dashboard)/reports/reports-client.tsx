@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { format, subDays, startOfMonth } from "date-fns";
 import { formatBstDate } from "@/lib/date-utils";
-import { Download, Calendar, BarChart, ShoppingCart, Truck, CheckCircle, XCircle, RotateCcw, TrendingUp, Award, FileSpreadsheet } from "lucide-react";
+import { Download, Calendar, BarChart, ShoppingCart, Truck, CheckCircle, XCircle, RotateCcw, TrendingUp, Award, FileSpreadsheet, FileText } from "lucide-react";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
 import { TopProducts } from "@/components/dashboard/top-products";
 import { DispatchedProductsToday } from "@/components/dashboard/dispatched-today";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface ReportsClientProps {
   revenueData: any[];
@@ -27,10 +29,10 @@ interface ReportsClientProps {
   returnedRevenue: number;
   cancelledRevenue: number;
   deliveredRevenue: number;
-  netCollectibleRevenue: number;
-  totalReturnDeliveryFees: number;
-  partialReturnDeductions: number;
+  pendingDeliveryAmount: number;
   successRate: number;
+  companyName: string;
+  systemName: string;
   initialStartDate: string;
   initialEndDate: string;
   initialFilterType: string;
@@ -47,10 +49,10 @@ export function ReportsClient({
   returnedRevenue,
   cancelledRevenue,
   deliveredRevenue,
-  netCollectibleRevenue,
-  totalReturnDeliveryFees,
-  partialReturnDeductions,
+  pendingDeliveryAmount,
   successRate,
+  companyName,
+  systemName,
   initialStartDate,
   initialEndDate,
   initialFilterType,
@@ -79,6 +81,12 @@ export function ReportsClient({
     } else if (type === "last_7_days") {
       newStart = formatBstDate(subDays(now, 7));
       newEnd = formatBstDate(now);
+    } else if (type === "this_week") {
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+      const monday = new Date(now.setDate(diff));
+      newStart = formatBstDate(monday);
+      newEnd = formatBstDate(new Date());
     } else if (type === "this_month") {
       const dtf = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Dhaka", year: "numeric", month: "numeric" });
       const parts = dtf.formatToParts(now);
@@ -105,7 +113,6 @@ export function ReportsClient({
 
     startTransition(() => {
       const params = new URLSearchParams();
-      // Use Bangladesh (+06:00) time boundaries to ensure correct local dates
       const startIso = new Date(`${newStart}T00:00:00+06:00`).toISOString();
       const endIso = new Date(`${newEnd}T23:59:59.999+06:00`).toISOString();
       
@@ -231,6 +238,167 @@ export function ReportsClient({
     }
   };
 
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  const handleExportSummaryPdf = () => {
+    setIsGeneratingPdf(true);
+    try {
+      const doc = new jsPDF();
+      
+      const primaryColor: [number, number, number] = [99, 102, 241]; 
+      const darkBg: [number, number, number] = [30, 30, 35];
+      const textColor: [number, number, number] = [40, 40, 40];
+      const pageWidth = doc.internal.pageSize.width || doc.internal.pageSize.getWidth();
+
+      // Premium Header Banner
+      doc.setFillColor(darkBg[0], darkBg[1], darkBg[2]);
+      doc.rect(0, 0, pageWidth, 40, "F");
+
+      doc.setFontSize(24);
+      doc.setTextColor(255, 255, 255);
+      doc.text(`${companyName}`, 14, 20);
+      
+      doc.setFontSize(12);
+      doc.setTextColor(200, 200, 200);
+      doc.text("Sales & Operations Report", 14, 30);
+      
+      // Right-aligned date
+      doc.setFontSize(10);
+      doc.setTextColor(200, 200, 200);
+      doc.text(`Period: ${startDate} to ${endDate}`, pageWidth - 14, 20, { align: 'right' });
+      doc.text(`Generated: ${new Date().toLocaleDateString()}`, pageWidth - 14, 28, { align: 'right' });
+
+      // KPI Section
+      doc.setFontSize(14);
+      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+      doc.text("Key Performance Indicators (KPIs)", 14, 52);
+
+      const aov = Math.round(totalGross / Math.max(1, orderStats.totalOrders));
+
+      autoTable(doc, {
+        startY: 56,
+        head: [["Metric", "Value"]],
+        body: [
+          ["Total Orders (Placed)", orderStats.totalOrders.toString()],
+          ["Total Dispatched Orders", orderStats.dispatchedOrders.toString()],
+          ["Total Delivered Orders", orderStats.deliveredOrders.toString()],
+          ["Total Returned Orders", orderStats.returnedOrders.toString()],
+          ["Delivery Success Rate", `${successRate}%`],
+          ["Average Order Value (AOV)", `Tk ${aov.toLocaleString()}`],
+        ],
+        theme: "grid",
+        headStyles: { fillColor: primaryColor, textColor: [255, 255, 255], fontStyle: 'bold' },
+        styles: { fontSize: 10, cellPadding: 5 },
+        alternateRowStyles: { fillColor: [248, 248, 250] },
+        margin: { left: 14 }
+      });
+
+      // Financial Overview
+      doc.setFontSize(14);
+      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+      doc.text("Financial Overview", 14, (doc as any).lastAutoTable.finalY + 14);
+
+      autoTable(doc, {
+        startY: (doc as any).lastAutoTable.finalY + 18,
+        head: [["Financial Metric", "Amount (BDT)"]],
+        body: [
+          ["Total Amount (Gross)", `Tk ${Math.round(totalGross).toLocaleString()}`],
+          ["Total Delivered Amount", `Tk ${Math.round(deliveredRevenue).toLocaleString()}`],
+          ["Pending Delivery Amount", `Tk ${Math.round(pendingDeliveryAmount).toLocaleString()}`]
+        ],
+        theme: "grid",
+        headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontStyle: 'bold' }, 
+        styles: { fontSize: 10, cellPadding: 5 },
+        alternateRowStyles: { fillColor: [248, 248, 250] },
+        margin: { left: 14 }
+      });
+
+      // Top Products Table
+      if (topProducts && topProducts.length > 0) {
+        let finalY = (doc as any).lastAutoTable.finalY;
+        if (finalY > 220) {
+          doc.addPage();
+          finalY = 20;
+        } else {
+          finalY += 14;
+        }
+
+        doc.setFontSize(14);
+        doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        doc.text("Top Performing Products", 14, finalY);
+
+        autoTable(doc, {
+          startY: finalY + 4,
+          head: [["Rank", "Product Name", "Quantity Sold", "Revenue (BDT)"]],
+          body: topProducts.slice(0, 10).map((p: any, i: number) => [
+            `#${i + 1}`,
+            p.title, 
+            (p.qty || 0).toString(), 
+            `Tk ${Math.round(p.revenue || 0).toLocaleString()}`
+          ]),
+          theme: "grid",
+          headStyles: { fillColor: [245, 158, 11], textColor: [255, 255, 255], fontStyle: 'bold' }, 
+          styles: { fontSize: 9, cellPadding: 4 },
+          alternateRowStyles: { fillColor: [248, 248, 250] },
+          margin: { left: 14 }
+        });
+      }
+
+      // Top Dispatched Products Table
+      if (topDispatched && topDispatched.length > 0) {
+        let finalY = (doc as any).lastAutoTable.finalY;
+        if (finalY > 240) {
+          doc.addPage();
+          finalY = 20;
+        } else {
+          finalY += 14;
+        }
+
+        doc.setFontSize(14);
+        doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        doc.text("Top Dispatched Products", 14, finalY);
+
+        autoTable(doc, {
+          startY: finalY + 4,
+          head: [["Rank", "Product Name", "Dispatched Volume"]],
+          body: topDispatched.slice(0, 10).map((c: any, i: number) => [
+            `#${i + 1}`,
+            c.title || 'Unknown', 
+            (c.qty || 0).toString()
+          ]),
+          theme: "grid",
+          headStyles: { fillColor: [59, 130, 246], textColor: [255, 255, 255], fontStyle: 'bold' }, 
+          styles: { fontSize: 9, cellPadding: 4 },
+          alternateRowStyles: { fillColor: [248, 248, 250] },
+          margin: { left: 14 }
+        });
+      }
+
+      // Footer
+      const pageCount = doc.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        const pageHeight = doc.internal.pageSize.height || doc.internal.pageSize.getHeight();
+        
+        doc.setDrawColor(200, 200, 200);
+        doc.setLineWidth(0.5);
+        doc.line(14, pageHeight - 15, pageWidth - 14, pageHeight - 15);
+        
+        doc.setFontSize(8);
+        doc.setTextColor(150, 150, 150);
+        doc.text(`Generated by ${systemName}`, 14, pageHeight - 10);
+        doc.text(`Page ${i} of ${pageCount}`, pageWidth - 14, pageHeight - 10, { align: 'right' });
+      }
+
+      doc.save(`${companyName.replace(/\s+/g, "-")}-Sales-Report-${startDate}-to-${endDate}.pdf`);
+    } catch (error) {
+      console.error("PDF generation failed:", error);
+      alert("Failed to generate PDF report.");
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
   return (
     <div className="space-y-4 animate-fade-in pb-12">
       {/* Header and Controls */}
@@ -262,6 +430,7 @@ export function ReportsClient({
           >
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
+            <option value="this_week">This Week</option>
             <option value="last_7_days">Last 7 Days</option>
             <option value="this_month">This Month</option>
             <option value="last_30_days">Last 30 Days</option>
@@ -297,7 +466,17 @@ export function ReportsClient({
             title="Export Complete All-in-One Report (Executive KPIs, Orders, Dispatches & Returns)"
           >
             <FileSpreadsheet className="w-3.5 h-3.5" />
-            {isExportingAll ? "Exporting Master..." : "All-in-One Report"}
+            {isExportingAll ? "Exporting Master..." : "All-in-One CSV"}
+          </button>
+
+          <button
+            onClick={handleExportSummaryPdf}
+            disabled={isGeneratingPdf || isPending}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 hover:text-white border border-orange-500/30 text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
+            title="Download Professional PDF Summary Report"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            {isGeneratingPdf ? "Generating..." : "Summary PDF"}
           </button>
 
           <div className="h-5 w-px bg-zinc-700/60 hidden sm:block mx-0.5" />
@@ -424,29 +603,27 @@ export function ReportsClient({
         </h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
           <div className="bg-zinc-950/50 border border-zinc-800/50 p-3.5 rounded-xl flex flex-col justify-center">
-            <p className="text-xs font-medium text-zinc-400 mb-0.5">Gross Revenue</p>
+            <p className="text-xs font-medium text-zinc-400 mb-0.5">Total Amount</p>
             <p className="text-xl lg:text-2xl font-bold text-white truncate" title={`৳${Number(totalGross).toLocaleString()}`}>
               ৳{Number(totalGross).toLocaleString()}
             </p>
-            <p className="text-[10px] text-zinc-500 mt-0.5 leading-tight">All orders (with delivery)</p>
-          </div>
-          <div className="bg-rose-500/5 border border-rose-500/20 p-3.5 rounded-xl flex flex-col justify-center">
-            <p className="text-xs font-medium text-rose-400/80 mb-0.5">Deductions</p>
-            <p className="text-xl lg:text-2xl font-bold text-rose-400 truncate" title={`-৳${Number(returnedRevenue + cancelledRevenue).toLocaleString()}`}>
-              -৳{Number(returnedRevenue + cancelledRevenue).toLocaleString()}
-            </p>
-            <p className="text-[10px] text-rose-400/60 mt-0.5 leading-tight truncate">
-              Returned: ৳{Number(returnedRevenue).toLocaleString()}
-              {partialReturnDeductions > 0 && ` (incl. ৳${partialReturnDeductions.toLocaleString()} partial)`}
-              {' '}• Cancelled: ৳{Number(cancelledRevenue).toLocaleString()}
-            </p>
+            <p className="text-[10px] text-zinc-500 mt-0.5 leading-tight">All orders</p>
           </div>
           <div className="bg-emerald-500/5 border border-emerald-500/20 p-3.5 rounded-xl flex flex-col justify-center">
-            <p className="text-xs font-medium text-emerald-400/80 mb-0.5">Net Collectible</p>
-            <p className="text-xl lg:text-2xl font-bold text-emerald-400 truncate" title={`৳${Number(netCollectibleRevenue).toLocaleString()}`}>
-              ৳{Number(netCollectibleRevenue).toLocaleString()}
+            <p className="text-xs font-medium text-emerald-400/80 mb-0.5">Total Delivered Amount</p>
+            <p className="text-xl lg:text-2xl font-bold text-emerald-400 truncate" title={`৳${Number(deliveredRevenue).toLocaleString()}`}>
+              ৳{Number(deliveredRevenue).toLocaleString()}
             </p>
-            <p className="text-[10px] text-emerald-400/60 mt-0.5 leading-tight">Gross − Returns − Cancelled</p>
+            <p className="text-[10px] text-emerald-400/60 mt-0.5 leading-tight truncate">
+              Collected Revenue
+            </p>
+          </div>
+          <div className="bg-amber-500/5 border border-amber-500/20 p-3.5 rounded-xl flex flex-col justify-center">
+            <p className="text-xs font-medium text-amber-400/80 mb-0.5">Pending Delivery Amount</p>
+            <p className="text-xl lg:text-2xl font-bold text-amber-400 truncate" title={`৳${Number(pendingDeliveryAmount).toLocaleString()}`}>
+              ৳{Number(pendingDeliveryAmount).toLocaleString()}
+            </p>
+            <p className="text-[10px] text-amber-400/60 mt-0.5 leading-tight">In transit</p>
           </div>
           <div className="bg-indigo-500/5 border border-indigo-500/20 p-3.5 rounded-xl flex flex-col justify-center">
             <p className="text-xs font-medium text-indigo-400/80 mb-0.5">Success Rate</p>

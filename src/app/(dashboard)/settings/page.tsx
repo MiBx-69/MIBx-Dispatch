@@ -10,6 +10,15 @@ export default async function SettingsPage() {
 
   const sections = [
     {
+      title: "General Settings",
+      description: "Manage company branding and system names.",
+      icon: Store,
+      href: "/settings/general",
+      color: "text-zinc-400",
+      bg: "bg-zinc-500/10",
+      isConfigured: true,
+    },
+    {
       title: "Shopify Integration",
       description: "Manage shop domain, API access token, and sync preferences.",
       icon: Store,

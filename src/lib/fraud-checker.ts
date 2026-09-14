@@ -29,13 +29,16 @@ export function formatCustomerReportsSummary(fraudData: any): string {
 
 export function buildFraudSpyCustomAttributes(fraudData: any, riskAnalysis: CustomerRiskAnalysis) {
   return [
-    { key: "Fraud Status", value: riskAnalysis.riskLevel.toUpperCase() },
-    { key: "Risk Score", value: `${riskAnalysis.riskScore}/100` }
+    { key: "Score", value: `${riskAnalysis.riskScore}/100` },
+    { key: "Total Delivered", value: `${fraudData?.overall?.delivered || 0}` },
+    { key: "Total Return", value: `${fraudData?.overall?.returned || 0}` }
   ];
 }
 
 export function buildFraudSpyCustomerNote(fraudData: any, riskAnalysis: CustomerRiskAnalysis) {
-  return `Fraud Status: ${riskAnalysis.riskLevel.toUpperCase()} (Score: ${riskAnalysis.riskScore}/100)`;
+  const delivered = fraudData?.overall?.delivered || 0;
+  const returned = fraudData?.overall?.returned || 0;
+  return `Score: ${riskAnalysis.riskScore}/100\nTotal Delivered: ${delivered}\nTotal Return: ${returned}`;
 }
 
 export function buildDispatchCustomAttributes({

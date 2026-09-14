@@ -42,6 +42,7 @@ export type Database = {
       app_settings: {
         Row: {
           created_at: string
+          company_name: string | null
           auto_mark_delivered_days: number | null
           delivery_charge_inside_dhaka: number | null
           delivery_charge_outside_dhaka: number | null
@@ -85,6 +86,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          company_name?: string | null
           auto_mark_delivered_days?: number | null
           delivery_charge_inside_dhaka?: number | null
           delivery_charge_outside_dhaka?: number | null
@@ -128,6 +130,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          company_name?: string | null
           auto_mark_delivered_days?: number | null
           delivery_charge_inside_dhaka?: number | null
           delivery_charge_outside_dhaka?: number | null

@@ -31,6 +31,8 @@ export default async function ReportsPage({
   }
 
   // 1. Fetch Orders in date range (exclude archived)
+  const { data: settings } = await supabase.from("app_settings").select("company_name, system_name").single();
+
   const { data: ordersData } = await supabase
     .from("orders")
     .select("total_price, subtotal_price, shopify_created_at, created_at, line_items, financial_status, fulfillment_status, internal_status, fraud_status, returned_at, return_reason, return_delivery_fee")
@@ -210,10 +212,10 @@ export default async function ReportsPage({
       returnedRevenue={totalReturnedRevenue}
       cancelledRevenue={cancelledRevenue}
       deliveredRevenue={deliveredRevenue}
-      netCollectibleRevenue={netCollectibleRevenue}
-      totalReturnDeliveryFees={totalReturnDeliveryFees}
-      partialReturnDeductions={partialReturnDeductions}
+      pendingDeliveryAmount={unifiedMetrics.courierProcessingValue || 0}
       successRate={successRate}
+      companyName={settings?.company_name || "MiBx"}
+      systemName={settings?.system_name || "MiBx Dispatch"}
       initialStartDate={startDateStr}
       initialEndDate={endDateStr}
       initialFilterType={params.filterType || "last_30_days"}
