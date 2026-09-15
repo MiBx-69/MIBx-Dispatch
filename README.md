@@ -1,139 +1,156 @@
-<div align="center">
-  <h1>🚀 MiBx Dispatch</h1>
-  <p>
-    <strong>An Enterprise-Grade Fulfillment, Logistics, and Operations Dashboard for Modern E-Commerce</strong>
-  </p>
-  <p>
-    <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-15-black?style=flat-square&logo=next.js" alt="Next.js" /></a>
-    <a href="https://supabase.com/"><img src="https://img.shields.io/badge/Supabase-Database%20%26%20Auth-3ECF8E?style=flat-square&logo=supabase&logoColor=white" alt="Supabase" /></a>
-    <a href="https://tailwindcss.com/"><img src="https://img.shields.io/badge/Tailwind_CSS-v4-38B2AC?style=flat-square&logo=tailwind-css&logoColor=white" alt="Tailwind CSS" /></a>
-    <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-Ready-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /></a>
-  </p>
-</div>
+# MIBx Dispatch
 
-<hr />
+**Production-grade, mobile-first order dispatch for Shopify merchants shipping through REDX, Pathao, and Steadfast.**
 
-## 📖 Overview & The Problem We Solve
-
-In modern e-commerce, the gap between receiving an order and successfully delivering it is fraught with inefficiencies. Brands struggle with disjointed systems—where storefronts (like Shopify), third-party couriers (like Pathao), and customer communication channels remain isolated. This fragmentation leads to manual data entry errors, delayed dispatch times, lack of real-time tracking visibility, and vulnerability to fraudulent orders resulting in expensive return-to-sender (RTS) costs.
-
-**MiBx Dispatch** bridges this gap. 
-
-Designed as a central logistics nervous system, MiBx Dispatch programmatically unifies Shopify, local courier APIs, and SMS gateways. It eliminates manual workflows through automated dispatching, intercepts fraudulent orders using predictive risk analytics, and ensures total operational transparency via real-time dashboards and financial reconciliation.
+Shopify remains the single source of truth for every order; MIBx Dispatch layers a secure, real-time operational control plane on top of it — so warehouse and fulfillment teams can search, verify, and dispatch orders to the correct courier in seconds, from a phone, without ever touching a spreadsheet or a courier's native dashboard.
 
 ---
 
-## ✨ Enterprise-Level Features
+## The Problem
 
-### 🛡️ Intelligent Fraud Prevention & Risk Analytics
-Return-to-sender (RTS) shipments are a massive drain on profit margins. 
-- **Predictive Scoring:** Automatically evaluates incoming orders based on historical data, customer purchase behavior, and delivery success rates.
-- **FraudSpy Integration:** Cross-references customer phone numbers and addresses to generate a reliable trust score before a label is ever printed.
-- **Automated Holds:** High-risk orders are automatically flagged and placed on a review hold, requiring manual operational override before dispatch.
+E-commerce fulfillment in markets served by multiple regional couriers (REDX, Pathao, Steadfast) is a fragmented, manual, and error-prone process:
 
-### 🛍️ Deep Shopify & Courier Interoperability
-- **Bi-Directional Webhooks:** Listens to Shopify for instant order creation and fulfillment updates while simultaneously pushing courier status changes (e.g., "Out for Delivery", "Delivered") back to the storefront.
-- **Pathao (Courier) Automation:** One-click bulk dispatching. Generates waybills, calculates shipping costs dynamically based on delivery zones, and maps delivery statuses back to internal operational states.
-- **Asynchronous Processing:** Utilizes **Upstash QStash** to queue and process webhooks asynchronously, ensuring no data is dropped even during massive traffic spikes or courier API downtimes.
+- **Fragmented tooling** — operators juggle the Shopify admin and three separate courier portals just to book a single shipment.
+- **Manual re-keying** — order details are copy-pasted between systems, introducing typos in phone numbers, addresses, and COD amounts that directly cause failed or misrouted deliveries.
+- **No single source of truth** — once an order is dispatched, there's no reliable, centralized record of *which* courier has it, its current status, or whether it was dispatched more than once.
+- **No safety net for bulk operations** — bulk-dispatching hundreds of orders during a sale event is high-risk with no built-in de-duplication or rollback.
+- **Desk-bound workflows** — most courier dashboards are not designed for a warehouse floor; staff need a tool that works one-handed, on a phone, with poor connectivity.
+- **Multi-store, multi-tenant chaos** — agencies and larger merchants running several Shopify stores have no unified, access-controlled way to manage dispatch across all of them.
 
-### 🔄 Advanced Returns & Reconciliation Management
-- **Lifecycle Tracking:** Granular tracking of returned, canceled, and partially delivered packages, ensuring inventory is accurately restocked and accounted for.
-- **Financial Reconciliation:** Dashboards that automatically reconcile courier invoices against actual shipped and returned items, immediately surfacing discrepancies and preventing revenue leakage.
-
-### 📱 Automated Customer Engagement
-- **Event-Driven SMS:** Triggers localized SMS alerts automatically when orders are confirmed, dispatched, out-for-delivery, or returned.
-- **Customization:** Full control over Sender IDs and message templates directly from the settings panel.
+MIBx Dispatch exists to close this gap: **one secure, mobile-first surface that turns "confirmed Shopify order" into "dispatched with the correct courier" in a single verified action.**
 
 ---
 
-## 🔒 Security & Architecture
+## Why It Matters
 
-Security is baked into the foundation of MiBx Dispatch to protect sensitive merchant and customer data.
-
-- **Supabase Row-Level Security (RLS):** Database access is heavily restricted at the Postgres engine level. Authenticated users can only read or mutate rows that belong to their explicitly authorized tenant/organization.
-- **Next.js Server Actions:** Sensitive operations (like generating courier API tokens, evaluating fraud rules, and triggering SMS) are strictly confined to the server. API keys are never exposed to the client bundle.
-- **Cryptographic Webhook Verification:** 
-  - **Shopify:** All incoming payloads are verified using HMAC-SHA256 signatures ensuring they originated exclusively from Shopify.
-  - **Pathao/Couriers:** Incoming status updates are validated using custom integration secrets.
-- **Secure Key Management:** Database migrations, cron jobs, and background workers operate using scoped Service Role Keys that bypass RLS, safely stored in environment variables and never committed to source control.
+- **Fewer failed deliveries.** Centralizing order and courier data removes the manual re-entry step that is the single biggest source of address/COD errors in last-mile logistics.
+- **Operational speed.** A dispatch that used to require switching between four tabs now happens from one mobile-optimized screen — critical during flash sales and peak order volume.
+- **Trust and auditability.** Every dispatch, sync, and credential access is scoped, logged, and authorized server-side — giving operations leads and merchants confidence that the system won't silently double-ship or leak courier credentials.
+- **Built for the region it serves.** Native, first-class support for REDX, Pathao, and Steadfast — not a generic shipping abstraction retrofitted after the fact.
+- **Scales from one store to many.** The multi-organization model means an agency or a merchant with multiple storefronts can operate from a single, permissioned control plane instead of duplicating tooling per store.
 
 ---
 
-## 🛠️ Technology Stack
+## Core Functionality
 
-| Category | Technology | Description |
-| :--- | :--- | :--- |
-| **Frontend Framework** | [Next.js (App Router)](https://nextjs.org) | React 19 framework utilizing Server Components for performance and security. |
-| **Database & Auth** | [Supabase](https://supabase.com) | Enterprise-grade PostgreSQL database with integrated Authentication and RLS. |
-| **Styling & UI** | [Tailwind CSS v4](https://tailwindcss.com) | Utility-first CSS combined with [shadcn/ui](https://ui.shadcn.com) for accessible, premium components. |
-| **Message Queue** | [Upstash QStash](https://upstash.com) | Serverless HTTP-based messaging and scheduling for reliable background jobs. |
-| **Caching** | [Upstash Redis](https://upstash.com) | Low-latency data store for rate-limiting, session caching, and heavy query optimization. |
+### Order Operations
+- Real-time, searchable, filterable order list synchronized from Shopify
+- Rich order detail view with full item, customer, and address context
+- Live shipment tracking per order
+- **Safe bulk dispatch** — select multiple eligible orders and dispatch them to a courier in one guarded action, with de-duplication to prevent double-booking
+- Real-time refresh so the team is always looking at current state, not a stale cache
+
+### Interface
+- Next.js App Router application, fully responsive:
+  - Sidebar navigation on desktop
+  - Bottom navigation on mobile — designed for one-handed warehouse use
+- Installable as a **Progressive Web App** (PWA manifest included)
+- Accessible loading, empty, and error states throughout — no dead ends, no silent failures
+
+### Shopify Integration
+- OAuth **authorization-code install flow** with full HMAC and state verification
+- Shopify **GraphQL Admin API** for order and product data
+- Webhook **registration, signature verification, and deduplication** — protecting against replayed or forged events
+- Initial sync + ongoing **reconciliation job queue** to keep local state consistent with Shopify, even after downtime
+- Order and product **snapshots**, plus dispatch status tracked via Shopify metafields — so dispatch state is visible back in the Shopify admin itself
+
+### Courier Integration
+- Native connections to **REDX**, **Pathao**, and **Steadfast**
+- Per-store courier credential management, isolated from client-side code
 
 ---
 
-## 🚀 Getting Started
+## Security Architecture
 
-Follow these instructions to set up the project locally for development or production deployment.
+Security is treated as a first-class product requirement, not an afterthought:
 
-### 1. Prerequisites
-- **Node.js** (v18 or higher)
-- **Supabase Project** (Database, Auth, and Storage)
-- **Upstash Account** (Redis & QStash)
-- **Shopify Partner Account** (Custom App credentials and configured webhooks)
-- **Courier API Credentials** (e.g., Pathao Merchant Account)
+| Layer | Protection |
+|---|---|
+| **Data isolation** | Row-Level Security (RLS) enforced on **every** tenant and security-sensitive Supabase table — no tenant can see another tenant's data at the database layer, independent of application logic |
+| **Credential storage** | Courier and Shopify credentials are never exposed to authenticated or anonymous database grants; protected additionally with **AES-256-GCM envelope encryption** at rest |
+| **Authentication** | Supabase Auth with email login as the reliable baseline, plus an **experimental passkey (WebAuthn) flow**, deliberately isolated in its own module (`src/lib/auth/passkeys.ts`) so it can evolve independently of core auth |
+| **Authorization** | Server-side authorization enforced on every privileged action — the client is never trusted to self-report permissions |
+| **Shopify trust boundary** | Installation and webhook flows verify **HMAC signatures and OAuth state** on every request, and webhook events are deduplicated to prevent replay-driven side effects |
+| **Secrets hygiene** | Hard rule: service-role keys, Shopify access tokens, courier credentials, and the encryption key must **never** be exposed via `NEXT_PUBLIC_*` environment variables |
+| **Verification** | A dedicated RLS test suite (`supabase/tests/tenant_isolation.sql`) asserts tenant isolation is actually active — not just assumed |
+| **Multi-tenancy** | Full multi-organization / multi-store model with role-based access, so permissions are scoped per store, not global |
 
-### 2. Installation
+> **Design principle:** every layer — database, API, and application — independently enforces authorization. A bug in one layer should never be sufficient, on its own, to leak another tenant's data or credentials.
 
-Clone the repository and install the dependencies:
+---
 
-```bash
-git clone https://github.com/your-username/mibx-dispatch.git
-cd mibx-dispatch
-npm install
-```
+## Tech Stack
 
-### 3. Environment Configuration
+- **Frontend / App Framework:** Next.js (App Router), PWA-enabled
+- **Backend / Data Layer:** Supabase (Postgres + Row-Level Security)
+- **Commerce Platform:** Shopify GraphQL Admin API, OAuth, Webhooks
+- **Auth:** Supabase Auth (email) + experimental WebAuthn/passkey support
+- **Encryption:** AES-256-GCM envelope encryption for stored secrets
 
-Copy the example environment file:
-```bash
-cp .env.example .env
-```
-Ensure you carefully populate the following required variables:
-- `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY` (Keep this strictly secret!)
-- `QSTASH_TOKEN` / `QSTASH_CURRENT_SIGNING_KEY`
-- `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET`
-- `PATHAO_CLIENT_ID` / `PATHAO_CLIENT_SECRET` (or respective courier keys)
+---
 
-### 4. Database Initialization
-
-Run the included Supabase migrations to provision your schemas, tables, views, and RLS policies:
-```bash
-# Using the Supabase CLI
-supabase link --project-ref your-project-ref
-supabase db push
-```
-
-### 5. Start the Development Server
+## Getting Started
 
 ```bash
 npm run dev
 ```
-Navigate to [http://localhost:3000](http://localhost:3000) to access the application.
+
+1. Sign in by email
+2. Connect your `.myshopify.com` store from **Settings**
+3. Register a passkey (optional, experimental)
+4. Run **Sync Now** to pull orders from Shopify
+5. Test the courier connection for REDX, Pathao, or Steadfast
+6. Dispatch an eligible real order to confirm the end-to-end flow
+
+### Quality & Verification Commands
+
+```bash
+npm run typecheck    # Static type verification
+npm run lint          # Code quality checks
+npm test              # Unit / integration test suite
+npm run test:rls      # Row-Level Security policy tests
+npm run build         # Production build
+```
+
+For a database-level RLS verification against a local Supabase stack:
+
+```bash
+supabase test db
+```
+
+> The included `supabase/tests/tenant_isolation.sql` asserts RLS is active. Before a production release, extend it with real, locally-seeded User A / User B JWT fixtures to fully validate tenant isolation under realistic conditions.
 
 ---
 
-## ☁️ Deployment Guide
+## Production Readiness Checklist
 
-MiBx Dispatch is architected for edge-ready deployment on [Vercel](https://vercel.com/). 
+Before shipping to production, confirm the following are explicitly configured — none of these are safe defaults:
 
-1. **Connect Repository:** Import the GitHub repository into your Vercel dashboard.
-2. **Environment Variables:** Ensure *all* variables from your `.env` are mirrored in Vercel's environment settings.
-3. **Cron Jobs:** The system utilizes standard API routes for periodic tasks (e.g., `api/cron/courier-sync`). Ensure your deployment platform or a service like cron-job.org is pinging these endpoints securely.
-4. **Deploy:** Trigger the build and deploy.
+- [ ] Production URLs configured with HTTPS enforced end-to-end
+- [ ] Supabase Auth redirect URL allow-list locked down
+- [ ] Shopify OAuth callback and webhook URLs set to production endpoints
+- [ ] Content-Security-Policy `frame-ancestors` configured
+- [ ] SMTP provider configured for transactional email
+- [ ] Error monitoring / observability wired in
+- [ ] Automated database backups enabled
+- [ ] A real cron-based consumer running for the reconciliation job queue
+- [ ] A production-grade **external** rate-limit store in place — the in-process limiter is intentionally development-only and will not survive multi-instance deployment
 
 ---
 
-<div align="center">
-  <p>Architected for scale. Built for modern e-commerce.</p>
-</div>
+## Who This Is For
+
+- Shopify merchants in markets served by REDX, Pathao, or Steadfast who need reliable, error-resistant dispatch
+- Fulfillment and warehouse teams who need a mobile-first tool, not a desk-bound admin panel
+- Agencies and multi-store operators who need centralized, role-based control across several Shopify storefronts
+- Operations leads who need auditability and confidence that dispatch actions are safe, authorized, and non-duplicative
+
+---
+
+## License
+
+Add license details here.
+
+---
+
+*This README reflects the current architecture and operational model of MIBx Dispatch. Contributions should preserve the security invariants above — particularly RLS coverage, credential isolation, and the fail-loud posture on Shopify webhook/install verification.*
