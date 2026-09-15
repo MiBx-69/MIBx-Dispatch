@@ -35,6 +35,11 @@ check-*.mjs
 check-*.ts
 test-*.mjs
 test-*.js
+sync-historical-orders.js
+set-admin.js
+setAdmin.js
+register-webhooks.ts
+shopify.app.toml
 
 # Logs & Debug
 npm-debug.log*
