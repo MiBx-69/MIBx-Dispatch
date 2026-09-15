@@ -19,6 +19,42 @@
 
 ---
 
+## 📸 App Showcase
+
+*(Note: Add your screenshots to the repository and update these paths)*
+
+| 📊 **Dashboard & Analytics** | 📦 **Orders & Dispatching** |
+| :---: | :---: |
+| ![Dashboard](./public/screenshots/dashboard.png) <br> *Real-time KPIs, Revenue, and Fulfillment stats.* | ![Orders](./public/screenshots/orders.png) <br> *Advanced order filtering, fraud scoring, and one-click dispatch.* |
+
+| 🚚 **Dispatches & Returns** | 💰 **Finances & Reconciliation** |
+| :---: | :---: |
+| ![Dispatches](./public/screenshots/dispatches.png) <br> *Live courier tracking and return management.* | ![Finances](./public/screenshots/finances.png) <br> *Cashflow tracking and automated courier reconciliation.* |
+
+---
+
+## 📱 Mobile-First Operations
+
+Warehouse floors and fulfillment centers don't operate effectively from desktop browsers. MiBx Dispatch is explicitly designed with a **Mobile-First UX/UI** to empower operators exactly where they work:
+
+- **PWA Ready:** Installable as a Progressive Web App on iOS and Android devices.
+- **One-Handed Navigation:** Bottom-navigation bars and thumb-friendly touch targets for rapid workflow execution.
+- **Optimized Data Density:** Complex order details, barcode scanning workflows, and tracking statuses elegantly collapse to fit mobile screens without sacrificing data.
+- **Resilient UI:** Accessible loading, empty, and error states ensure no dead ends or silent failures when network connectivity drops on the warehouse floor.
+
+---
+
+## ⚙️ How It Works (The Workflow)
+
+1. **Ingestion & Verification:** A customer places an order on Shopify. MiBx Dispatch instantly catches the webhook, verifying the payload cryptographically.
+2. **AI-Powered Fraud Check:** The system automatically checks the customer's phone number and history against the **FraudSpy API**. It scores the risk of the order and automatically tags it in Shopify (e.g., `Fraud: Safe`, `Fraud: High`).
+3. **Operational Review:** The order drops into the MiBx dashboard. High-risk orders are placed "On Hold", while safe orders are queued for dispatch.
+4. **Bulk Dispatching:** Warehouse staff select hundreds of eligible orders and hit "Dispatch". The system connects to the **Pathao Courier API**, generates waybills, and confirms the dispatches—processing 1,000+ orders in seconds.
+5. **Customer Engagement:** As the courier moves the package, MiBx Dispatch triggers automated, localized SMS updates to the customer (e.g., "Out for Delivery", "Delivered").
+6. **Reconciliation & Reporting:** Real-time dashboards update automatically. Financials, collected COD amounts, return fees, and operational success rates are reconciled instantly.
+
+---
+
 ## 🎯 Problems & Solutions
 
 ### MiBx Dispatch — AI-Powered Order & Courier Operations System
