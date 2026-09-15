@@ -19,7 +19,11 @@
 
 ---
 
-## 📸 App Showcase
+## 📸 Application Showcase
+
+MiBx Dispatch features a truly responsive, dual-interface design. The expansive Desktop UI provides deep data analytics and bulk actions, while the Mobile-First UI allows warehouse operators to manage shipments directly from the floor with one-handed workflows.
+
+### 💻 The Desktop Experience
 
 | 📊 **Dashboard & Analytics** | 📦 **Orders & Dispatching** |
 | :---: | :---: |
@@ -33,16 +37,26 @@
 | :---: | :---: |
 | ![Reports](./public/demo-data/report.png) <br> *Generate and export detailed CSV & PDF reports.* | ![Settings](./public/demo-data/settings.png) <br> *Manage integrations, webhooks, and SMS rules.* |
 
----
+### 📱 The Mobile-First Experience (Warehouse Ready)
 
-## 📱 Mobile-First Operations
+Warehouse floors don't operate from desktop browsers. MiBx Dispatch is explicitly designed with a **Mobile-First UX/UI** to empower operators exactly where they work, featuring PWA-readiness and thumb-friendly bottom navigation.
 
-Warehouse floors and fulfillment centers don't operate effectively from desktop browsers. MiBx Dispatch is explicitly designed with a **Mobile-First UX/UI** to empower operators exactly where they work:
-
-- **PWA Ready:** Installable as a Progressive Web App on iOS and Android devices.
-- **One-Handed Navigation:** Bottom-navigation bars and thumb-friendly touch targets for rapid workflow execution.
-- **Optimized Data Density:** Complex order details, barcode scanning workflows, and tracking statuses elegantly collapse to fit mobile screens without sacrificing data.
-- **Resilient UI:** Accessible loading, empty, and error states ensure no dead ends or silent failures when network connectivity drops on the warehouse floor.
+<div align="center">
+  <table>
+    <tr>
+      <td align="center"><b>Mobile Dashboard</b></td>
+      <td align="center"><b>Mobile Orders</b></td>
+      <td align="center"><b>Mobile Reports</b></td>
+      <td align="center"><b>Mobile Settings</b></td>
+    </tr>
+    <tr>
+      <td><img src="./public/demo-data/mobile-dashboard.png" alt="Mobile Dashboard" width="200" /></td>
+      <td><img src="./public/demo-data/mobile-orders.png" alt="Mobile Orders" width="200" /></td>
+      <td><img src="./public/demo-data/mobile-report.png" alt="Mobile Reports" width="200" /></td>
+      <td><img src="./public/demo-data/mobil-setting.png" alt="Mobile Settings" width="200" /></td>
+    </tr>
+  </table>
+</div>
 
 ---
 
@@ -58,8 +72,6 @@ Warehouse floors and fulfillment centers don't operate effectively from desktop 
 ---
 
 ## 🎯 Problems & Solutions
-
-### MiBx Dispatch — AI-Powered Order & Courier Operations System
 
 **🔴 Problem:** Day-to-day order dispatch required repetitive manual entry and processing of approximately 50–100 orders daily, consuming significant operational time and creating opportunities for human error.  
 **🟢 Solution:** Built a custom Shopify–courier dispatch system that enables **one-click bulk dispatch**, allowing hundreds of orders to be processed simultaneously and supporting the dispatch of **1,000+ orders within seconds** through automated workflows.
