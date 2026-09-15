@@ -15,7 +15,7 @@ export function PasskeyButton({ redirectTo }: { redirectTo: string }) {
     const supabase = createClient();
     
     try {
-      const { data, error } = await supabase.auth.signInWithWebAuthn();
+      const { data, error } = await supabase.auth.signInWithPasskey();
       
       if (error) {
         setError(error.message);
