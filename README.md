@@ -29,17 +29,30 @@ MiBx Dispatch features a truly responsive, dual-interface design. The expansive 
 
 ### 💻 The Desktop Experience
 
-| 📊 **Dashboard & Analytics** | 📦 **Orders & Dispatching** |
-| :---: | :---: |
-| ![Dashboard](./public/demo-data/dashboard.png) <br> *Real-time KPIs, Revenue, and Fulfillment stats.* | ![Orders](./public/demo-data/orders.png) <br> *Advanced order filtering, fraud scoring, and one-click dispatch.* |
-
-| 🚚 **Dispatches & Returns** | 💰 **Finances & Reconciliation** |
-| :---: | :---: |
-| ![Dispatches](./public/demo-data/dispatches.png) <br> *Live courier tracking and return management.* | ![Finances](./public/demo-data/finance.png) <br> *Cashflow tracking and automated courier reconciliation.* |
-
-| 📈 **Custom Reporting** | ⚙️ **Settings & Configurations** |
-| :---: | :---: |
-| ![Reports](./public/demo-data/report.png) <br> *Generate and export detailed CSV & PDF reports.* | ![Settings](./public/demo-data/settings.png) <br> *Manage integrations, webhooks, and SMS rules.* |
+<div align="center">
+  <table>
+    <tr>
+      <td align="center"><b>Dashboard & Analytics</b><br><i>Real-time KPIs & Revenue</i></td>
+      <td align="center"><b>Orders & Dispatching</b><br><i>Advanced filtering & one-click dispatch</i></td>
+      <td align="center"><b>Dispatches & Returns</b><br><i>Live tracking & return management</i></td>
+    </tr>
+    <tr>
+      <td><img src="./public/demo-data/dashboard.png" alt="Desktop Dashboard" width="300" /></td>
+      <td><img src="./public/demo-data/orders.png" alt="Desktop Orders" width="300" /></td>
+      <td><img src="./public/demo-data/dispatches.png" alt="Desktop Dispatches" width="300" /></td>
+    </tr>
+    <tr>
+      <td align="center"><b>Finances & Reconciliation</b><br><i>Cashflow tracking</i></td>
+      <td align="center"><b>Custom Reporting</b><br><i>Export detailed CSV & PDF</i></td>
+      <td align="center"><b>Settings & Configs</b><br><i>Integrations & SMS rules</i></td>
+    </tr>
+    <tr>
+      <td><img src="./public/demo-data/finance.png" alt="Desktop Finances" width="300" /></td>
+      <td><img src="./public/demo-data/report.png" alt="Desktop Reports" width="300" /></td>
+      <td><img src="./public/demo-data/settings.png" alt="Desktop Settings" width="300" /></td>
+    </tr>
+  </table>
+</div>
 
 ### 📱 The Mobile-First Experience (Warehouse Ready)
 
