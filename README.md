@@ -1,7 +1,7 @@
 <div align="center">
   <h1>🚀 MiBx Dispatch</h1>
   <p>
-    <strong>A high-performance logistics, fulfillment, and operations dashboard for modern e-commerce.</strong>
+    <strong>An Enterprise-Grade Fulfillment, Logistics, and Operations Dashboard for Modern E-Commerce</strong>
   </p>
   <p>
     <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-15-black?style=flat-square&logo=next.js" alt="Next.js" /></a>
@@ -13,100 +13,103 @@
 
 <hr />
 
-## 📖 Overview
+## 📖 Overview & The Problem We Solve
 
-**MiBx Dispatch** is a comprehensive fulfillment and logistics management system designed to sit between your Shopify storefront and your local courier partners. It automates the tedious parts of e-commerce logistics, offering intelligent fraud detection, seamless courier dispatching, real-time SMS notifications, and rich analytics—all wrapped in a premium, responsive UI.
+In modern e-commerce, the gap between receiving an order and successfully delivering it is fraught with inefficiencies. Brands struggle with disjointed systems—where storefronts (like Shopify), third-party couriers (like Pathao), and customer communication channels remain isolated. This fragmentation leads to manual data entry errors, delayed dispatch times, lack of real-time tracking visibility, and vulnerability to fraudulent orders resulting in expensive return-to-sender (RTS) costs.
+
+**MiBx Dispatch** bridges this gap. 
+
+Designed as a central logistics nervous system, MiBx Dispatch programmatically unifies Shopify, local courier APIs, and SMS gateways. It eliminates manual workflows through automated dispatching, intercepts fraudulent orders using predictive risk analytics, and ensures total operational transparency via real-time dashboards and financial reconciliation.
 
 ---
 
-## ✨ Core Capabilities
+## ✨ Enterprise-Level Features
 
-### 🛍️ Deep Shopify Integration
-- **Real-Time Sync:** Leverages Shopify Webhooks to instantly sync orders, products, and customer profiles.
-- **Fulfillment Automation:** Pushes delivery updates, tracking numbers, and fulfillment events back to Shopify automatically.
+### 🛡️ Intelligent Fraud Prevention & Risk Analytics
+Return-to-sender (RTS) shipments are a massive drain on profit margins. 
+- **Predictive Scoring:** Automatically evaluates incoming orders based on historical data, customer purchase behavior, and delivery success rates.
+- **FraudSpy Integration:** Cross-references customer phone numbers and addresses to generate a reliable trust score before a label is ever printed.
+- **Automated Holds:** High-risk orders are automatically flagged and placed on a review hold, requiring manual operational override before dispatch.
 
-### 🚚 Courier Automation (Pathao & more)
-- **Instant Dispatch:** Send orders directly to Pathao or other integrated logistics partners with a single click.
-- **Status Tracking:** Automatically pulls real-time delivery statuses to keep your team and customers informed.
+### 🛍️ Deep Shopify & Courier Interoperability
+- **Bi-Directional Webhooks:** Listens to Shopify for instant order creation and fulfillment updates while simultaneously pushing courier status changes (e.g., "Out for Delivery", "Delivered") back to the storefront.
+- **Pathao (Courier) Automation:** One-click bulk dispatching. Generates waybills, calculates shipping costs dynamically based on delivery zones, and maps delivery statuses back to internal operational states.
+- **Asynchronous Processing:** Utilizes **Upstash QStash** to queue and process webhooks asynchronously, ensuring no data is dropped even during massive traffic spikes or courier API downtimes.
 
-### 📱 Customer Engagement (SMS)
-- **Automated Alerts:** Trigger custom SMS messages based on order lifecycle events (Order Confirmed, Dispatched, Out for Delivery, Returned).
-- **Custom Sender IDs:** Fully configurable SMS gateway settings right from the dashboard.
+### 🔄 Advanced Returns & Reconciliation Management
+- **Lifecycle Tracking:** Granular tracking of returned, canceled, and partially delivered packages, ensuring inventory is accurately restocked and accounted for.
+- **Financial Reconciliation:** Dashboards that automatically reconcile courier invoices against actual shipped and returned items, immediately surfacing discrepancies and preventing revenue leakage.
 
-### 🛡️ Intelligent Fraud Prevention
-- **Risk Analytics:** Employs custom algorithms and historical data to flag potentially fraudulent orders before they ship.
-- **FraudSpy Integration:** Cross-references customer data to calculate a reliable trust score.
+### 📱 Automated Customer Engagement
+- **Event-Driven SMS:** Triggers localized SMS alerts automatically when orders are confirmed, dispatched, out-for-delivery, or returned.
+- **Customization:** Full control over Sender IDs and message templates directly from the settings panel.
 
-### 🔄 Returns Management
-- **Lifecycle Tracking:** Granular tracking of returned packages ensuring accurate inventory reconciliation.
-- **Partial Returns:** Native support for managing partial deliveries and customized return flows.
+---
 
-### 📊 Advanced Reporting
-- **Financial Dashboards:** Track revenue, shipping costs, and profit margins.
-- **Reconciliation:** Easily reconcile courier invoices against actual shipped and returned items to prevent revenue leakage.
+## 🔒 Security & Architecture
+
+Security is baked into the foundation of MiBx Dispatch to protect sensitive merchant and customer data.
+
+- **Supabase Row-Level Security (RLS):** Database access is heavily restricted at the Postgres engine level. Authenticated users can only read or mutate rows that belong to their explicitly authorized tenant/organization.
+- **Next.js Server Actions:** Sensitive operations (like generating courier API tokens, evaluating fraud rules, and triggering SMS) are strictly confined to the server. API keys are never exposed to the client bundle.
+- **Cryptographic Webhook Verification:** 
+  - **Shopify:** All incoming payloads are verified using HMAC-SHA256 signatures ensuring they originated exclusively from Shopify.
+  - **Pathao/Couriers:** Incoming status updates are validated using custom integration secrets.
+- **Secure Key Management:** Database migrations, cron jobs, and background workers operate using scoped Service Role Keys that bypass RLS, safely stored in environment variables and never committed to source control.
 
 ---
 
 ## 🛠️ Technology Stack
 
-Our architecture is built for speed, security, and scale:
-
 | Category | Technology | Description |
 | :--- | :--- | :--- |
-| **Frontend Framework** | [Next.js (App Router)](https://nextjs.org) | React 19 powered framework for server-side rendering and static generation. |
-| **Database & Auth** | [Supabase](https://supabase.com) | Enterprise-grade Postgres database with robust Row-Level Security (RLS). |
-| **Styling & UI** | [Tailwind CSS v4](https://tailwindcss.com) | Utility-first CSS framework combined with [shadcn/ui](https://ui.shadcn.com) for accessible components. |
-| **Background Jobs** | [Upstash QStash](https://upstash.com) | Reliable serverless task scheduling and asynchronous webhook processing. |
-| **Caching** | [Upstash Redis](https://upstash.com) | Low-latency caching for heavy queries and rate-limiting. |
+| **Frontend Framework** | [Next.js (App Router)](https://nextjs.org) | React 19 framework utilizing Server Components for performance and security. |
+| **Database & Auth** | [Supabase](https://supabase.com) | Enterprise-grade PostgreSQL database with integrated Authentication and RLS. |
+| **Styling & UI** | [Tailwind CSS v4](https://tailwindcss.com) | Utility-first CSS combined with [shadcn/ui](https://ui.shadcn.com) for accessible, premium components. |
+| **Message Queue** | [Upstash QStash](https://upstash.com) | Serverless HTTP-based messaging and scheduling for reliable background jobs. |
+| **Caching** | [Upstash Redis](https://upstash.com) | Low-latency data store for rate-limiting, session caching, and heavy query optimization. |
 
 ---
 
 ## 🚀 Getting Started
 
-Follow these instructions to set up the project locally.
+Follow these instructions to set up the project locally for development or production deployment.
 
 ### 1. Prerequisites
-
-Ensure you have the following installed and configured:
 - **Node.js** (v18 or higher)
-- **Git**
-- A **Supabase** Project
-- An **Upstash** Account (Redis & QStash)
-- **Shopify Partner Account** (for Custom App credentials)
-- **Pathao Courier Credentials**
+- **Supabase Project** (Database, Auth, and Storage)
+- **Upstash Account** (Redis & QStash)
+- **Shopify Partner Account** (Custom App credentials and configured webhooks)
+- **Courier API Credentials** (e.g., Pathao Merchant Account)
 
 ### 2. Installation
 
 Clone the repository and install the dependencies:
 
 ```bash
-# Clone the repo
 git clone https://github.com/your-username/mibx-dispatch.git
 cd mibx-dispatch
-
-# Install dependencies using npm (or yarn/pnpm)
 npm install
 ```
 
 ### 3. Environment Configuration
 
-Copy the example environment file and configure it with your credentials:
-
+Copy the example environment file:
 ```bash
 cp .env.example .env
 ```
+Ensure you carefully populate the following required variables:
+- `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` (Keep this strictly secret!)
+- `QSTASH_TOKEN` / `QSTASH_CURRENT_SIGNING_KEY`
+- `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET`
+- `PATHAO_CLIENT_ID` / `PATHAO_CLIENT_SECRET` (or respective courier keys)
 
-**Key Environment Variables to configure:**
-- `NEXT_PUBLIC_SUPABASE_URL` & `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY` (for secure server-side operations)
-- `QSTASH_TOKEN` & `QSTASH_CURRENT_SIGNING_KEY`
-- `SHOPIFY_API_KEY` & `SHOPIFY_API_SECRET`
+### 4. Database Initialization
 
-### 4. Database Setup
-
-Ensure you run the included Supabase migrations to set up your schemas, tables, and RLS policies:
+Run the included Supabase migrations to provision your schemas, tables, views, and RLS policies:
 ```bash
-# Assuming you have the Supabase CLI installed
+# Using the Supabase CLI
 supabase link --project-ref your-project-ref
 supabase db push
 ```
@@ -116,29 +119,21 @@ supabase db push
 ```bash
 npm run dev
 ```
-Navigate to [http://localhost:3000](http://localhost:3000) to access the dashboard.
+Navigate to [http://localhost:3000](http://localhost:3000) to access the application.
 
 ---
 
-## 🔒 Security & Architecture
+## ☁️ Deployment Guide
 
-- **Row Level Security (RLS):** All database interactions are protected via Supabase RLS, ensuring users only access authorized data.
-- **Server Actions:** Secure server-side mutations in Next.js prevent sensitive logic and keys from leaking to the client.
-- **Webhook Verification:** All incoming webhooks (Shopify, Pathao) are cryptographically verified to ensure authenticity.
+MiBx Dispatch is architected for edge-ready deployment on [Vercel](https://vercel.com/). 
 
----
-
-## ☁️ Deployment
-
-MiBx Dispatch is optimized for seamless deployment on [Vercel](https://vercel.com/). 
-
-1. Push your code to your GitHub repository.
-2. Import the project into Vercel.
-3. Add all required environment variables in the Vercel dashboard.
-4. Deploy!
+1. **Connect Repository:** Import the GitHub repository into your Vercel dashboard.
+2. **Environment Variables:** Ensure *all* variables from your `.env` are mirrored in Vercel's environment settings.
+3. **Cron Jobs:** The system utilizes standard API routes for periodic tasks (e.g., `api/cron/courier-sync`). Ensure your deployment platform or a service like cron-job.org is pinging these endpoints securely.
+4. **Deploy:** Trigger the build and deploy.
 
 ---
 
 <div align="center">
-  <p>Built with ❤️ for modern e-commerce operations.</p>
+  <p>Architected for scale. Built for modern e-commerce.</p>
 </div>
