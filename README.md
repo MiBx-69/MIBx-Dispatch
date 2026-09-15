@@ -1,7 +1,11 @@
 <div align="center">
+  <img src="./public/demo-data/hero-demo.png" alt="MiBx Dispatch Hero Demo" style="border-radius: 12px; box-shadow: 0 4px 14px rgba(0,0,0,0.1);" />
   <h1>🚀 MiBx Dispatch</h1>
   <p>
     <strong>AI-Powered Order & Courier Operations System for Modern E-Commerce</strong>
+  </p>
+  <p>
+    <a href="https://your-demo-url.com" target="_blank"><strong>🔗 View Live Demo</strong></a>
   </p>
   <p>
     <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-15-black?style=flat-square&logo=next.js" alt="Next.js" /></a>
