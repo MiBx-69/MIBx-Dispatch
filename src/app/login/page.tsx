@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { PasskeyButton } from "./PasskeyButton";
 
 export default async function LoginPage({
   searchParams,
@@ -100,22 +101,7 @@ export default async function LoginPage({
             </div>
           </div>
 
-          {/* Passkey button */}
-          <form action="/api/auth/passkey" method="POST">
-            <input type="hidden" name="redirectTo" value={params.redirectTo || "/"} />
-            <button
-              type="submit"
-              className="w-full py-2.5 px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-medium
-                        rounded-lg transition-colors border border-zinc-700 text-sm flex items-center
-                        justify-center gap-2.5 touch-target"
-            >
-              <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-              </svg>
-              Sign in with Passkey
-            </button>
-          </form>
+          <PasskeyButton redirectTo={params.redirectTo || "/"} />
 
           <p className="mt-4 text-xs text-zinc-600 text-center">
             No account? Contact your admin to get access.
