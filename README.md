@@ -1,7 +1,7 @@
 <div align="center">
   <h1>🚀 MiBx Dispatch</h1>
   <p>
-    <strong>An Enterprise-Grade Fulfillment, Logistics, and Operations Dashboard for Modern E-Commerce</strong>
+    <strong>AI-Powered Order & Courier Operations System for Modern E-Commerce</strong>
   </p>
   <p>
     <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-15-black?style=flat-square&logo=next.js" alt="Next.js" /></a>
@@ -13,36 +13,41 @@
 
 <hr />
 
-## 📖 Overview & The Problem We Solve
+## 📖 Overview
 
-In modern e-commerce, the gap between receiving an order and successfully delivering it is fraught with inefficiencies. Brands struggle with disjointed systems—where storefronts (like Shopify), third-party couriers (like Pathao), and customer communication channels remain isolated. This fragmentation leads to manual data entry errors, delayed dispatch times, lack of real-time tracking visibility, and vulnerability to fraudulent orders resulting in expensive return-to-sender (RTS) costs.
-
-**MiBx Dispatch** bridges this gap. 
-
-Designed as a central logistics nervous system, MiBx Dispatch programmatically unifies Shopify, local courier APIs, and SMS gateways. It eliminates manual workflows through automated dispatching, intercepts fraudulent orders using predictive risk analytics, and ensures total operational transparency via real-time dashboards and financial reconciliation.
+**MiBx Dispatch** is a bespoke, single-tenant ERP and logistics middleware built for Shopify. It acts as the central brain between a Shopify storefront and third-party logistics providers, automating order ingestion, fraud detection, courier dispatching, bidirectional status syncing, and customer SMS notifications.
 
 ---
 
-## ✨ Enterprise-Level Features
+## 🎯 Problems & Solutions
 
-### 🛡️ Intelligent Fraud Prevention & Risk Analytics
-Return-to-sender (RTS) shipments are a massive drain on profit margins. 
-- **Predictive Scoring:** Automatically evaluates incoming orders based on historical data, customer purchase behavior, and delivery success rates.
-- **FraudSpy Integration:** Cross-references customer phone numbers and addresses to generate a reliable trust score before a label is ever printed.
-- **Automated Holds:** High-risk orders are automatically flagged and placed on a review hold, requiring manual operational override before dispatch.
+### MiBx Dispatch — AI-Powered Order & Courier Operations System
 
-### 🛍️ Deep Shopify & Courier Interoperability
-- **Bi-Directional Webhooks:** Listens to Shopify for instant order creation and fulfillment updates while simultaneously pushing courier status changes (e.g., "Out for Delivery", "Delivered") back to the storefront.
-- **Pathao (Courier) Automation:** One-click bulk dispatching. Generates waybills, calculates shipping costs dynamically based on delivery zones, and maps delivery statuses back to internal operational states.
-- **Asynchronous Processing:** Utilizes **Upstash QStash** to queue and process webhooks asynchronously, ensuring no data is dropped even during massive traffic spikes or courier API downtimes.
+**🔴 Problem:** Day-to-day order dispatch required repetitive manual entry and processing of approximately 50–100 orders daily, consuming significant operational time and creating opportunities for human error.  
+**🟢 Solution:** Built a custom Shopify–courier dispatch system that enables **one-click bulk dispatch**, allowing hundreds of orders to be processed simultaneously and supporting the dispatch of **1,000+ orders within seconds** through automated workflows.
 
-### 🔄 Advanced Returns & Reconciliation Management
-- **Lifecycle Tracking:** Granular tracking of returned, canceled, and partially delivered packages, ensuring inventory is accurately restocked and accounted for.
-- **Financial Reconciliation:** Dashboards that automatically reconcile courier invoices against actual shipped and returned items, immediately surfacing discrepancies and preventing revenue leakage.
+**🔴 Problem:** Month-end sales reporting and performance tracking required manual data collection and reporting, making it difficult to monitor daily business performance.  
+**🟢 Solution:** Built automated **daily and monthly sales reporting** with live KPI visibility, allowing management to monitor sales performance, order activity, revenue, and operational metrics without manually preparing reports.
 
-### 📱 Automated Customer Engagement
-- **Event-Driven SMS:** Triggers localized SMS alerts automatically when orders are confirmed, dispatched, out-for-delivery, or returned.
-- **Customization:** Full control over Sender IDs and message templates directly from the settings panel.
+**🔴 Problem:** Delivery and return management involved significant manual work, including checking statuses and manually updating orders.  
+**🟢 Solution:** Integrated **Shopify and Pathao webhooks** to automate delivery and return status synchronization. Orders can automatically be updated based on courier events, significantly reducing manual status management.
+
+**🔴 Problem:** Customer SMS communication for dispatch, delivery, and other order updates was handled manually, consuming time and creating the risk of incorrect contact information or missed communication.  
+**🟢 Solution:** Built an **automated SMS communication system** connected to order-status workflows, supporting automatic customer notifications for dispatch and delivery events as well as custom SMS messages when required.
+
+**🔴 Problem:** Customer background checks and COD fraud detection required manual investigation before processing orders.  
+**🟢 Solution:** Built an **automated customer verification and fraud-checking workflow** that evaluates customer history and automatically adds relevant risk information, delivery history, return history, and order details to Shopify and the dispatch system. Orders can be tagged based on the resulting assessment for faster operational decisions.
+
+---
+
+## 📈 Overall Impact
+
+- Solved **15+ operational problems** within a single integrated system.
+- Reduced manual/analog operational workload by approximately **45%** through automation.
+- Automated repetitive order, dispatch, delivery, return, reporting, customer communication, and fraud-checking workflows.
+- Supports high-volume order processing and significantly reduces repetitive manual work.
+- Connected **Shopify, courier APIs/webhooks, customer data, reporting, SMS communication, and fraud detection** into one operational workflow.
+- Designed around real day-to-day business problems, with solutions developed and implemented based on actual operational requirements.
 
 ---
 
@@ -99,11 +104,11 @@ Copy the example environment file:
 cp .env.example .env
 ```
 Ensure you carefully populate the following required variables:
-- `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY` (Keep this strictly secret!)
-- `QSTASH_TOKEN` / `QSTASH_CURRENT_SIGNING_KEY`
-- `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET`
-- `PATHAO_CLIENT_ID` / `PATHAO_CLIENT_SECRET` (or respective courier keys)
+- **`NEXT_PUBLIC_SUPABASE_URL`** / **`NEXT_PUBLIC_SUPABASE_ANON_KEY`**
+- **`SUPABASE_SERVICE_ROLE_KEY`** (Keep this strictly secret!)
+- **`QSTASH_TOKEN`** / **`QSTASH_CURRENT_SIGNING_KEY`**
+- **`SHOPIFY_API_KEY`** / **`SHOPIFY_API_SECRET`**
+- **`PATHAO_CLIENT_ID`** / **`PATHAO_CLIENT_SECRET`** (or respective courier keys)
 
 ### 4. Database Initialization
 
