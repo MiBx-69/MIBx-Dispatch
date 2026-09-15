@@ -21,15 +21,17 @@
 
 ## 📸 App Showcase
 
-*(Note: Add your screenshots to the repository and update these paths)*
-
 | 📊 **Dashboard & Analytics** | 📦 **Orders & Dispatching** |
 | :---: | :---: |
-| ![Dashboard](./public/screenshots/dashboard.png) <br> *Real-time KPIs, Revenue, and Fulfillment stats.* | ![Orders](./public/screenshots/orders.png) <br> *Advanced order filtering, fraud scoring, and one-click dispatch.* |
+| ![Dashboard](./public/demo-data/dashboard.png) <br> *Real-time KPIs, Revenue, and Fulfillment stats.* | ![Orders](./public/demo-data/orders.png) <br> *Advanced order filtering, fraud scoring, and one-click dispatch.* |
 
 | 🚚 **Dispatches & Returns** | 💰 **Finances & Reconciliation** |
 | :---: | :---: |
-| ![Dispatches](./public/screenshots/dispatches.png) <br> *Live courier tracking and return management.* | ![Finances](./public/screenshots/finances.png) <br> *Cashflow tracking and automated courier reconciliation.* |
+| ![Dispatches](./public/demo-data/dispatches.png) <br> *Live courier tracking and return management.* | ![Finances](./public/demo-data/finance.png) <br> *Cashflow tracking and automated courier reconciliation.* |
+
+| 📈 **Custom Reporting** | ⚙️ **Settings & Configurations** |
+| :---: | :---: |
+| ![Reports](./public/demo-data/report.png) <br> *Generate and export detailed CSV & PDF reports.* | ![Settings](./public/demo-data/settings.png) <br> *Manage integrations, webhooks, and SMS rules.* |
 
 ---
 
