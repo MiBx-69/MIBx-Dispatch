@@ -93,23 +93,17 @@ export function AccountTabs({ userProfile, teamProfiles }: { userProfile: any, t
                     const { createClient } = await import('@/lib/supabase/client');
                     const supabase = createClient();
                     
-                    const { data, error } = await supabase.auth.mfa.enroll({
-                      factorType: 'webauthn',
-                    });
+                    const { data, error } = await supabase.auth.registerPasskey();
                     
-                    if (error) throw error;
+                    if (error) {
+                      throw error;
+                    }
                     
-                    const challenge = await supabase.auth.mfa.challenge({
-                      factorId: data.id,
-                    });
-                    
-                    if (challenge.error) throw challenge.error;
-                    
-                    toast.success("Passkey registered successfully!");
+                    toast.success("Passkey registered successfully! You can now log in without a password.");
                   } catch (err: any) {
                     console.error("Passkey error:", err);
-                    if (err.message && err.message.includes('MFA enroll is disabled for WebAuthn')) {
-                      toast.error("WebAuthn is disabled in your Supabase project. Please enable it in Supabase Dashboard -> Authentication -> Providers -> Multi-Factor Authentication.", { duration: 10000 });
+                    if (err.message && err.message.includes('WebAuthn is disabled')) {
+                      toast.error("WebAuthn is disabled in your Supabase project.", { duration: 10000 });
                     } else {
                       toast.error(err.message || "Failed to register passkey. Ensure your browser supports WebAuthn and you are on a secure context (HTTPS).");
                     }

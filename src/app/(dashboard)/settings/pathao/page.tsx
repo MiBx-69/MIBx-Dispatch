@@ -3,6 +3,7 @@ import { ActionForm, SubmitButton } from "@/components/ui/action-form";
 import { updatePathaoSettings } from "./actions";
 import { getPathaoStores } from "@/lib/pathao/client";
 
+export const dynamic = "force-dynamic";
 export const metadata = { title: "Pathao Settings" };
 
 export default async function PathaoSettingsPage() {

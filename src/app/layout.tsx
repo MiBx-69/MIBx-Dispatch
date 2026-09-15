@@ -20,6 +20,7 @@ export const metadata: Metadata = {
   },
   description: "Shopify × Pathao Dispatch ERP — manage orders and dispatch parcels",
   robots: "noindex, nofollow", // Internal tool — don't index
+  metadataBase: new URL("https://orders.universesraw.com"),
 };
 
 export const viewport: Viewport = {
