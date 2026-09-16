@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   let query = supabase.from("customers").select("*");
 
   if (search) {
-    query = query.or(`full_name.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`);
+    query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`);
   }
 
   if (sort === "orders") {
@@ -33,23 +33,45 @@ export async function GET(request: NextRequest) {
 
   // Create CSV header
   const headers = [
+    "Customer ID",
+    "Shopify Customer ID",
     "Customer Name",
     "Email",
     "Phone",
     "Total Orders",
     "Total Spent",
-    "Created At"
+    "Currency",
+    "Email Opt-in",
+    "SMS Opt-in",
+    "WhatsApp Opt-in",
+    "Marketing Tags",
+    "Shopify Tags",
+    "Shopify Created At",
+    "Synced At",
+    "Created At",
+    "Updated At"
   ].join(",");
 
   // Create CSV rows
   const rows = customers.map((c: any) => {
     return [
-      `"${c.full_name?.replace(/"/g, '""') || ""}"`,
+      `"${c.id || ""}"`,
+      `"${c.shopify_customer_id || ""}"`,
+      `"${c.name?.replace(/"/g, '""') || ""}"`,
       `"${c.email || ""}"`,
       `"${c.phone || ""}"`,
       `"${c.total_orders || 0}"`,
       `"${c.total_spent || 0}"`,
-      `"${new Date(c.created_at).toLocaleString()}"`
+      `"${c.currency || ""}"`,
+      `"${c.email_opt_in ? 'Yes' : 'No'}"`,
+      `"${c.sms_opt_in ? 'Yes' : 'No'}"`,
+      `"${c.whatsapp_opt_in ? 'Yes' : 'No'}"`,
+      `"${(c.marketing_tags || []).join(', ')}"`,
+      `"${(c.shopify_tags || []).join(', ')}"`,
+      `"${c.shopify_created_at ? new Date(c.shopify_created_at).toLocaleString() : ""}"`,
+      `"${c.synced_at ? new Date(c.synced_at).toLocaleString() : ""}"`,
+      `"${c.created_at ? new Date(c.created_at).toLocaleString() : ""}"`,
+      `"${c.updated_at ? new Date(c.updated_at).toLocaleString() : ""}"`
     ].join(",");
   });
 
