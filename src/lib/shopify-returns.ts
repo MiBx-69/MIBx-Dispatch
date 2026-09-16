@@ -283,6 +283,19 @@ export async function handleShopifyRefundOrReturn({
     // ==========================================
     // PARTIAL RETURN HANDLING
     // ==========================================
+
+    // If order is not delivered, this is likely an order edit on an undispatched/dispatched parcel,
+    // NOT a partial return from the customer.
+    if (order.internal_status !== "delivered") {
+      console.log(`[Shopify Return] Partial refund on non-delivered order ${order.shopify_order_name}. Treating as order edit, not a partial return.`);
+      return {
+        success: true,
+        type: "partial",
+        status: "ignored",
+        message: "Partial refund before delivery treated as order edit. Ignored.",
+      };
+    }
+
     console.log(`[Shopify Return] Partial return detected for order ${order.shopify_order_name} (${totalRefundedQty}/${totalOrderQty} items). Moving to Admin Attention.`);
 
     // DO NOT mark order as returned! Keep original status (e.g. delivered / dispatched)
