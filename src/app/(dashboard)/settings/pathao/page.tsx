@@ -75,6 +75,19 @@ export default async function PathaoSettingsPage() {
               This store is automatically selected during order dispatches. As you dispatch, your most frequently used store will be maintained as default.
             </p>
           </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-zinc-300">Default Special Instructions</label>
+            <textarea
+              name="special_instruction"
+              defaultValue={settings?.pathao_special_instruction || ""}
+              placeholder="e.g. Handle with care, Call before delivery"
+              rows={2}
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 focus:outline-none focus:border-red-500/50 resize-none"
+            />
+            <p className="text-xs text-zinc-500">
+              This instruction will automatically be added to all Pathao deliveries.
+            </p>
+          </div>
           <div className="pt-4">
             <SubmitButton className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium">
               Save Pathao Credentials

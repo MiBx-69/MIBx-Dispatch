@@ -16,6 +16,7 @@ export async function updatePathaoSettings(formData: FormData) {
   const username = formData.get("username")?.toString() || "";
   const password = formData.get("password")?.toString() || "";
   const store_id = formData.get("store_id")?.toString();
+  const special_instruction = formData.get("special_instruction")?.toString() || null;
 
   const supabaseAdmin = createServiceClient();
   
@@ -34,6 +35,7 @@ export async function updatePathaoSettings(formData: FormData) {
       pathao_username: username,
       pathao_password: password,
       pathao_store_id: store_id ? parseInt(store_id, 10) : null,
+      pathao_special_instruction: special_instruction,
     })
     .eq("id", settings.id);
 

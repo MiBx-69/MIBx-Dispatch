@@ -398,6 +398,15 @@ export async function markShopifyOrderAsDelivered(params: {
       console.error("[Shopify] Failed to update tags on order:", err);
       errors.push(`Tags update: ${err.message}`);
     }
+
+    // 4. Mark order as paid
+    try {
+      await markShopifyOrderAsPaid(orderGid);
+    } catch (err: any) {
+      console.error("[Shopify] Failed to mark order as paid:", err);
+      // We don't fail the delivery if marking as paid fails (e.g., already paid)
+      errors.push(`Mark as paid: ${err.message}`);
+    }
   }
 
   return {
@@ -469,6 +478,32 @@ export async function markShopifyOrderAsPartialDelivered(params: {
     success: errors.length === 0,
     errors,
   };
+}
+
+// ─── Mark Order as Paid ───────────────────────────────────────────────────────
+const MARK_AS_PAID_MUTATION = `
+  mutation orderMarkAsPaid($input: OrderMarkAsPaidInput!) {
+    orderMarkAsPaid(input: $input) {
+      order { id displayFinancialStatus }
+      userErrors { field message }
+    }
+  }
+`;
+
+export async function markShopifyOrderAsPaid(orderId: string) {
+  const gid = orderId.startsWith("gid://shopify/Order/")
+    ? orderId
+    : `gid://shopify/Order/${orderId}`;
+    
+  const result = await shopifyFetch(MARK_AS_PAID_MUTATION, {
+    input: { id: gid },
+  });
+  
+  const res = result.data?.orderMarkAsPaid;
+  if (res?.userErrors?.length) {
+    throw new Error(res.userErrors.map((e: any) => e.message).join(", "));
+  }
+  return res?.order;
 }
 
 // ─── Cancel Order ─────────────────────────────────────────────────────────────

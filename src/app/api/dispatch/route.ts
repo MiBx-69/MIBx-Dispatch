@@ -55,10 +55,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Order not found" }, { status: 404 });
   }
 
-  // Get settings for store_id
+  // Get settings for store_id and special instructions
   const { data: settings } = await supabase
     .from("app_settings")
-    .select("pathao_store_id")
+    .select("pathao_store_id, pathao_special_instruction")
     .single();
 
   const pathaoStoreId = store_id || settings?.pathao_store_id;
@@ -118,6 +118,14 @@ export async function POST(request: NextRequest) {
 
     const finalAmount = Math.round(parseFloat(amount_to_collect ?? (order.total_price || "0")));
 
+    // Combine global special instructions with order specific instructions
+    let finalInstruction = special_instruction || "";
+    if (settings?.pathao_special_instruction) {
+      finalInstruction = finalInstruction
+        ? `${settings.pathao_special_instruction} | ${finalInstruction}`
+        : settings.pathao_special_instruction;
+    }
+
     // 1. Create Pathao order
     const pathaoResponse = await createPathaoOrder({
       store_id: pathaoStoreId,
@@ -134,8 +142,12 @@ export async function POST(request: NextRequest) {
       item_weight,
       amount_to_collect: finalAmount,
       item_description: item_description || (order.line_items as any[])[0]?.title,
-      special_instruction,
+      special_instruction: finalInstruction,
     });
+
+    if (!pathaoResponse?.data?.consignment_id) {
+      throw new Error(pathaoResponse?.message || "Failed to create order in Pathao. No consignment ID returned.");
+    }
 
     const { consignment_id, delivery_fee } = pathaoResponse.data;
 

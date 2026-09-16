@@ -20,13 +20,28 @@ export async function PATCH(
 
   const { data: order, error } = await supabase
     .from("orders")
-    .update({ internal_status: status })
-    .eq("id", id)
     .select("*, customers(name, phone)")
+    .eq("id", id)
     .single();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error || !order) {
+    return NextResponse.json({ error: error?.message || "Order not found" }, { status: 500 });
+  }
+
+  if (status === "dispatched" && !order.pathao_consignment_id) {
+    return NextResponse.json(
+      { error: "Cannot manually mark as dispatched without a Pathao consignment ID. Please use the Dispatch action." },
+      { status: 400 }
+    );
+  }
+
+  const { error: updateError } = await supabase
+    .from("orders")
+    .update({ internal_status: status })
+    .eq("id", id);
+
+  if (updateError) {
+    return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
 
   const { logOrderEvent } = await import("@/lib/audit");

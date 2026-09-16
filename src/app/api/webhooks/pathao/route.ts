@@ -1,4 +1,4 @@
-import { type NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse, after } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { updateShopifyFulfillmentTracking, markShopifyOrderAsDelivered, markShopifyOrderAsPartialDelivered } from "@/lib/shopify/client";
 
@@ -125,7 +125,8 @@ export async function POST(request: NextRequest) {
   // Pathao strictly enforces a 2-second timeout window. Waiting for database queries,
   // Shopify tracking updates, and SMS sending caused delivery timeouts in Pathao's network.
   // We execute all heavy processing asynchronously in the background.
-  (async () => {
+  // The proper way to do background processing in Next.js is using after()
+  after(async () => {
     try {
       await processPathaoWebhook(payload, returnSecret, logId);
     } catch (err: any) {
@@ -144,7 +145,7 @@ export async function POST(request: NextRequest) {
     } catch (err) {
       console.error("[Pathao Webhook] Auto Deliver processing error:", err);
     }
-  })();
+  });
 
   return new NextResponse(JSON.stringify({ received: true, event: topic }), {
     status: 202,

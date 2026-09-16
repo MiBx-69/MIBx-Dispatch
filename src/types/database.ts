@@ -57,6 +57,7 @@ export type Database = {
           pathao_store_id: number | null
           pathao_username: string | null
           pathao_webhook_secret: string | null
+          pathao_special_instruction: string | null
           shopify_access_token: string | null
           shopify_api_version: string | null
           shopify_shop_domain: string | null
@@ -101,6 +102,7 @@ export type Database = {
           pathao_store_id?: number | null
           pathao_username?: string | null
           pathao_webhook_secret?: string | null
+          pathao_special_instruction?: string | null
           shopify_access_token?: string | null
           shopify_api_version?: string | null
           shopify_shop_domain?: string | null
@@ -145,6 +147,7 @@ export type Database = {
           pathao_store_id?: number | null
           pathao_username?: string | null
           pathao_webhook_secret?: string | null
+          pathao_special_instruction?: string | null
           shopify_access_token?: string | null
           shopify_api_version?: string | null
           shopify_shop_domain?: string | null
