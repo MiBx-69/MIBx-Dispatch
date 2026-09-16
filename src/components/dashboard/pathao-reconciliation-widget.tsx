@@ -236,7 +236,7 @@ export function PathaoReconciliationWidget({ metrics }: Props) {
                   Total Value
                 </span>
                 <span className="text-xl sm:text-2xl font-extrabold text-white mt-1 tracking-tight">
-                  ৳ {courierActiveTotalValue.toLocaleString()}
+                  ৳ {courierActiveTotalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                 </span>
                 <span className="text-xs font-medium text-zinc-400 mt-0.5">
                   {courierActiveTotalCount} Orders
@@ -269,7 +269,7 @@ export function PathaoReconciliationWidget({ metrics }: Props) {
                 <p className="text-xs text-zinc-400 mt-1">
                   <span className="text-zinc-200 font-semibold">{courierDeliveredCount} orders</span>{" "}
                   <span className="text-zinc-500">|</span>{" "}
-                  <span className="text-emerald-400 font-medium">৳ {courierDeliveredValue.toLocaleString()}</span>
+                  <span className="text-emerald-400 font-medium">৳ {courierDeliveredValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                 </p>
               </div>
             </div>
@@ -290,11 +290,11 @@ export function PathaoReconciliationWidget({ metrics }: Props) {
                 <p className="text-xs text-zinc-400 mt-1">
                   <span className="text-zinc-200 font-semibold">{courierPaidReturnCount} orders</span>{" "}
                   <span className="text-zinc-500">|</span>{" "}
-                  <span className="text-blue-400 font-medium">৳ {courierPaidReturnValue.toLocaleString()}</span>
+                  <span className="text-blue-400 font-medium">৳ {courierPaidReturnValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                 </p>
                 {courierPaidReturnFee > 0 && (
                   <p className="text-[10px] text-blue-400/70 mt-0.5">
-                    (৳ {courierPaidReturnFee.toLocaleString()} return fee collected)
+                    (৳ {courierPaidReturnFee.toLocaleString('en-IN', { maximumFractionDigits: 0 })} return fee collected)
                   </p>
                 )}
               </div>
@@ -316,7 +316,7 @@ export function PathaoReconciliationWidget({ metrics }: Props) {
                 <p className="text-xs text-zinc-400 mt-1">
                   <span className="text-zinc-200 font-semibold">{courierReturnedCount} orders</span>{" "}
                   <span className="text-zinc-500">|</span>{" "}
-                  <span className="text-rose-400 font-medium">৳ {courierReturnedValue.toLocaleString()}</span>
+                  <span className="text-rose-400 font-medium">৳ {courierReturnedValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                 </p>
               </div>
             </div>
@@ -337,7 +337,7 @@ export function PathaoReconciliationWidget({ metrics }: Props) {
                 <p className="text-xs text-zinc-400 mt-1">
                   <span className="text-zinc-200 font-semibold">{courierProcessingCount} orders</span>{" "}
                   <span className="text-zinc-500">|</span>{" "}
-                  <span className="text-amber-400 font-medium">৳ {courierProcessingValue.toLocaleString()}</span>
+                  <span className="text-amber-400 font-medium">৳ {courierProcessingValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                 </p>
               </div>
             </div>
