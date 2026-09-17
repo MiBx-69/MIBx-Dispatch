@@ -484,6 +484,14 @@ async function processPathaoWebhook(payload: any, storedSecret: string, logId?: 
         .eq("pathao_consignment_id", consignmentId)
         .eq("source", "pathao");
     }
+
+    // Invalidate dashboard cache
+    try {
+      const { deleteCachePattern } = await import("@/lib/redis");
+      await deleteCachePattern("dashboard:metrics:v1:*");
+    } catch (cacheErr) {
+      console.error("[Pathao Webhook] Failed to invalidate cache:", cacheErr);
+    }
   } catch (err: any) {
     console.error("[Pathao Webhook] Processing error:", err);
     if (logId) {

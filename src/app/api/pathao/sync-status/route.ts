@@ -419,6 +419,11 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    if (updatedCount > 0) {
+      const { deleteCachePattern } = await import("@/lib/redis");
+      await deleteCachePattern("dashboard:metrics:v1:*");
+    }
+
     return NextResponse.json({
       success: true,
       mode: "pending_only",

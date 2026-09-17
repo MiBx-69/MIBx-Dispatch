@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Truck, CheckCircle2, ArrowDownLeft, RotateCcw, Clock, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import type { UnifiedReportMetrics } from "@/lib/reporting-engine";
@@ -15,6 +15,7 @@ export function PathaoReconciliationWidget({ metrics }: Props) {
   const router = useRouter();
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  const hasAutoSynced = useRef(false);
 
   const {
     courierDeliveredCount = 0,
@@ -34,10 +35,13 @@ export function PathaoReconciliationWidget({ metrics }: Props) {
     endDateStr,
   } = metrics;
 
-  const handleManualSync = async () => {
+  const handleManualSync = async (silent = false) => {
     if (isSyncing) return;
     setIsSyncing(true);
-    const toastId = toast.loading("Syncing active pending parcels with Pathao...");
+    let toastId;
+    if (!silent) {
+      toastId = toast.loading("Syncing active pending parcels with Pathao...");
+    }
     try {
       const res = await fetch("/api/pathao/sync-status", {
         method: "POST",
@@ -45,20 +49,31 @@ export function PathaoReconciliationWidget({ metrics }: Props) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to sync with Pathao");
 
-      toast.success("Pathao Sync Completed!", {
-        id: toastId,
-        description: `Checked ${data.checked || data.totalChecked || 0} active parcels in ${data.durationMs ? (data.durationMs / 1000).toFixed(1) + 's' : 'seconds'}. Updated ${data.updated || data.updatedCount || 0} statuses.`,
-      });
+      if (!silent) {
+        toast.success("Pathao Sync Completed!", {
+          id: toastId,
+          description: `Checked ${data.checked || data.totalChecked || 0} active parcels in ${data.durationMs ? (data.durationMs / 1000).toFixed(1) + 's' : 'seconds'}. Updated ${data.updated || data.updatedCount || 0} statuses.`,
+        });
+      }
       setLastSyncTime(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
-      router.refresh();
+      if (data.updatedCount > 0) {
+        router.refresh();
+      }
     } catch (err: any) {
-      toast.error(err.message || "Sync failed", { id: toastId });
+      if (!silent && toastId) toast.error(err.message || "Sync failed", { id: toastId });
     } finally {
       setIsSyncing(false);
     }
   };
 
-  // Sync is exclusively manual on-click or via background webhooks
+  useEffect(() => {
+    if (!hasAutoSynced.current) {
+      hasAutoSynced.current = true;
+      handleManualSync(true);
+    }
+  }, []);
+
+  // Sync is exclusively manual on-click, via background webhooks, or auto on mount
 
   // Calculate percentages based on active orders (Delivered + Paid Return + Returned + Processing)
   const totalOrders = courierActiveTotalCount || 1;
@@ -129,7 +144,7 @@ export function PathaoReconciliationWidget({ metrics }: Props) {
           {/* Manual Sync Button */}
           <button
             type="button"
-            onClick={handleManualSync}
+            onClick={() => handleManualSync(false)}
             disabled={isSyncing}
             className="text-xs font-semibold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50"
             title="Sync active pending parcels with Pathao"
