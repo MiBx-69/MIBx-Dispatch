@@ -1,428 +1,446 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { Package, Truck, CheckCircle, Clock, AlertCircle, TrendingUp, Zap, XCircle } from "lucide-react";
+import {
+  Package, Truck, CheckCircle, Clock, XCircle, TrendingUp, Banknote,
+  ArrowRight, RotateCcw, ShoppingBag, ChevronRight
+} from "lucide-react";
 import Link from "next/link";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { getOrderDisplayStatus } from "@/lib/order-status";
-import { subDays, format, parseISO, differenceInDays } from "date-fns";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
-import { TopProducts } from "@/components/dashboard/top-products";
-import { FulfillmentStats } from "@/components/dashboard/fulfillment-stats";
-import { FinancialsWidget } from "@/components/dashboard/financials-widget";
-import { CourierPerformanceChart } from "@/components/dashboard/courier-performance-chart";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
-import { FraudWidget } from "@/components/dashboard/fraud-widget";
-import { DispatchedProductsToday } from "@/components/dashboard/dispatched-today";
-import type { Order } from "@/types/database";
-import { getUnifiedReportMetrics, resolveDateRange, UnifiedReportMetrics } from "@/lib/reporting-engine";
 import { PathaoReconciliationWidget } from "@/components/dashboard/pathao-reconciliation-widget";
-import { getCache, setCache, TTL } from "@/lib/redis";
+import type { Order } from "@/types/database";
+import type { LucideIcon } from "lucide-react";
+import { getCachedDashboardData } from "@/lib/dashboard-service";
+
+type KPI = {
+  label: string;
+  value: number;
+  icon: LucideIcon;
+  color: string;
+  border: string;
+  glow: string;
+  format: "number" | "currency";
+  href?: string;
+};
 
 export const metadata = { title: "Dashboard" };
 export const dynamic = "force-dynamic";
 
-async function getCachedDashboardData(dateFilter: string) {
-  const cacheKey = `dashboard:metrics:v1:${dateFilter}`;
-  const cached = await getCache<any>(cacheKey);
-  if (cached) return cached;
-
-  const supabase = createServiceClient();
-  const unifiedMetrics = await getUnifiedReportMetrics({ dateFilter });
-  const { startDateStr: resolvedStart, endDateStr: resolvedEnd } = resolveDateRange(dateFilter);
-  let startDateStr = resolvedStart || subDays(new Date(), 30).toISOString();
-  let endDateStr = resolvedEnd || new Date().toISOString();
-
-  const MIN_DATE = new Date("2026-08-31T18:00:00.000Z");
-  if (new Date(startDateStr) < MIN_DATE) {
-    startDateStr = MIN_DATE.toISOString();
-  }
-
-  const { data: recentMonthOrders } = await supabase
-    .from("orders")
-    .select("total_price, subtotal_price, shopify_created_at, created_at, line_items, financial_status, fulfillment_status, internal_status, fraud_status")
-    .gte("shopify_created_at", startDateStr)
-    .lte("shopify_created_at", endDateStr)
-    .order("shopify_created_at", { ascending: false });
-
-  const orders = recentMonthOrders || [];
-  
-  const revenueMap = new Map<string, { total: number, subtotal: number }>();
-  let daysDiff = differenceInDays(parseISO(endDateStr), parseISO(startDateStr));
-  if (daysDiff < 7) {
-     for (let i = 6; i >= 0; i--) {
-        revenueMap.set(format(subDays(parseISO(endDateStr), i), 'yyyy-MM-dd'), { total: 0, subtotal: 0 });
-     }
-  } else {
-     for (let i = daysDiff; i >= 0; i--) {
-        revenueMap.set(format(subDays(parseISO(endDateStr), i), 'yyyy-MM-dd'), { total: 0, subtotal: 0 });
-     }
-  }
-  
-  orders.forEach((o: any) => {
-    if (o.internal_status === 'cancelled' || o.internal_status === 'returned') return;
-    if (!o.shopify_created_at) return;
-    const dateStr = format(parseISO(o.shopify_created_at), 'yyyy-MM-dd');
-    if (revenueMap.has(dateStr)) {
-      const current = revenueMap.get(dateStr)!;
-      revenueMap.set(dateStr, {
-        total: current.total + (Number(o.total_price) || 0),
-        subtotal: current.subtotal + (Number(o.subtotal_price) || 0)
-      });
-    }
-  });
-  const revenueData = Array.from(revenueMap.entries()).map(([date, data]) => ({ 
-    date, displayDate: format(parseISO(date), "MMM d"), revenue: data.total, subtotal: data.subtotal
-  }));
-
-  const productMap = new Map<string, { id: string, title: string, variant: string, qty: number, revenue: number }>();
-  orders.forEach((o: any) => {
-    const items = o.line_items as any[];
-    if (Array.isArray(items)) {
-      items.forEach((item: any) => {
-        const key = `${item.product_id || item.title}-${item.variant_id || item.variant_title}`;
-        if (!productMap.has(key)) {
-          productMap.set(key, { id: key, title: item.title || item.name || 'Unknown', variant: item.variant_title || '', qty: 0, revenue: 0 });
-        }
-        const p = productMap.get(key)!;
-        p.qty += item.quantity || 1;
-        p.revenue += (Number(item.price) || 0) * (item.quantity || 1);
-      });
-    }
-  });
-  const topProducts = Array.from(productMap.values()).sort((a, b) => b.qty - a.qty).slice(0, 5);
-
-  const { data: dispatchesInPeriod } = await supabase
-    .from("dispatches")
-    .select("dispatched_at, is_cancelled, pathao_order_status, orders!inner(line_items, internal_status, is_archived)")
-    .gte("dispatched_at", startDateStr)
-    .lte("dispatched_at", endDateStr)
-    .eq("is_cancelled", false)
-    .neq("orders.internal_status", "cancelled")
-    .eq("orders.is_archived", false);
-
-  const dispatchedPeriodMap = new Map<string, { id: string, title: string, variant: string, qty: number }>();
-  if (dispatchesInPeriod) {
-    dispatchesInPeriod.forEach((d: any) => {
-      if (d.is_cancelled) return;
-      if (d.pathao_order_status && d.pathao_order_status.toLowerCase().includes("cancel")) return;
-      if (d.orders?.internal_status === "cancelled") return;
-      if (d.orders?.is_archived) return;
-      const items = d.orders?.line_items;
-      if (Array.isArray(items)) {
-        items.forEach((item: any) => {
-          const key = `${item.product_id || item.title}-${item.variant_id || item.variant_title}`;
-          if (!dispatchedPeriodMap.has(key)) {
-            dispatchedPeriodMap.set(key, { id: key, title: item.title || item.name || 'Unknown', variant: item.variant_title || '', qty: 0 });
-          }
-          dispatchedPeriodMap.get(key)!.qty += item.quantity || 1;
-        });
-      }
-    });
-  }
-  const topDispatchedPeriod = Array.from(dispatchedPeriodMap.values()).sort((a, b) => b.qty - a.qty);
-
-  const fStats = { unfulfilled: 0, partial: 0, fulfilled: 0, paid: 0, pending_payment: 0, total: orders.length };
-  const fraudStats = { safe: 0, risky: 0, fraud: 0 };
-  const liveStats = { pending_orders: 0, preparing_orders: 0, dispatched_orders: 0, delivered_orders: 0, hold_orders: 0, orders_period: 0, dispatched_period: 0, cancelled_period: 0, returned_period: 0, returned_revenue: 0, revenue_period: 0, subtotal_period: 0 };
-
-  let pendingCOD = 0; let deliveredCOD = 0; let returnedCOD = 0;
-  orders.forEach((o: any) => {
-    if (o.fulfillment_status === 'fulfilled') fStats.fulfilled++;
-    else if (o.fulfillment_status === 'partial') fStats.partial++;
-    else fStats.unfulfilled++;
-    if (o.financial_status === 'paid') fStats.paid++;
-    else fStats.pending_payment++;
-    if (o.fraud_status === 'safe') fraudStats.safe++;
-    else if (o.fraud_status === 'risky') fraudStats.risky++;
-    else if (o.fraud_status === 'fraud') fraudStats.fraud++;
-
-    const effectiveStatus = getOrderDisplayStatus(o);
-    if (effectiveStatus === 'pending') liveStats.pending_orders++;
-    else if (effectiveStatus === 'preparing') liveStats.preparing_orders++;
-    else if (effectiveStatus === 'dispatched') liveStats.dispatched_orders++;
-    else if (effectiveStatus === 'delivered') liveStats.delivered_orders++;
-    else if (effectiveStatus === 'hold') liveStats.hold_orders++;
-
-    liveStats.orders_period++;
-    if (o.internal_status !== 'cancelled' && o.internal_status !== 'returned') {
-      liveStats.revenue_period += Number(o.total_price) || 0;
-      liveStats.subtotal_period += Number(o.subtotal_price) || 0;
-    }
-    if (o.internal_status === 'cancelled') liveStats.cancelled_period++;
-    if (o.internal_status === 'returned') {
-      liveStats.returned_period++;
-      liveStats.returned_revenue += Number(o.total_price) || 0;
-    }
-
-    const st = o.internal_status;
-    if (st === "dispatched") pendingCOD += Number(o.total_price);
-    else if (st === "delivered") deliveredCOD += Number(o.total_price);
-    else if (st === "returned") returnedCOD += Number(o.total_price);
-  });
-  liveStats.dispatched_period = unifiedMetrics.dispatchedCount;
-
-  const { data: partialReturnsData } = await supabase
-    .from("returns")
-    .select("refund_amount, order_total, returned_items")
-    .eq("return_type", "partial")
-    .gte("returned_at", startDateStr)
-    .lte("returned_at", endDateStr);
-
-  const partialDeductions = (partialReturnsData || []).reduce((acc: number, r: any) => {
-    const val = Number(r.refund_amount) || 
-      (Array.isArray(r.returned_items) && r.returned_items.reduce((s: number, i: any) => s + (Number(i.price || 0) * Number(i.quantity || 1)), 0)) ||
-      (Number(r.order_total) || 0);
-    return acc + val;
-  }, 0);
-  liveStats.returned_revenue += partialDeductions;
-  returnedCOD += partialDeductions;
-
-  const result = {
-    unifiedMetrics,
-    revenueData,
-    topProducts,
-    topDispatchedPeriod,
-    fStats,
-    fraudStats,
-    liveStats,
-    pendingCOD,
-    deliveredCOD,
-    returnedCOD,
-  };
-
-  await setCache(cacheKey, result, TTL.DASHBOARD_STATS);
-  return result;
-}
-
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ dateFilter?: string }> }) {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ dateFilter?: string }>;
+}) {
   const supabase = createServiceClient();
   const params = await searchParams;
   const dateFilter = params.dateFilter || "this_month";
 
   const data = await getCachedDashboardData(dateFilter);
-  const { unifiedMetrics, revenueData, topProducts, topDispatchedPeriod, fStats, fraudStats, liveStats, pendingCOD, deliveredCOD, returnedCOD } = data;
+  const {
+    unifiedMetrics,
+    revenueData,
+    topProducts,
+    liveStats,
+    pendingCOD,
+    deliveredCOD,
+    returnedCOD,
+  } = data;
 
   const { data: recentOrders } = await supabase
     .from("orders")
     .select("*")
     .order("shopify_created_at", { ascending: false })
-    .limit(10);
+    .limit(8);
 
-  const courierStats = [
-    { status: "Delivered", count: unifiedMetrics.courierDeliveredCount },
-    { status: "Paid Return", count: unifiedMetrics.courierPaidReturnCount },
-    { status: "Returned", count: unifiedMetrics.courierReturnedCount },
-    { status: "In Transit", count: unifiedMetrics.courierProcessingCount },
-    { status: "Pending", count: unifiedMetrics.courierPickupIssueCount },
+  // ── KPI Data ──────────────────────────────────────────────────────────────
+  const kpis: KPI[] = [
+    {
+      label: "Total Orders",
+      value: unifiedMetrics.totalOrders,
+      icon: ShoppingBag,
+      color: "text-sky-400",
+      border: "border-sky-500/20",
+      glow: "bg-sky-500/5",
+      href: "/orders",
+      format: "number",
+    },
+    {
+      label: "Delivered Sales",
+      value: unifiedMetrics.courierDeliveredValue || unifiedMetrics.deliveredRevenue,
+      icon: TrendingUp,
+      color: "text-emerald-400",
+      border: "border-emerald-500/20",
+      glow: "bg-emerald-500/5",
+      format: "currency",
+    },
+    {
+      label: "In Transit",
+      value: unifiedMetrics.courierActiveTotalCount || unifiedMetrics.dispatchedCount,
+      icon: Truck,
+      color: "text-indigo-400",
+      border: "border-indigo-500/20",
+      glow: "bg-indigo-500/5",
+      href: "/dispatches",
+      format: "number",
+    },
+    {
+      label: "Pending Orders",
+      value: unifiedMetrics.pendingOrdersCount,
+      icon: Clock,
+      color: "text-amber-400",
+      border: "border-amber-500/20",
+      glow: "bg-amber-500/5",
+      href: "/orders?status=pending",
+      format: "number",
+    },
+    {
+      label: "Cancelled",
+      value: unifiedMetrics.cancelledOrdersCount,
+      icon: XCircle,
+      color: "text-rose-400",
+      border: "border-rose-500/20",
+      glow: "bg-rose-500/5",
+      format: "number",
+    },
+    {
+      label: "COD Pending",
+      value: unifiedMetrics.courierProcessingValue || pendingCOD,
+      icon: Banknote,
+      color: "text-violet-400",
+      border: "border-violet-500/20",
+      glow: "bg-violet-500/5",
+      format: "currency",
+    },
+  ] satisfies KPI[];
+
+  // ── COD Financials ─────────────────────────────────────────────────────────
+  const financials = [
+    {
+      label: "Pending COD",
+      subtitle: "In transit / awaiting",
+      value: unifiedMetrics.courierProcessingValue || pendingCOD,
+      icon: Truck,
+      color: "text-amber-400",
+      border: "border-amber-500/20",
+      bg: "bg-amber-500/5",
+    },
+    {
+      label: "Collected Revenue",
+      subtitle: "Delivered successfully",
+      value: unifiedMetrics.courierDeliveredValue || deliveredCOD,
+      icon: CheckCircle,
+      color: "text-emerald-400",
+      border: "border-emerald-500/20",
+      bg: "bg-emerald-500/5",
+    },
+    {
+      label: "Lost to Returns",
+      subtitle: "Returned order value",
+      value:
+        unifiedMetrics.courierReturnedValue +
+          unifiedMetrics.courierPaidReturnValue || returnedCOD,
+      icon: RotateCcw,
+      color: "text-rose-400",
+      border: "border-rose-500/20",
+      bg: "bg-rose-500/5",
+    },
   ];
 
-  const statCards = [
-    { label: "Pending Orders", value: unifiedMetrics.pendingOrdersCount, icon: Clock, color: "text-zinc-400", bg: "bg-zinc-800/50", href: "/orders?status=pending" },
-    { label: "Preparing", value: liveStats.preparing_orders || 0, icon: Package, color: "text-amber-400", bg: "bg-amber-500/10", href: "/orders?status=preparing" },
-    { label: "Dispatched", value: unifiedMetrics.courierActiveTotalCount || unifiedMetrics.dispatchedCount, icon: Truck, color: "text-indigo-400", bg: "bg-indigo-500/10", href: "/dispatches" },
-    { label: "Delivered", value: unifiedMetrics.courierDeliveredCount || unifiedMetrics.deliveredCount, icon: CheckCircle, color: "text-emerald-400", bg: "bg-emerald-500/10", href: "/orders?status=delivered" },
-    { label: "On Hold", value: liveStats.hold_orders || 0, icon: AlertCircle, color: "text-orange-400", bg: "bg-orange-500/10", href: "/orders?status=hold" },
-    { label: "Net Revenue", value: `৳${Number(unifiedMetrics.netRevenue || unifiedMetrics.deliveredRevenue).toLocaleString()}`, subValue: `৳${Number(unifiedMetrics.courierDeliveredValue || unifiedMetrics.deliveredRevenue).toLocaleString()} delivered`, icon: TrendingUp, color: "text-violet-400", bg: "bg-violet-500/10", isText: true },
+  // ── Pipeline ───────────────────────────────────────────────────────────────
+  const pipelineMax = Math.max(
+    unifiedMetrics.pendingOrdersCount,
+    liveStats.preparing_orders,
+    unifiedMetrics.courierActiveTotalCount || unifiedMetrics.dispatchedCount,
+    unifiedMetrics.courierDeliveredCount || unifiedMetrics.deliveredCount,
+    1
+  );
+
+  const pipeline = [
+    {
+      label: "Pending",
+      value: unifiedMetrics.pendingOrdersCount,
+      color: "bg-amber-500",
+      text: "text-amber-400",
+      href: "/orders?status=pending",
+      icon: Clock,
+    },
+    {
+      label: "Preparing",
+      value: liveStats.preparing_orders || 0,
+      color: "bg-sky-500",
+      text: "text-sky-400",
+      href: "/orders?status=preparing",
+      icon: Package,
+    },
+    {
+      label: "Dispatched",
+      value:
+        unifiedMetrics.courierActiveTotalCount || unifiedMetrics.dispatchedCount,
+      color: "bg-indigo-500",
+      text: "text-indigo-400",
+      href: "/dispatches",
+      icon: Truck,
+    },
+    {
+      label: "Delivered",
+      value:
+        unifiedMetrics.courierDeliveredCount || unifiedMetrics.deliveredCount,
+      color: "bg-emerald-500",
+      text: "text-emerald-400",
+      href: "/orders?status=delivered",
+      icon: CheckCircle,
+    },
   ];
+
+  const fmt = (v: number | string, type: string) => {
+    if (type === "currency") return `৳${Number(v).toLocaleString()}`;
+    return Number(v).toLocaleString();
+  };
+
+  const maxQty = Math.max(...topProducts.map((p: { qty: number }) => p.qty), 1);
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-5 pb-10">
+      {/* ── Header ──────────────────────────────────────────────────────── */}
       <DashboardHeader />
 
-      {/* Period Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-        {/* Orders */}
-        <div className="rounded-2xl p-4 lg:p-5 bg-zinc-900/60 backdrop-blur-md border border-zinc-800/50 shadow-sm hover:shadow-lg relative overflow-hidden group flex flex-col justify-center transition-all duration-300 hover:scale-[1.02] hover:bg-zinc-900/80">
-          <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-            <Package className="w-16 h-16 text-zinc-100" />
-          </div>
-          <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider relative z-10">Orders</p>
-          <p className="text-2xl lg:text-4xl font-bold text-white mt-2 relative z-10 truncate">{unifiedMetrics.totalOrders}</p>
-        </div>
-
-        {/* Sales */}
-        <div className="rounded-2xl p-4 lg:p-5 bg-emerald-500/10 backdrop-blur-md border border-emerald-500/20 shadow-sm hover:shadow-emerald-900/20 relative overflow-hidden group flex flex-col justify-center transition-all duration-300 hover:scale-[1.02] hover:bg-emerald-500/15">
-          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-            <TrendingUp className="w-16 h-16 text-emerald-400" />
-          </div>
-          <p className="text-xs text-emerald-400/80 font-medium uppercase tracking-wider relative z-10">Delivered Sales</p>
-          <p className="text-2xl lg:text-4xl font-bold text-emerald-400 mt-2 relative z-10 truncate" title={`৳${Number(unifiedMetrics.courierDeliveredValue || unifiedMetrics.deliveredRevenue).toLocaleString()}`}>
-            ৳{Number(unifiedMetrics.courierDeliveredValue || unifiedMetrics.deliveredRevenue).toLocaleString()}
-          </p>
-        </div>
-
-        {/* Dispatched */}
-        <div className="rounded-2xl p-4 lg:p-5 bg-indigo-500/10 backdrop-blur-md border border-indigo-500/20 shadow-sm hover:shadow-indigo-900/20 relative overflow-hidden group flex flex-col justify-center transition-all duration-300 hover:scale-[1.02] hover:bg-indigo-500/15">
-          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-            <Truck className="w-16 h-16 text-indigo-400" />
-          </div>
-          <p className="text-xs text-indigo-400/80 font-medium uppercase tracking-wider relative z-10">Dispatched</p>
-          <div className="flex items-center gap-2 relative z-10 mt-2 truncate">
-            <p className="text-2xl lg:text-4xl font-bold text-indigo-400 truncate">{unifiedMetrics.courierActiveTotalCount || unifiedMetrics.dispatchedCount}</p>
-            <Link href="/dispatches" className="text-[10px] text-indigo-500/60 hover:text-indigo-400 transition-colors uppercase tracking-widest font-semibold border border-indigo-500/20 px-2 py-0.5 rounded-full shrink-0">
-              View
-            </Link>
-          </div>
-        </div>
-
-        {/* Cancelled */}
-        <div className="rounded-2xl p-4 lg:p-5 bg-rose-500/10 backdrop-blur-md border border-rose-500/20 shadow-sm hover:shadow-rose-900/20 relative overflow-hidden group flex flex-col justify-center transition-all duration-300 hover:scale-[1.02] hover:bg-rose-500/15">
-          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-            <XCircle className="w-16 h-16 text-rose-400" />
-          </div>
-          <p className="text-xs text-rose-400/80 font-medium uppercase tracking-wider relative z-10">Cancelled</p>
-          <p className="text-2xl lg:text-4xl font-bold text-rose-400 mt-2 relative z-10 truncate">{unifiedMetrics.cancelledOrdersCount}</p>
-        </div>
-      </div>
-
-      {/* Pathao Courier Reconciliation Widget */}
-      <PathaoReconciliationWidget metrics={unifiedMetrics} />
-
-      {/* Advanced Metrics */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Revenue Chart */}
-        <div className="lg:col-span-2 rounded-2xl p-5 border border-zinc-800/50 bg-zinc-900">
-          <h2 className="text-sm font-semibold text-zinc-300 mb-4">Revenue</h2>
-          <RevenueChart data={revenueData} />
-        </div>
-
-        {/* Fulfillment Stats */}
-        <div className="rounded-2xl p-5 border border-zinc-800/50 bg-zinc-900 flex flex-col justify-center">
-          <FulfillmentStats stats={fStats} />
-        </div>
-      </div>
-
-      {/* Courier, Financial, Fraud Stats */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="rounded-2xl p-5 border border-zinc-800/50 bg-zinc-900 flex flex-col justify-center">
-          <FraudWidget stats={fraudStats} />
-        </div>
-        <div className="lg:col-span-2 rounded-2xl p-5 border border-zinc-800/50 bg-zinc-900 flex flex-col justify-center">
-          <FinancialsWidget
-            pendingCOD={unifiedMetrics.courierProcessingValue || pendingCOD}
-            deliveredCOD={unifiedMetrics.courierDeliveredValue || deliveredCOD}
-            returnedCOD={unifiedMetrics.courierReturnedValue + unifiedMetrics.courierPaidReturnValue || returnedCOD}
-          />
-        </div>
-        <div className="lg:col-span-3 h-80 rounded-2xl p-5 border border-zinc-800/50 bg-zinc-900">
-          <CourierPerformanceChart data={courierStats} />
-        </div>
-      </div>
-
-      {/* Top Products & Stat Cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Top Products */}
-        <div className="lg:col-span-1 rounded-2xl p-5 border border-zinc-800/50 bg-zinc-900">
-          <h2 className="text-sm font-semibold text-zinc-300 mb-4">Top Selling Products</h2>
-          <TopProducts products={topProducts} />
-        </div>
-
-        {/* Dispatched Products */}
-        <div className="lg:col-span-1 rounded-2xl p-5 border border-zinc-800/50 bg-zinc-900">
-          <h2 className="text-sm font-semibold text-zinc-300 mb-4">Dispatched Products</h2>
-          <DispatchedProductsToday products={topDispatchedPeriod} />
-        </div>
-
-        {/* Quick Stats Grid */}
-        <div className="lg:col-span-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
-          {statCards.map((card) => (
+      {/* ── Row 1: KPI Strip ────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {kpis.map((kpi) => {
+          const inner = (
             <div
-              key={card.label}
-              className={`rounded-xl p-4 ${card.bg} border border-zinc-800/50 flex-1 ${
-                card.href ? "hover:border-zinc-700 transition-colors" : ""
-              }`}
+              className={`relative overflow-hidden rounded-2xl p-4 h-full border ${kpi.border} ${kpi.glow} group transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/30`}
             >
-              {card.href ? (
-                <Link href={card.href} className="block">
-                  <StatCardContent {...card} />
-                </Link>
-              ) : (
-                <StatCardContent {...card} />
+              <div className="flex items-start justify-between">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400 leading-none">
+                  {kpi.label}
+                </p>
+                <kpi.icon className={`w-4 h-4 ${kpi.color} opacity-70 shrink-0`} />
+              </div>
+              <p className={`text-2xl font-bold mt-3 ${kpi.color} tracking-tight leading-none`}>
+                {fmt(kpi.value, kpi.format)}
+              </p>
+              {kpi.href && (
+                <ArrowRight
+                  className={`w-3.5 h-3.5 ${kpi.color} opacity-0 group-hover:opacity-60 absolute bottom-3.5 right-3.5 transition-opacity`}
+                />
               )}
             </div>
-          ))}
+          );
+          return kpi.href ? (
+            <Link key={kpi.label} href={kpi.href} className="block">
+              {inner}
+            </Link>
+          ) : (
+            <div key={kpi.label}>{inner}</div>
+          );
+        })}
+      </div>
+
+      {/* ── Row 2: Revenue Chart + Pathao Widget ────────────────────────── */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+        {/* Revenue Chart */}
+        <div className="xl:col-span-8 rounded-2xl border border-zinc-800/60 bg-zinc-900/80 p-5">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-100">Revenue Overview</h2>
+              <p className="text-xs text-zinc-500 mt-0.5">Order value over selected period</p>
+            </div>
+            <div className="flex items-center gap-4 text-[11px]">
+              <span className="flex items-center gap-1.5 text-zinc-400">
+                <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
+                w/ Delivery
+              </span>
+              <span className="flex items-center gap-1.5 text-zinc-400">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                w/o Delivery
+              </span>
+            </div>
+          </div>
+          <div className="h-60">
+            <RevenueChart data={revenueData} />
+          </div>
+        </div>
+
+        {/* Pathao Widget */}
+        <div className="xl:col-span-4">
+          <PathaoReconciliationWidget metrics={unifiedMetrics} />
         </div>
       </div>
 
-      {/* Recent Orders */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-zinc-300">Recent Orders</h2>
-          <Link href="/orders" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
-            View all
-          </Link>
-        </div>
-        <div className="space-y-2">
-          {recentOrders?.length === 0 && (
-            <div className="text-center py-10 text-zinc-600 text-sm rounded-xl border border-zinc-800">
-              No orders yet. Sync your Shopify store first.
+      {/* ── Row 3: COD Financials ────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {financials.map((f) => (
+          <div
+            key={f.label}
+            className={`rounded-2xl p-5 border ${f.border} ${f.bg} flex items-center gap-4`}
+          >
+            <div className={`w-10 h-10 rounded-xl ${f.bg} border ${f.border} flex items-center justify-center shrink-0`}>
+              <f.icon className={`w-5 h-5 ${f.color}`} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">{f.label}</p>
+              <p className={`text-xl font-bold ${f.color} mt-0.5 truncate`}>
+                ৳{Number(f.value).toLocaleString()}
+              </p>
+              <p className="text-[11px] text-zinc-500 mt-0.5">{f.subtitle}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Row 4: Top Products + Order Pipeline ─────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* Top Selling Products */}
+        <div className="lg:col-span-5 rounded-2xl border border-zinc-800/60 bg-zinc-900/80 p-5">
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-sm font-semibold text-zinc-100">Top Selling Products</h2>
+            <span className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">By quantity sold</span>
+          </div>
+          {topProducts.length === 0 ? (
+            <div className="py-10 text-center text-zinc-500 text-sm">No product data this period.</div>
+          ) : (
+            <div className="space-y-4">
+              {topProducts.map((p: { id: string; title: string; qty: number; revenue: number }, i: number) => (
+                <div key={p.id}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-[10px] font-bold text-zinc-600 w-4 shrink-0">#{i + 1}</span>
+                      <p className="text-sm font-medium text-zinc-200 truncate">{p.title}</p>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0 pl-3">
+                      <span className="text-xs text-zinc-400 font-medium">{p.qty} sold</span>
+                      <span className="text-sm font-bold text-emerald-400">৳{p.revenue.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-indigo-500 to-emerald-500 rounded-full transition-all duration-1000"
+                      style={{ width: `${(p.qty / maxQty) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
           )}
-          {recentOrders?.map((order: Order) => (
-            <Link key={order.id} href={`/orders/${order.id}`}>
-              <div className="flex items-center gap-3 p-3.5 rounded-xl bg-zinc-900 border border-zinc-800
-                             hover:border-zinc-700 hover:bg-zinc-800/50 transition-all">
-                {/* Order name */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-zinc-200">
-                      {order.shopify_order_name}
-                    </span>
-                    <StatusBadge status={getOrderDisplayStatus(order)} />
+        </div>
+
+        {/* Order Pipeline */}
+        <div className="lg:col-span-7 rounded-2xl border border-zinc-800/60 bg-zinc-900/80 p-5">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-100">Order Pipeline</h2>
+              <p className="text-xs text-zinc-500 mt-0.5">Live fulfillment status breakdown</p>
+            </div>
+          </div>
+          <div className="space-y-5">
+            {pipeline.map((stage, i) => (
+              <Link key={stage.label} href={stage.href} className="block group">
+                <div className="flex items-center gap-4">
+                  <div className={`w-8 h-8 rounded-lg ${stage.color.replace("bg-", "bg-").replace("500", "500/15")} border ${stage.text.replace("text-", "border-").replace("400", "500/30")} flex items-center justify-center shrink-0`}>
+                    <stage.icon className={`w-4 h-4 ${stage.text}`} />
                   </div>
-                  <p className="text-xs text-zinc-500 mt-0.5 truncate">
-                    {order.customer_name}
-                    {order.customer_phone ? ` · ${order.customer_phone}` : ""}
-                  </p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`text-xs font-semibold ${stage.text} uppercase tracking-wider`}>
+                        {stage.label}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-zinc-100">{stage.value}</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-zinc-600 group-hover:text-zinc-400 transition-colors" />
+                      </div>
+                    </div>
+                    <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${stage.color} rounded-full transition-all duration-1000 ease-out`}
+                        style={{ width: `${Math.max((stage.value / pipelineMax) * 100, stage.value > 0 ? 3 : 0)}%` }}
+                      />
+                    </div>
+                  </div>
                 </div>
-                {/* Amount */}
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-semibold text-zinc-200">
-                    ৳{Number(order.total_price).toLocaleString()}
-                  </p>
-                  <p className="text-xs text-zinc-600">
-                    {new Date(order.shopify_created_at || order.created_at).toLocaleDateString("en-BD", {
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </p>
-                </div>
-              </div>
-            </Link>
-          ))}
+                {i < pipeline.length - 1 && (
+                  <div className="ml-4 mt-2 mb-0 w-0.5 h-2 bg-zinc-800 ml-[15px]" />
+                )}
+              </Link>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Quick Actions */}
-      <div>
-        <h2 className="text-sm font-semibold text-zinc-300 mb-3">Quick Actions</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <Link href="/orders?status=pending"
-            className="flex flex-col items-center gap-2 p-4 rounded-xl bg-zinc-900 border border-zinc-800
-                      hover:border-indigo-500/50 hover:bg-indigo-600/5 transition-all">
-            <Package className="w-6 h-6 text-indigo-400" />
-            <span className="text-xs font-medium text-zinc-300">Pending Orders</span>
+      {/* ── Row 5: Recent Orders ─────────────────────────────────────────── */}
+      <div className="rounded-2xl border border-zinc-800/60 bg-zinc-900/80 overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800/60">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-100">Recent Orders</h2>
+            <p className="text-[11px] text-zinc-500 mt-0.5">Latest 8 orders from your store</p>
+          </div>
+          <Link
+            href="/orders"
+            className="text-xs font-medium text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-colors"
+          >
+            View all
+            <ArrowRight className="w-3.5 h-3.5" />
           </Link>
-          <form action="/api/sync/shopify" method="POST">
-            <button type="submit"
-              className="w-full flex flex-col items-center gap-2 p-4 rounded-xl bg-zinc-900 border border-zinc-800
-                        hover:border-emerald-500/50 hover:bg-emerald-600/5 transition-all">
-              <Zap className="w-6 h-6 text-emerald-400" />
-              <span className="text-xs font-medium text-zinc-300">Sync Shopify</span>
-            </button>
-          </form>
         </div>
+
+        {recentOrders?.length === 0 ? (
+          <div className="text-center py-16 text-zinc-500 text-sm">
+            No orders yet. Sync your Shopify store first.
+          </div>
+        ) : (
+          <div className="divide-y divide-zinc-800/40">
+            {recentOrders?.map((order: Order) => {
+              const statusColor =
+                order.internal_status === "dispatched"
+                  ? "bg-indigo-500"
+                  : order.internal_status === "delivered"
+                  ? "bg-emerald-500"
+                  : order.internal_status === "cancelled"
+                  ? "bg-rose-500"
+                  : order.internal_status === "returned"
+                  ? "bg-orange-500"
+                  : order.internal_status === "preparing"
+                  ? "bg-sky-500"
+                  : "bg-zinc-600";
+              return (
+                <Link key={order.id} href={`/orders/${order.id}`}>
+                  <div className="flex items-center gap-4 px-5 py-3.5 hover:bg-zinc-800/40 transition-colors group">
+                    <div className={`w-1 h-7 rounded-full ${statusColor} shrink-0`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-zinc-100 group-hover:text-white transition-colors">
+                          {order.shopify_order_name}
+                        </span>
+                        <StatusBadge status={getOrderDisplayStatus(order)} />
+                      </div>
+                      <p className="text-xs text-zinc-500 mt-0.5 truncate">
+                        <span className="text-zinc-400">{order.customer_name}</span>
+                        {order.customer_phone && (
+                          <span className="text-zinc-600"> · {order.customer_phone}</span>
+                        )}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-semibold text-zinc-100">
+                        ৳{Number(order.total_price).toLocaleString()}
+                      </p>
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        {new Date(
+                          order.shopify_created_at || order.created_at
+                        ).toLocaleDateString("en-BD", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
-  );
-}
-
-function StatCardContent({ label, value, subValue, icon: Icon, color, isText }: any) {
-  return (
-    <>
-      <Icon className={`w-5 h-5 ${color} mb-2`} />
-      <p className={`text-xl font-bold ${isText ? color : "text-white"}`}>{value}</p>
-      {subValue && <p className="text-xs font-semibold text-zinc-400 mt-1">{subValue}</p>}
-      <p className="text-xs text-zinc-500 mt-0.5">{label}</p>
-    </>
   );
 }

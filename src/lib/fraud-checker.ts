@@ -42,16 +42,21 @@ export function buildFraudSpyCustomerNote(fraudData: any, riskAnalysis: Customer
 }
 
 export function buildDispatchCustomAttributes({
-  consignmentId,
+  fraudData,
+  riskAnalysis,
 }: {
-  consignmentId: string;
-  trackingUrl: string;
+  consignmentId?: string;
+  trackingUrl?: string;
   fraudData?: any;
   riskAnalysis?: CustomerRiskAnalysis;
-}) {
-  return [
-    { key: "Pathao Consignment", value: consignmentId }
-  ];
+}): Array<{ key: string; value: string }> | undefined {
+  // Never add Pathao dispatched ID to additional details (customAttributes).
+  // Keep FraudSpy only on additional details.
+  if (fraudData) {
+    const analysis = riskAnalysis || analyzeCustomerRisk(fraudData);
+    return buildFraudSpyCustomAttributes(fraudData, analysis);
+  }
+  return undefined;
 }
 
 export function buildDispatchCombinedNote({
@@ -59,20 +64,33 @@ export function buildDispatchCombinedNote({
   existingNote,
 }: {
   consignmentId: string;
-  trackingUrl: string;
+  trackingUrl?: string;
   existingNote?: string | null;
   fraudData?: any;
   riskAnalysis?: CustomerRiskAnalysis;
 }): string {
-  const parts: string[] = [
-    `Pathao Consignment: ${consignmentId}`
-  ];
+  const dispatchHeader = `Pathao Consignment: ${consignmentId}`;
 
-  if (existingNote && !existingNote.includes("Pathao Consignment")) {
-    parts.push(`\n[Order Note]\n${existingNote}`);
+  if (!existingNote || !existingNote.trim()) {
+    return dispatchHeader;
   }
 
-  return parts.join("\n");
+  // If existing note already has this exact dispatch ID line, return it as is
+  if (existingNote.includes(dispatchHeader)) {
+    return existingNote;
+  }
+
+  // Remove any previous Pathao Consignment references and duplicate [Order Note] headers
+  const cleanedExisting = existingNote
+    .replace(/Pathao Consignment:\s*[^\n\r]+/gi, "")
+    .replace(/\[Order Note\]/gi, "")
+    .trim();
+
+  if (!cleanedExisting) {
+    return dispatchHeader;
+  }
+
+  return `${dispatchHeader}\n\n[Order Note]\n${cleanedExisting}`;
 }
 
 export async function performFraudCheck(

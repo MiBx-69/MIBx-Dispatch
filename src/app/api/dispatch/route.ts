@@ -277,8 +277,14 @@ export async function POST(request: NextRequest) {
           "dispatched",
           ...(fraudTag ? [fraudTag, 'FraudSpy Verified'] : []),
         ])),
-        customAttributes,
+        ...(customAttributes ? { customAttributes } : {}),
       });
+
+      // Keep DB note synchronized with the dispatched consignment note
+      await supabase
+        .from("orders")
+        .update({ note: combinedNote })
+        .eq("id", order.id);
     } catch (tagErr) {
       console.error("[Dispatch] Shopify tag/attributes update error (non-fatal):", tagErr);
     }

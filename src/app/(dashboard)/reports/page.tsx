@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { format, parseISO, differenceInDays, subDays } from "date-fns";
 import { ReportsClient } from "./reports-client";
 import { getUnifiedReportMetrics, resolveDateRange } from "@/lib/reporting-engine";
+import { normalizeProductTitle } from "@/lib/product-utils";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Reports" };
@@ -121,12 +122,14 @@ export default async function ReportsPage({
     const items = o.line_items as any[];
     if (Array.isArray(items)) {
       items.forEach((item: any) => {
-        const key = `${item.product_id || item.title}-${item.variant_id || item.variant_title}`;
+        const rawTitle = item.title || item.name || 'Unknown';
+        const normalizedTitle = normalizeProductTitle(rawTitle);
+        const key = normalizedTitle;
         if (!productMap.has(key)) {
           productMap.set(key, { 
             id: key, 
-            title: item.title || item.name || 'Unknown', 
-            variant: item.variant_title || '', 
+            title: normalizedTitle, 
+            variant: 'Multiple Variations', 
             qty: 0, 
             revenue: 0 
           });
@@ -147,12 +150,14 @@ export default async function ReportsPage({
     const items = d.orders?.line_items;
     if (Array.isArray(items)) {
       items.forEach((item: any) => {
-        const key = `${item.product_id || item.title}-${item.variant_id || item.variant_title}`;
+        const rawTitle = item.title || item.name || 'Unknown';
+        const normalizedTitle = normalizeProductTitle(rawTitle);
+        const key = normalizedTitle;
         if (!dispatchedMap.has(key)) {
           dispatchedMap.set(key, { 
             id: key, 
-            title: item.title || item.name || 'Unknown', 
-            variant: item.variant_title || '', 
+            title: normalizedTitle, 
+            variant: 'Multiple Variations', 
             qty: 0
           });
         }
