@@ -17,7 +17,8 @@ import {
   ChevronLeft,
   ChevronRight,
   BarChart,
-  Activity
+  Activity,
+  TrendingUp,
 } from "lucide-react";
 import type { Profile } from "@/types/database";
 
@@ -50,20 +51,20 @@ export function Sidebar({ profile }: SidebarProps) {
       {/* Toggle Button */}
       <button 
         onClick={() => setIsExpanded(!isExpanded)}
-        className="absolute -right-3 top-6 bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white p-1 rounded-full z-10 transition-colors"
+        className="absolute -right-3 top-6 bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white p-1 rounded-full z-10 transition-all duration-200 hover:scale-110 active:scale-95"
       >
         {isExpanded ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
       </button>
 
       {/* Logo */}
       <div className={`flex items-center ${isExpanded ? "gap-3 px-5 justify-start" : "justify-center px-0"} py-5 border-b border-zinc-800 h-20`}>
-        <div className="flex items-center justify-center w-9 h-9 rounded-xl overflow-hidden bg-white shrink-0">
+        <div className="flex items-center justify-center w-9 h-9 rounded-xl overflow-hidden bg-white shrink-0 shadow-sm">
           <img src="/logo.png" alt="MiBx Logo" className="w-full h-full object-cover" />
         </div>
         {isExpanded && (
           <div className="whitespace-nowrap overflow-hidden">
-            <p className="text-sm font-bold text-white leading-none">MiBx Dispatch v3</p>
-            <p className="text-xs text-zinc-500 mt-0.5">ERP System</p>
+            <p className="text-sm font-bold text-white leading-none tracking-tight">MiBx Dispatch v3</p>
+            <p className="text-[11px] text-zinc-400 mt-1 font-medium tracking-wide uppercase">ERP System</p>
           </div>
         )}
       </div>
@@ -86,21 +87,21 @@ export function Sidebar({ profile }: SidebarProps) {
               href={href}
               title={!isExpanded ? label : undefined}
               className={`flex items-center ${isExpanded ? "gap-3 px-3 justify-start" : "justify-center px-0"} py-2.5 rounded-lg text-sm font-medium
-                         transition-all duration-150 group whitespace-nowrap ${
+                         transition-all duration-200 active:scale-[0.98] group whitespace-nowrap ${
                            isActive
-                             ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/20"
-                             : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 border border-transparent"
+                             ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/20 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)]"
+                             : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 border border-transparent hover:border-zinc-700/30"
                          }`}
             >
               <Icon
-                className={`w-4.5 h-4.5 shrink-0 ${
+                className={`w-4.5 h-4.5 shrink-0 transition-transform duration-200 group-hover:scale-110 ${
                   isActive ? "text-indigo-400" : "text-zinc-500 group-hover:text-zinc-300"
                 }`}
                 size={18}
               />
               {isExpanded && label}
               {isExpanded && label === "Orders" && (
-                <span className="ml-auto text-xs bg-indigo-600/30 text-indigo-300 px-1.5 py-0.5 rounded-full font-medium">
+                <span className="ml-auto text-xs bg-indigo-600/30 text-indigo-300 px-1.5 py-0.5 rounded-full font-medium border border-indigo-500/20 shadow-sm">
                   Live
                 </span>
               )}
@@ -119,9 +120,9 @@ export function Sidebar({ profile }: SidebarProps) {
           }}
           title={!isExpanded ? "Sync Shopify Orders" : undefined}
           className={`w-full flex items-center ${isExpanded ? "gap-2 px-3 justify-start" : "justify-center px-0"} py-2.5 text-xs text-zinc-500
-                     hover:text-zinc-300 hover:bg-zinc-800 rounded-lg transition-colors whitespace-nowrap overflow-hidden`}
+                     hover:text-zinc-300 hover:bg-zinc-800 border border-transparent hover:border-zinc-700/50 rounded-lg transition-all duration-200 active:scale-95 whitespace-nowrap overflow-hidden group`}
         >
-          <Zap size={16} className="shrink-0" />
+          <Zap size={16} className="shrink-0 transition-transform duration-200 group-hover:scale-110 group-hover:text-amber-400" />
           {isExpanded && "Sync Shopify Orders"}
         </button>
       </div>

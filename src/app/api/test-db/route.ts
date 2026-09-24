@@ -1,0 +1,1 @@
+import { NextResponse } from 'next/server'; import { createServiceClient } from '@/lib/supabase/server'; export async function GET(req: Request) { const supabase = createServiceClient(); const { data } = await supabase.from('shopify_line_items').select('vendor, quantity, price, shopify_order_id').limit(20); return NextResponse.json({ data }); }

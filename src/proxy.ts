@@ -46,6 +46,7 @@ export async function proxy(request: NextRequest) {
   const publicPaths = [
     "/login",
     "/api/auth",
+    "/api/cron",
     "/api/webhooks",
     "/api/pathao",
     "/site.webmanifest",
@@ -57,6 +58,9 @@ export async function proxy(request: NextRequest) {
 
   // Redirect unauthenticated users to login
   if (!user && !isPublic) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("redirectTo", pathname);

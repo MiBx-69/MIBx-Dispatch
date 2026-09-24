@@ -88,7 +88,7 @@ export function TopBar({ profile }: TopBarProps) {
           onClick={handleCourierSync}
           disabled={syncingCourier}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-                     text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/15 border border-amber-500/25 transition-colors disabled:opacity-50"
+                     text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/15 border border-amber-500/25 transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
           title="Quick sync pending & in-transit parcels with Pathao"
         >
           <Truck size={13} className={syncingCourier ? "animate-bounce text-amber-400" : "text-amber-400"} />
@@ -100,7 +100,7 @@ export function TopBar({ profile }: TopBarProps) {
           onClick={handleSync}
           disabled={syncing}
           className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-                     text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors disabled:opacity-50"
+                     text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 border border-transparent hover:border-zinc-700/50 transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
           title="Sync Shopify orders"
         >
           <Zap size={13} className={syncing ? "animate-pulse text-indigo-400" : ""} />

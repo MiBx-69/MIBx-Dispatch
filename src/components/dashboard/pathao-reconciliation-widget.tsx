@@ -189,7 +189,7 @@ export function PathaoReconciliationWidget({ metrics }: Props) {
           </div>
           {courierPickupIssueCount > 0 && (
             <p className="text-[10px] text-zinc-500 mt-1 text-center">
-              +{courierPickupIssueCount} under pickup review
+              +{courierPickupIssueCount} cancelled or pickup failed
             </p>
           )}
         </div>

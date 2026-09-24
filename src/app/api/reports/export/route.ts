@@ -5,6 +5,8 @@ import { formatBstDate } from "@/lib/reporting-engine";
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
+
+
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
 

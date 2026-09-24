@@ -210,28 +210,40 @@ export async function getUnifiedReportMetrics(params: {
   let courierProcessingValue = 0;
   let courierPickupIssueCount = 0;
   let courierPickupIssueValue = 0;
+  let courierActiveTotalCount = 0;
+  let courierActiveTotalValue = 0;
   let courierTotalCount = 0;
   let courierTotalValue = 0;
 
   filteredDispatches.forEach((d: any) => {
     const st = (d.pathao_order_status || "").toLowerCase().trim();
-    const val = Number(d.amount_to_collect || d.orders?.total_price || 0);
+    // Use amount_to_collect preferentially, falling back to 0 if we know it's a Pathao dispatch 
+    // to avoid artificially inflating prepaid orders to full order value.
+    const val = d.amount_to_collect != null ? Number(d.amount_to_collect) : Number(d.orders?.total_price || 0);
     const fee = Number(d.delivery_fee || 110);
 
+    const isCancelledOrFailed = d.is_cancelled || st.includes("cancel") || st.includes("pickup failed") || st.includes("pickup-failed");
+
+    if (!isCancelledOrFailed) {
+      courierActiveTotalCount++;
+    }
+    
     courierTotalCount++;
     courierTotalValue += val;
 
     if (st === "delivered" || st.includes("partial")) {
       courierDeliveredCount++;
       courierDeliveredValue += val;
+      courierActiveTotalValue += val; // Pathao counts only successful/paid deliveries in 'Total Value'
     } else if (st === "paid return") {
       courierPaidReturnCount++;
       courierPaidReturnValue += val;
       courierPaidReturnFee += fee;
+      courierActiveTotalValue += val; // Pathao counts Paid Return in 'Total Value'
     } else if (st.includes("return")) {
       courierReturnedCount++;
       courierReturnedValue += val;
-    } else if (st.includes("pickup")) {
+    } else if (isCancelledOrFailed) {
       courierPickupIssueCount++;
       courierPickupIssueValue += val;
     } else {
@@ -240,8 +252,7 @@ export async function getUnifiedReportMetrics(params: {
     }
   });
 
-  const courierActiveTotalCount = courierDeliveredCount + courierPaidReturnCount + courierReturnedCount + courierProcessingCount;
-  const courierActiveTotalValue = Math.round(courierDeliveredValue + courierPaidReturnValue + courierReturnedValue + courierProcessingValue);
+  courierActiveTotalValue = Math.round(courierActiveTotalValue);
 
   // Dispatches Calculations (active, non-pickup-cancelled)
   const activeDispatches = filteredDispatches.filter((d: any) => {
