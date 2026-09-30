@@ -1,6 +1,4 @@
 import { format, parseISO, isValid } from "date-fns";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 
 export function formatCurrency(amount: number | string | null | undefined, currency = "BDT"): string {
   const val = Number(amount) || 0;

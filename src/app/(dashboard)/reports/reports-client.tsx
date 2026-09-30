@@ -11,8 +11,6 @@ import {
   ChevronRight, Calendar,
 } from "lucide-react";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 
 interface ReportsClientProps {
   revenueData: any[];
@@ -147,9 +145,12 @@ export function ReportsClient({
     }
   };
 
-  const handleExportSummaryPdf = () => {
+  const handleExportSummaryPdf = async () => {
     setIsGeneratingPdf(true);
     try {
+      const { default: jsPDF } = await import("jspdf");
+      const autoTableModule = await import("jspdf-autotable");
+      const autoTable = autoTableModule.default || autoTableModule;
       const doc = new jsPDF();
       const primary: [number, number, number] = [99, 102, 241];
       const dark: [number, number, number] = [30, 30, 35];
