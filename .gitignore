@@ -22,6 +22,11 @@ next-env.d.ts
 .env*
 !.env.example
 *.pem
+*.key
+*.cert
+*.pfx
+*service-account*.json
+*credentials*.json
 
 # Shopify CLI local state
 .shopify/
@@ -58,6 +63,3 @@ Thumbs.db
 
 # Vercel
 .vercel
-
-.vercel
-.env*

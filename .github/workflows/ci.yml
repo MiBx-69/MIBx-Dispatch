@@ -1,0 +1,52 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, "audit/**"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Lint, Typecheck, Test & Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: "https://mock-supabase-project.supabase.co"
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "mock-anon-key-for-ci-build"
+      SUPABASE_SERVICE_ROLE_KEY: "mock-service-role-key-for-ci"
+      UPSTASH_REDIS_REST_URL: "https://mock-redis.upstash.io"
+      UPSTASH_REDIS_REST_TOKEN: "mock-redis-token-for-ci"
+      NEXT_PUBLIC_APP_URL: "https://orders.universesraw.com"
+      NEXT_PUBLIC_APP_NAME: "MiBx Dispatch"
+      NODE_ENV: "production"
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: TypeScript Check
+        run: npx tsc --noEmit
+
+      - name: Run Unit & Integration Tests
+        run: npm test -- --run
+
+      - name: Production Build
+        run: npm run build
+
+      - name: Security Dependency Audit
+        run: npm audit --audit-level=high
