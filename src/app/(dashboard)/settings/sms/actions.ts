@@ -1,9 +1,12 @@
 "use server";
 
 import { createServiceClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/auth-guard";
 import { revalidatePath } from "next/cache";
 
 export async function updateSMSSettings(formData: FormData) {
+  await requireAdmin();
+
   const sms_api_key = formData.get("sms_api_key") as string;
   const sms_sender_id = formData.get("sms_sender_id") as string;
   const sms_auto_dispatch_enabled = formData.get("sms_auto_dispatch_enabled") === "true";
@@ -74,6 +77,8 @@ export async function updateSMSSettings(formData: FormData) {
 }
 
 export async function toggleMasterSMSAction(enabled: boolean) {
+  await requireAdmin();
+
   const supabase = createServiceClient();
   const { data: currentSettings } = await supabase.from("app_settings").select("id").single();
   
@@ -92,6 +97,8 @@ export async function toggleMasterSMSAction(enabled: boolean) {
 }
 
 export async function toggleSettingFieldAction(field: string, value: boolean | string) {
+  await requireAdmin();
+
   const allowedFields = new Set([
     "sms_master_enabled",
     "sms_sender_id_enabled",
@@ -134,6 +141,8 @@ export async function toggleSettingFieldAction(field: string, value: boolean | s
 }
 
 export async function sendTestSMS(formData: FormData) {
+  await requireAdmin();
+
   const phone = formData.get("test_phone") as string;
   
   if (!phone) {

@@ -59,11 +59,22 @@ export async function inviteTeamMember(formData: FormData) {
 
   if (!user) return { error: "Unauthorized" };
 
-  const email = formData.get("email")?.toString();
-  const role = formData.get("role")?.toString() || "staff";
-  const fullName = formData.get("full_name")?.toString() || "New Member";
+  const { data: callerProfile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("user_id", user.id)
+    .single();
 
-  if (!email) return { error: "Email is required." };
+  if (callerProfile?.role !== "admin") {
+    return { error: "Forbidden: Only administrators can invite team members." };
+  }
+
+  const email = formData.get("email")?.toString()?.trim();
+  const rawRole = formData.get("role")?.toString() || "staff";
+  const role = ["admin", "staff"].includes(rawRole) ? rawRole : "staff";
+  const fullName = formData.get("full_name")?.toString()?.trim() || "New Member";
+
+  if (!email || !email.includes("@")) return { error: "Valid email is required." };
 
   const supabaseAdmin = createServiceClient();
   

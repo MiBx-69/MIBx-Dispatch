@@ -1,13 +1,15 @@
 "use server";
 
-import { createServiceClient, createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/auth-guard";
 import { revalidatePath } from "next/cache";
 
 export async function updateWebhookSecret(formData: FormData) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) return { error: "Unauthorized" };
+  try {
+    await requireAdmin();
+  } catch (err: any) {
+    return { error: err.message || "Unauthorized" };
+  }
 
   const secret = formData.get("shopify_webhook_secret")?.toString() || "";
 
@@ -28,10 +30,11 @@ export async function updateWebhookSecret(formData: FormData) {
 }
 
 export async function updatePathaoWebhookSecret(formData: FormData) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) return { error: "Unauthorized" };
+  try {
+    await requireAdmin();
+  } catch (err: any) {
+    return { error: err.message || "Unauthorized" };
+  }
 
   const secret = formData.get("pathao_webhook_secret")?.toString() || "";
 

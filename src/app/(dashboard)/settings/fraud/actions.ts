@@ -1,9 +1,12 @@
 "use server";
 
 import { createServiceClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/auth-guard";
 import { revalidatePath } from "next/cache";
 
 export async function updateFraudSettings(formData: FormData) {
+  await requireAdmin();
+
   const fraud_check_enabled = formData.get("fraud_check_enabled") === "true";
   const fraudspy_api_key = formData.get("fraudspy_api_key") as string;
 
@@ -41,6 +44,8 @@ export async function updateFraudSettings(formData: FormData) {
 }
 
 export async function connectSteadfastAction(formData: FormData) {
+  await requireAdmin();
+
   const api_key = formData.get("steadfast_api_key") as string;
   const secret_key = formData.get("steadfast_secret_key") as string;
 

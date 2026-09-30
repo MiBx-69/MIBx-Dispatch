@@ -1,14 +1,14 @@
 "use server";
 
-import { createServiceClient, createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/auth-guard";
 import { revalidatePath } from "next/cache";
 
 export async function updatePathaoSettings(formData: FormData) {
-  const supabase = await createClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { error: "Unauthorized" };
+  try {
+    await requireAdmin();
+  } catch (err: any) {
+    return { error: err.message || "Unauthorized" };
   }
 
   const client_id = formData.get("client_id")?.toString() || "";

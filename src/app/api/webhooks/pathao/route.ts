@@ -33,16 +33,16 @@ export async function POST(request: NextRequest) {
     ""
   ).trim();
 
-  // Fetch stored secrets from app_settings
+  // Fetch stored secrets from app_settings or environment
   const { data: settings } = await supabaseAdmin
     .from("app_settings")
     .select("pathao_webhook_secret, pathao_client_secret")
     .single();
-  const storedWebhookSecret = (settings?.pathao_webhook_secret || "").trim();
-  const storedClientSecret = (settings?.pathao_client_secret || "").trim();
+  const storedWebhookSecret = (settings?.pathao_webhook_secret || process.env.PATHAO_WEBHOOK_SECRET || "").trim();
+  const storedClientSecret = (settings?.pathao_client_secret || process.env.PATHAO_CLIENT_SECRET || "").trim();
 
-  // The secret we return in the response header (Pathao validates this header)
-  const returnSecret = providedSecret || storedWebhookSecret || storedClientSecret || "f3992ecc-59da-4cbe-a049-a13da2018d51";
+  const validSecrets = [storedWebhookSecret, storedClientSecret].filter(Boolean);
+  const primarySecret = validSecrets[0] || "";
 
   // 1. Webhook Integration Verification Event
   if (payload.event === "webhook_integration") {
@@ -59,45 +59,41 @@ export async function POST(request: NextRequest) {
       status: 202,
       headers: {
         "Content-Type": "application/json",
-        "X-Pathao-Merchant-Webhook-Integration-Secret": returnSecret,
+        "X-Pathao-Merchant-Webhook-Integration-Secret": primarySecret || providedSecret,
       },
     });
   }
 
   // 2. Secret Verification for normal events
-  // Check against webhook_secret, client_secret, or fallback UUID
-  const validSecrets = [
-    storedWebhookSecret,
-    storedClientSecret,
-    "f3992ecc-59da-4cbe-a049-a13da2018d51",
-  ].filter(Boolean);
+  const safeCompare = (a: string, b: string): boolean => {
+    if (!a || !b) return false;
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    if (bufA.length !== bufB.length) return false;
+    const crypto = require("crypto");
+    return crypto.timingSafeEqual(bufA, bufB);
+  };
 
   const isAuthorized =
-    validSecrets.length === 0 ||
-    (providedSecret &&
-      validSecrets.some(
-        (sec) =>
-          providedSecret === sec ||
-          providedSecret.includes(sec) ||
-          sec.includes(providedSecret)
-      ));
+    validSecrets.length > 0 &&
+    Boolean(providedSecret) &&
+    validSecrets.some((sec) => safeCompare(providedSecret, sec));
 
   if (!isAuthorized) {
-    console.error(`[Pathao Webhook] Unauthorized. Expected one of: ${validSecrets.join(", ")}, Got: ${providedSecret}`);
+    console.error("[Pathao Webhook] Unauthorized attempt: secret mismatch or unconfigured");
     await supabaseAdmin.from("webhook_logs").insert({
       source: "pathao",
       topic: payload.event || payload.order_status || "unauthorized_webhook",
       pathao_consignment_id: payload.consignment_id || null,
       payload,
       processed: false,
-      error: `Unauthorized secret mismatch (Header: '${providedSecret || "None"}')`,
+      error: "Unauthorized secret mismatch",
     });
 
     return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: {
         "Content-Type": "application/json",
-        "X-Pathao-Merchant-Webhook-Integration-Secret": returnSecret,
       },
     });
   }
@@ -128,7 +124,7 @@ export async function POST(request: NextRequest) {
   // The proper way to do background processing in Next.js is using after()
   after(async () => {
     try {
-      await processPathaoWebhook(payload, returnSecret, logId);
+      await processPathaoWebhook(payload, primarySecret, logId);
     } catch (err: any) {
       console.error("[Pathao Webhook] Background processing error:", err);
       if (logId) {
@@ -151,7 +147,7 @@ export async function POST(request: NextRequest) {
     status: 202,
     headers: {
       "Content-Type": "application/json",
-      "X-Pathao-Merchant-Webhook-Integration-Secret": returnSecret,
+      "X-Pathao-Merchant-Webhook-Integration-Secret": primarySecret,
     },
   });
 }

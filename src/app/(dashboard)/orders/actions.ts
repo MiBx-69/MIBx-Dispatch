@@ -1,6 +1,7 @@
 "use server";
 
 import { sendSMS } from "@/lib/sms";
+import { requireAuth } from "@/lib/auth-guard";
 
 export async function sendSMSAction(
   to: string, 
@@ -8,6 +9,7 @@ export async function sendSMSAction(
   metadata?: { orderId?: string | number; orderName?: string; customerName?: string }
 ) {
   try {
+    await requireAuth();
     const result = await sendSMS(to, message, false, undefined, metadata);
     if (!result.success) {
       throw new Error(result.message || "Failed to send SMS");
@@ -21,6 +23,7 @@ export async function sendSMSAction(
 
 export async function reportFraudAction(payload: any) {
   try {
+    await requireAuth();
     const { createServiceClient } = await import("@/lib/supabase/server");
     const supabase = createServiceClient();
     const { data: settings } = await supabase.from("app_settings").select("fraudspy_api_key").single();

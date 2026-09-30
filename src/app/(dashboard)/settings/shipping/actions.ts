@@ -1,9 +1,12 @@
 "use server";
 
 import { createServiceClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/auth-guard";
 import { revalidatePath } from "next/cache";
 
 export async function updateShippingSettings(formData: FormData) {
+  await requireAdmin();
+
   const delivery_charge_inside_dhaka = formData.get("delivery_charge_inside_dhaka");
   const delivery_charge_outside_dhaka = formData.get("delivery_charge_outside_dhaka");
   const auto_mark_delivered_days = formData.get("auto_mark_delivered_days");

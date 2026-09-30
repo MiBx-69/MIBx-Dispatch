@@ -1,9 +1,12 @@
 "use server";
 
 import { createServiceClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/auth-guard";
 import { revalidatePath } from "next/cache";
 
 export async function updateGeneralSettings(formData: FormData) {
+  await requireAdmin();
+
   const supabase = createServiceClient();
   const companyName = formData.get("companyName") as string;
   const systemName = formData.get("systemName") as string;
