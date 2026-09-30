@@ -273,7 +273,7 @@ export async function handleShopifyRefundOrReturn({
   // Check if a return record already exists
   const { data: existingReturn } = await supabase
     .from("returns")
-    .select("id, status, is_verified, return_type")
+    .select("id, status, is_verified, return_type, refund_amount")
     .eq("order_id", order.id)
     .maybeSingle();
 

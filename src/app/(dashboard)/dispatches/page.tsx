@@ -104,7 +104,7 @@ export default async function DispatchesPage({
       count={count || 0}
       currentStatus={params.status}
       currentSearch={params.search}
-      pathaoStoreId={settings?.pathao_store_id}
+      pathaoStoreId={settings?.pathao_store_id || undefined}
       dateFilter={dateFilter}
       startDate={params.startDate}
       endDate={params.endDate}

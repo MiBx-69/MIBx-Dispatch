@@ -8,6 +8,8 @@ interface EmbeddedOrderPageProps {
   params: Promise<{ id: string }>;
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export default async function EmbeddedOrderPage({ params }: EmbeddedOrderPageProps) {
   const { id } = await params;
   const supabase = createServiceClient();
@@ -15,7 +17,7 @@ export default async function EmbeddedOrderPage({ params }: EmbeddedOrderPagePro
   const cleanId = decodeURIComponent(id).trim();
   const altId = cleanId.startsWith("#") ? cleanId.slice(1) : `#${cleanId}`;
 
-  // Query order by internal ID, shopify_order_id (number or string), or shopify_order_name
+  // Query order by internal ID (UUID only), shopify_order_id, or shopify_order_name
   let query = supabase
     .from("orders")
     .select(`
@@ -37,12 +39,21 @@ export default async function EmbeddedOrderPage({ params }: EmbeddedOrderPagePro
       )
     `);
 
-  // If numeric, also check shopify_order_id
   const isNumeric = /^\d+$/.test(cleanId);
+  const isUUID = UUID_REGEX.test(cleanId);
+
+  const orConditions: string[] = [];
+  if (isUUID) {
+    orConditions.push(`id.eq.${cleanId}`);
+  }
   if (isNumeric) {
-    query = query.or(`id.eq.${cleanId},shopify_order_id.eq.${Number(cleanId)},shopify_order_name.eq.${cleanId},shopify_order_name.eq.${altId}`);
-  } else {
-    query = query.or(`id.eq.${cleanId},shopify_order_name.eq.${cleanId},shopify_order_name.eq.${altId}`);
+    orConditions.push(`shopify_order_id.eq.${Number(cleanId)}`);
+  }
+  orConditions.push(`shopify_order_name.eq.${cleanId}`);
+  orConditions.push(`shopify_order_name.eq.${altId}`);
+
+  if (orConditions.length > 0) {
+    query = query.or(orConditions.join(","));
   }
 
   const { data: orders } = await query.limit(1);

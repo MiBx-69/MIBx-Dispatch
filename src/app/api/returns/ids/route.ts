@@ -9,22 +9,24 @@ export async function GET(request: NextRequest) {
 
     const supabase = createServiceClient();
 
-    let query = supabase.from("returns");
+    let query: any = search
+      ? supabase.from("returns").select(`
+          id,
+          consignment_id,
+          return_reason,
+          orders!inner (
+            shopify_order_name,
+            customer_name,
+            customer_phone
+          )
+        `)
+      : supabase.from("returns").select("id");
 
     if (search) {
-      query = query.select(`
-        id,
-        consignment_id,
-        return_reason,
-        orders!inner (
-          shopify_order_name,
-          customer_name,
-          customer_phone
-        )
-      `);
-      query = query.or(`consignment_id.ilike.%${search}%,return_reason.ilike.%${search}%,orders.shopify_order_name.ilike.%${search}%,orders.customer_name.ilike.%${search}%,orders.customer_phone.ilike.%${search}%`);
-    } else {
-      query = query.select("id");
+      const cleanSearch = search.replace(/[,()]/g, " ").trim();
+      if (cleanSearch) {
+        query = query.or(`consignment_id.ilike.%${cleanSearch}%,return_reason.ilike.%${cleanSearch}%,orders.shopify_order_name.ilike.%${cleanSearch}%,orders.customer_name.ilike.%${cleanSearch}%,orders.customer_phone.ilike.%${cleanSearch}%`);
+      }
     }
 
     if (filter && filter !== "all") {

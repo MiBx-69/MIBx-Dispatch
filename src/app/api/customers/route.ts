@@ -16,8 +16,9 @@ export async function GET(request: Request) {
       .from("customers")
       .select("*", { count: "exact" });
 
-    if (search) {
-      query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`);
+    const cleanSearch = (search || "").replace(/[,()]/g, " ").trim();
+    if (cleanSearch) {
+      query = query.or(`name.ilike.%${cleanSearch}%,phone.ilike.%${cleanSearch}%,email.ilike.%${cleanSearch}%`);
     }
 
     if (sort === "orders") {

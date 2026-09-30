@@ -60,6 +60,7 @@ async function handleCron(request: NextRequest) {
       .select(`
         id,
         consignment_id,
+        amount_to_collect,
         pathao_order_status,
         order_id,
         shopify_order_name,

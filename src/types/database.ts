@@ -82,6 +82,7 @@ export type Database = {
           sms_non_sender_id_enabled: boolean | null
           sms_sender_id_event_types: string | null
           sms_sender_id: string | null
+          cron_secret: string | null
           system_name: string
           updated_at: string
         }
@@ -127,6 +128,7 @@ export type Database = {
           sms_non_sender_id_enabled?: boolean | null
           sms_sender_id_event_types?: string | null
           sms_sender_id?: string | null
+          cron_secret?: string | null
           system_name?: string
           updated_at?: string
         }
@@ -172,6 +174,7 @@ export type Database = {
           sms_non_sender_id_enabled?: boolean | null
           sms_sender_id_event_types?: string | null
           sms_sender_id?: string | null
+          cron_secret?: string | null
           system_name?: string
           updated_at?: string
         }
@@ -728,6 +731,7 @@ export type Database = {
       webhook_logs: {
         Row: {
           error: string | null
+          event_type: string | null
           id: string
           pathao_consignment_id: string | null
           payload: Json | null
@@ -739,6 +743,7 @@ export type Database = {
         }
         Insert: {
           error?: string | null
+          event_type?: string | null
           id?: string
           pathao_consignment_id?: string | null
           payload?: Json | null
@@ -750,6 +755,7 @@ export type Database = {
         }
         Update: {
           error?: string | null
+          event_type?: string | null
           id?: string
           pathao_consignment_id?: string | null
           payload?: Json | null
@@ -760,6 +766,214 @@ export type Database = {
           topic?: string | null
         }
         Relationships: []
+      }
+      order_events: {
+        Row: {
+          id: string
+          order_id: string
+          event_type: string
+          description: string
+          metadata: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          order_id: string
+          event_type: string
+          description: string
+          metadata?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          order_id?: string
+          event_type?: string
+          description?: string
+          metadata?: Json | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_events_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shopify_orders: {
+        Row: {
+          id: string
+          shopify_order_id: string
+          shopify_order_number: number | null
+          name: string | null
+          created_at: string
+          total_price: number
+          subtotal_price: number | null
+          currency: string | null
+          customer_id: string | null
+          customer_name: string | null
+          financial_status: string | null
+          fulfillment_status: string | null
+          cancelled_at: string | null
+          synced_at: string
+        }
+        Insert: {
+          id?: string
+          shopify_order_id: string
+          shopify_order_number?: number | null
+          name?: string | null
+          created_at: string
+          total_price?: number
+          subtotal_price?: number | null
+          currency?: string | null
+          customer_id?: string | null
+          customer_name?: string | null
+          financial_status?: string | null
+          fulfillment_status?: string | null
+          cancelled_at?: string | null
+          synced_at?: string
+        }
+        Update: {
+          id?: string
+          shopify_order_id?: string
+          shopify_order_number?: number | null
+          name?: string | null
+          created_at?: string
+          total_price?: number
+          subtotal_price?: number | null
+          currency?: string | null
+          customer_id?: string | null
+          customer_name?: string | null
+          financial_status?: string | null
+          fulfillment_status?: string | null
+          cancelled_at?: string | null
+          synced_at?: string
+        }
+        Relationships: []
+      }
+      shopify_products: {
+        Row: {
+          id: string
+          shopify_product_id: string
+          title: string
+          vendor: string | null
+          product_type: string | null
+          collections: Json | null
+          variants: Json | null
+          image_url: string | null
+          status: string | null
+          synced_at: string
+        }
+        Insert: {
+          id?: string
+          shopify_product_id: string
+          title: string
+          vendor?: string | null
+          product_type?: string | null
+          collections?: Json | null
+          variants?: Json | null
+          image_url?: string | null
+          status?: string | null
+          synced_at?: string
+        }
+        Update: {
+          id?: string
+          shopify_product_id?: string
+          title?: string
+          vendor?: string | null
+          product_type?: string | null
+          collections?: Json | null
+          variants?: Json | null
+          image_url?: string | null
+          status?: string | null
+          synced_at?: string
+        }
+        Relationships: []
+      }
+      shopify_collections: {
+        Row: {
+          id: string
+          shopify_collection_id: string
+          title: string
+          handle: string | null
+          products_count: number | null
+          synced_at: string
+        }
+        Insert: {
+          id?: string
+          shopify_collection_id: string
+          title: string
+          handle?: string | null
+          products_count?: number | null
+          synced_at?: string
+        }
+        Update: {
+          id?: string
+          shopify_collection_id?: string
+          title?: string
+          handle?: string | null
+          products_count?: number | null
+          synced_at?: string
+        }
+        Relationships: []
+      }
+      shopify_line_items: {
+        Row: {
+          id: string
+          order_id: string | null
+          shopify_order_id: string
+          shopify_product_id: string | null
+          product_name: string
+          vendor: string | null
+          variant_id: string | null
+          variant_title: string | null
+          quantity: number
+          price: number
+          sku: string | null
+          collection_ids: string[] | null
+          order_created_at: string
+        }
+        Insert: {
+          id?: string
+          order_id?: string | null
+          shopify_order_id: string
+          shopify_product_id?: string | null
+          product_name: string
+          vendor?: string | null
+          variant_id?: string | null
+          variant_title?: string | null
+          quantity?: number
+          price?: number
+          sku?: string | null
+          collection_ids?: string[] | null
+          order_created_at: string
+        }
+        Update: {
+          id?: string
+          order_id?: string | null
+          shopify_order_id?: string
+          shopify_product_id?: string | null
+          product_name?: string
+          vendor?: string | null
+          variant_id?: string | null
+          variant_title?: string | null
+          quantity?: number
+          price?: number
+          sku?: string | null
+          collection_ids?: string[] | null
+          order_created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_line_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_orders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

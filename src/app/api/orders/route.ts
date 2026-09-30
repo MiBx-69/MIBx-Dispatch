@@ -13,15 +13,13 @@ export async function GET(request: NextRequest) {
     const idsOnly = searchParams.get("idsOnly") === "true";
     const supabase = createServiceClient();
 
-    let query = supabase.from("orders");
-    if (idsOnly) {
-      query = query.select("id").order("shopify_created_at", { ascending: false });
-    } else {
-      query = query
-        .select("*", { count: "exact" })
-        .order("shopify_created_at", { ascending: false })
-        .range(offset, offset + pageSize - 1);
-    }
+    let query: any = idsOnly
+      ? supabase.from("orders").select("id").order("shopify_created_at", { ascending: false })
+      : supabase
+          .from("orders")
+          .select("*", { count: "exact" })
+          .order("shopify_created_at", { ascending: false })
+          .range(offset, offset + pageSize - 1);
 
     if (status === "archived") {
       query = query.eq("is_archived", true);
@@ -88,9 +86,10 @@ export async function GET(request: NextRequest) {
       query = query.eq("is_archived", false).eq("internal_status", status);
     }
 
-    if (search) {
+    const cleanSearch = (search || "").replace(/[,()]/g, " ").trim();
+    if (cleanSearch) {
       query = query.or(
-        `customer_name.ilike.%${search}%,customer_phone.ilike.%${search}%,shopify_order_name.ilike.%${search}%,pathao_consignment_id.ilike.%${search}%`
+        `customer_name.ilike.%${cleanSearch}%,customer_phone.ilike.%${cleanSearch}%,shopify_order_name.ilike.%${cleanSearch}%,pathao_consignment_id.ilike.%${cleanSearch}%`
       );
     }
 

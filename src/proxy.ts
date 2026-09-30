@@ -42,13 +42,13 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // Public routes that don't need auth
+  // Public routes that don't need user session auth
+  // Note: /api/pathao is NOT public (only /api/webhooks/pathao is public, covered by /api/webhooks)
   const publicPaths = [
     "/login",
     "/api/auth",
     "/api/cron",
     "/api/webhooks",
-    "/api/pathao",
     "/site.webmanifest",
     "/manifest.json",
     "/robots.txt",
@@ -67,7 +67,7 @@ export async function proxy(request: NextRequest) {
     const redirectRes = NextResponse.redirect(loginUrl);
     // Copy cookies to preserve session refresh
     supabaseResponse.cookies.getAll().forEach((c) => {
-      redirectRes.cookies.set(c.name, c.value, c as any);
+      redirectRes.cookies.set(c);
     });
     return redirectRes;
   }
@@ -76,7 +76,7 @@ export async function proxy(request: NextRequest) {
   if (user && pathname === "/login") {
     const redirectRes = NextResponse.redirect(new URL("/", request.url));
     supabaseResponse.cookies.getAll().forEach((c) => {
-      redirectRes.cookies.set(c.name, c.value, c as any);
+      redirectRes.cookies.set(c);
     });
     return redirectRes;
   }

@@ -322,7 +322,7 @@ export async function getUnifiedLogs(params: LogQueryParams): Promise<{
       q = q.or(`topic.ilike.%${search}%,error.ilike.%${search}%,pathao_consignment_id.ilike.%${search}%`);
     }
 
-    promises.push(q);
+    promises.push(Promise.resolve(q));
   } else {
     promises.push(Promise.resolve({ data: [] }));
   }
@@ -343,7 +343,7 @@ export async function getUnifiedLogs(params: LogQueryParams): Promise<{
       q = q.or(`event_type.ilike.%${search}%,description.ilike.%${search}%`);
     }
 
-    promises.push(q);
+    promises.push(Promise.resolve(q));
   } else {
     promises.push(Promise.resolve({ data: [] }));
   }
@@ -364,7 +364,7 @@ export async function getUnifiedLogs(params: LogQueryParams): Promise<{
       q = q.or("status.eq.failed,errors.gt.0");
     }
 
-    promises.push(q);
+    promises.push(Promise.resolve(q));
   } else {
     promises.push(Promise.resolve({ data: [] }));
   }

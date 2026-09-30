@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createServiceClient, createClient } from "@/lib/supabase/server";
 import type { OrderStatus } from "@/types/database";
 
 export async function PATCH(
@@ -7,6 +7,14 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+
+  // Auth check
+  const authClient = await createClient();
+  const { data: { user } } = await authClient.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const supabase = createServiceClient();
   const { status }: { status: OrderStatus } = await request.json();
 
@@ -25,7 +33,7 @@ export async function PATCH(
     .single();
 
   if (error || !order) {
-    return NextResponse.json({ error: error?.message || "Order not found" }, { status: 500 });
+    return NextResponse.json({ error: error?.message || "Order not found" }, { status: 404 });
   }
 
   if (status === "dispatched" && !order.pathao_consignment_id) {
@@ -35,9 +43,25 @@ export async function PATCH(
     );
   }
 
+  const now = new Date().toISOString();
+  const orderUpdates: Record<string, any> = { internal_status: status };
+
+  if (status === "delivered") {
+    orderUpdates.delivered_at = order.delivered_at || now;
+  } else if (status === "returned") {
+    orderUpdates.returned_at = order.returned_at || now;
+    if (!order.return_reason) {
+      orderUpdates.return_reason = "Manually marked as returned";
+    }
+  } else if (status === "cancelled") {
+    orderUpdates.cancel_reason = order.cancel_reason || "Cancelled by Admin";
+    orderUpdates.returned_at = null;
+    orderUpdates.return_reason = null;
+  }
+
   const { error: updateError } = await supabase
     .from("orders")
-    .update({ internal_status: status })
+    .update(orderUpdates as any)
     .eq("id", id);
 
   if (updateError) {
@@ -48,22 +72,13 @@ export async function PATCH(
   await logOrderEvent(id, "STATUS_CHANGE", `Internal status updated to: ${status}`);
 
   if (status === "cancelled") {
-    await supabase
-      .from("orders")
-      .update({
-        cancel_reason: order.cancel_reason || "Cancelled by Admin",
-        returned_at: null,
-        return_reason: null,
-      })
-      .eq("id", id);
-
     await supabase.from("returns").delete().eq("order_id", id);
 
     await supabase
       .from("dispatches")
       .update({
         is_cancelled: true,
-        cancelled_at: new Date().toISOString(),
+        cancelled_at: now,
         cancel_reason: "Order marked as cancelled in ERP",
       })
       .eq("order_id", id);
@@ -87,21 +102,18 @@ export async function PATCH(
           }
 
           if (template) {
-            let msg = template
-              .replace("{{order_id}}", order.shopify_order_name || order.id)
-              .replace("{{customer_name}}", order.customers?.name || "Customer");
-              
-            if (order.pathao_consignment_id) {
-               msg = msg.replace("{{tracking_url}}", `https://merchant.pathao.com/cn-tracking/${order.pathao_consignment_id}`);
-            } else {
-               msg = msg.replace("{{tracking_url}}", "");
-            }
-            
-            if (order.total_price !== undefined && order.total_price !== null) {
-              msg = msg.replace("{{total_price}}", order.total_price.toString());
-            } else {
-              msg = msg.replace("{{total_price}}", "0");
-            }
+            const customerName = order.customers?.name || "Customer";
+            const trackingUrl = order.pathao_consignment_id
+              ? `https://merchant.pathao.com/cn-tracking/${order.pathao_consignment_id}`
+              : "";
+            const total = order.total_price !== undefined && order.total_price !== null ? order.total_price.toString() : "0";
+
+            const msg = template
+              .replace(/\{\{order_id\}\}/g, order.shopify_order_name || order.id)
+              .replace(/\{\{customer_name\}\}/g, customerName)
+              .replace(/\{\{tracking_url\}\}/g, trackingUrl)
+              .replace(/\{\{consignment_id\}\}/g, order.pathao_consignment_id || "")
+              .replace(/\{\{total_price\}\}/g, total);
 
             await sendSMS(
               phone,
@@ -111,7 +123,7 @@ export async function PATCH(
               {
                 orderId: order.shopify_order_id || order.id,
                 orderName: order.shopify_order_name,
-                customerName: order.customers?.name,
+                customerName,
                 eventType: status,
               }
             );
@@ -122,6 +134,14 @@ export async function PATCH(
     }
   } catch (smsError) {
     console.error("[SMS Automation Error]", smsError);
+  }
+
+  // Invalidate Redis dashboard cache
+  try {
+    const { deleteCachePattern } = await import("@/lib/redis");
+    await deleteCachePattern("dashboard:metrics:v1:*");
+  } catch (cacheErr) {
+    console.error("[Status Change] Cache invalidate error:", cacheErr);
   }
 
   return NextResponse.json({ success: true, status });
