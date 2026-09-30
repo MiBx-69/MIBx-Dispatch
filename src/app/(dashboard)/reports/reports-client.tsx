@@ -11,6 +11,7 @@ import {
   ChevronRight, Calendar,
 } from "lucide-react";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
+import { formatPdfCurrency, cleanPdfText } from "@/lib/report-formatters";
 
 interface ReportsClientProps {
   revenueData: any[];
@@ -156,87 +157,121 @@ export function ReportsClient({
       const dark: [number, number, number] = [30, 30, 35];
       const pw = doc.internal.pageSize.width || doc.internal.pageSize.getWidth();
 
+      // Header Banner
       doc.setFillColor(...dark);
-      doc.rect(0, 0, pw, 40, "F");
-      doc.setFontSize(22).setTextColor(255, 255, 255);
-      doc.text(companyName, 14, 20);
-      doc.setFontSize(11).setTextColor(180, 180, 180);
-      doc.text("Sales & Operations Report", 14, 30);
-      doc.setFontSize(9);
-      doc.text(`Period: ${startDate} to ${endDate}`, pw - 14, 20, { align: "right" });
-      doc.text(`Generated: ${new Date().toLocaleDateString()}`, pw - 14, 28, { align: "right" });
+      doc.rect(0, 0, pw, 42, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(20).setTextColor(255, 255, 255);
+      doc.text(cleanPdfText(companyName), 14, 18);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10).setTextColor(200, 200, 200);
+      doc.text("Sales & Operations Report", 14, 28);
+      doc.setFontSize(9).setTextColor(210, 210, 210);
+      doc.text(`Period: ${startDate} to ${endDate}`, pw - 14, 18, { align: "right" });
+      doc.text(`Generated: ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}`, pw - 14, 28, { align: "right" });
 
       const aov = Math.round(totalGross / Math.max(1, orderStats.totalOrders));
 
+      // Key Performance Indicators Table
+      doc.setFont("helvetica", "bold");
       doc.setFontSize(13).setTextColor(40, 40, 40);
-      doc.text("Key Performance Indicators", 14, 52);
+      doc.text("Key Performance Indicators", 14, 54);
       autoTable(doc, {
-        startY: 56,
+        startY: 58,
         head: [["Metric", "Value"]],
         body: [
-          ["Total Orders", orderStats.totalOrders.toString()],
-          ["Dispatched", orderStats.dispatchedOrders.toString()],
-          ["Delivered", orderStats.deliveredOrders.toString()],
-          ["Returned", orderStats.returnedOrders.toString()],
-          ["Cancelled", orderStats.cancelledOrders.toString()],
+          ["Total Orders", Number(orderStats.totalOrders || 0).toLocaleString("en-US")],
+          ["Dispatched", Number(orderStats.dispatchedOrders || 0).toLocaleString("en-US")],
+          ["Delivered", Number(orderStats.deliveredOrders || 0).toLocaleString("en-US")],
+          ["Returned", Number(orderStats.returnedOrders || 0).toLocaleString("en-US")],
+          ["Cancelled", Number(orderStats.cancelledOrders || 0).toLocaleString("en-US")],
           ["Delivery Success Rate", `${successRate}%`],
-          ["Average Order Value", `৳${aov.toLocaleString()}`],
+          ["Average Order Value", formatPdfCurrency(aov)],
         ],
         theme: "grid",
-        headStyles: { fillColor: primary, textColor: [255, 255, 255], fontStyle: "bold" },
-        styles: { fontSize: 10, cellPadding: 5 },
+        headStyles: { fillColor: primary, textColor: [255, 255, 255], fontStyle: "bold", fontSize: 10 },
+        styles: { font: "helvetica", fontSize: 10, cellPadding: 5, textColor: [40, 40, 40] },
+        columnStyles: {
+          0: { fontStyle: "normal" },
+          1: { halign: "right", fontStyle: "bold" },
+        },
         alternateRowStyles: { fillColor: [248, 248, 250] },
-        margin: { left: 14 },
+        margin: { left: 14, right: 14 },
       });
 
+      // Financial Overview Table
+      const finY = (doc as any).lastAutoTable.finalY + 12;
+      doc.setFont("helvetica", "bold");
       doc.setFontSize(13).setTextColor(40, 40, 40);
-      doc.text("Financial Overview", 14, (doc as any).lastAutoTable.finalY + 14);
+      doc.text("Financial Overview", 14, finY);
       autoTable(doc, {
-        startY: (doc as any).lastAutoTable.finalY + 18,
+        startY: finY + 4,
         head: [["Financial Metric", "Amount (BDT)"]],
         body: [
-          ["Total Gross Revenue", `৳${Math.round(totalGross).toLocaleString()}`],
-          ["Delivered Revenue (Collected)", `৳${Math.round(deliveredRevenue).toLocaleString()}`],
-          ["Pending Delivery Amount", `৳${Math.round(pendingDeliveryAmount).toLocaleString()}`],
-          ["Returned Value (Lost)", `৳${Math.round(returnedRevenue).toLocaleString()}`],
-          ["Cancelled Value", `৳${Math.round(cancelledRevenue).toLocaleString()}`],
+          ["Total Gross Revenue", formatPdfCurrency(totalGross)],
+          ["Delivered Revenue (Collected)", formatPdfCurrency(deliveredRevenue)],
+          ["Pending Delivery Amount", formatPdfCurrency(pendingDeliveryAmount)],
+          ["Returned Value (Lost)", formatPdfCurrency(returnedRevenue)],
+          ["Cancelled Value", formatPdfCurrency(cancelledRevenue)],
         ],
         theme: "grid",
-        headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontStyle: "bold" },
-        styles: { fontSize: 10, cellPadding: 5 },
+        headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 10 },
+        styles: { font: "helvetica", fontSize: 10, cellPadding: 5, textColor: [40, 40, 40] },
+        columnStyles: {
+          0: { fontStyle: "normal" },
+          1: { halign: "right", fontStyle: "bold" },
+        },
         alternateRowStyles: { fillColor: [248, 248, 250] },
-        margin: { left: 14 },
+        margin: { left: 14, right: 14 },
       });
 
+      // Top Selling Products Table
       if (topProducts.length > 0) {
-        let finalY = (doc as any).lastAutoTable.finalY;
-        if (finalY > 220) { doc.addPage(); finalY = 20; } else finalY += 14;
+        let prodY = (doc as any).lastAutoTable.finalY;
+        if (prodY > 210) {
+          doc.addPage();
+          prodY = 20;
+        } else {
+          prodY += 12;
+        }
+        doc.setFont("helvetica", "bold");
         doc.setFontSize(13).setTextColor(40, 40, 40);
-        doc.text("Top Selling Products", 14, finalY);
+        doc.text("Top Selling Products", 14, prodY);
         autoTable(doc, {
-          startY: finalY + 4,
-          head: [["#", "Product", "Qty Sold", "Revenue"]],
+          startY: prodY + 4,
+          head: [["#", "Product", "Qty Sold", "Revenue (BDT)"]],
           body: topProducts.slice(0, 10).map((p: any, i: number) => [
-            `#${i + 1}`, p.title, p.qty.toString(), `৳${Math.round(p.revenue).toLocaleString()}`,
+            `#${i + 1}`,
+            cleanPdfText(p.title),
+            Number(p.qty || 0).toLocaleString("en-US"),
+            formatPdfCurrency(p.revenue),
           ]),
           theme: "grid",
-          headStyles: { fillColor: [245, 158, 11], textColor: [255, 255, 255], fontStyle: "bold" },
-          styles: { fontSize: 9, cellPadding: 4 },
+          headStyles: { fillColor: [245, 158, 11], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 9 },
+          styles: { font: "helvetica", fontSize: 9, cellPadding: 4, textColor: [40, 40, 40] },
+          columnStyles: {
+            0: { halign: "center", cellWidth: 14 },
+            1: { fontStyle: "normal" },
+            2: { halign: "right", cellWidth: 26 },
+            3: { halign: "right", cellWidth: 42, fontStyle: "bold" },
+          },
           alternateRowStyles: { fillColor: [248, 248, 250] },
-          margin: { left: 14 },
+          margin: { left: 14, right: 14 },
         });
       }
 
+      // Page Footer
       const pageCount = doc.getNumberOfPages();
       for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
         const ph = doc.internal.pageSize.height || doc.internal.pageSize.getHeight();
-        doc.setDrawColor(200, 200, 200).setLineWidth(0.5).line(14, ph - 15, pw - 14, ph - 15);
-        doc.setFontSize(8).setTextColor(150, 150, 150);
-        doc.text(`Generated by ${systemName}`, 14, ph - 10);
-        doc.text(`Page ${i} of ${pageCount}`, pw - 14, ph - 10, { align: "right" });
+        doc.setDrawColor(220, 220, 225).setLineWidth(0.5).line(14, ph - 14, pw - 14, ph - 14);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8).setTextColor(140, 140, 140);
+        doc.text(`Generated by ${cleanPdfText(systemName)}`, 14, ph - 9);
+        doc.text(`Page ${i} of ${pageCount}`, pw - 14, ph - 9, { align: "right" });
       }
-      doc.save(`${companyName.replace(/\s+/g, "-")}-Report-${startDate}-to-${endDate}.pdf`);
+      doc.save(`${cleanPdfText(companyName).replace(/\s+/g, "-")}-Report-${startDate}-to-${endDate}.pdf`);
     } catch {
       alert("Failed to generate PDF.");
     } finally {
