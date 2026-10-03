@@ -671,19 +671,46 @@ import { createHmac, timingSafeEqual } from "crypto";
 export function verifyShopifyWebhook(
   rawBody: string,
   hmacHeader: string,
-  secret?: string
+  secret?: string | string[]
 ): boolean {
-  // Use explicit secret, OR webhook secret, OR client secret
-  const webhookSecret = secret || process.env.SHOPIFY_WEBHOOK_SECRET || process.env.SHOPIFY_CLIENT_SECRET;
-  if (!webhookSecret) return false;
+  if (!hmacHeader || !rawBody) return false;
 
-  const hash = createHmac("sha256", webhookSecret)
-    .update(rawBody, "utf8")
-    .digest("base64");
+  const secretsToCheck: string[] = [];
+  if (Array.isArray(secret)) {
+    secretsToCheck.push(...secret);
+  } else if (secret) {
+    secretsToCheck.push(secret);
+  }
 
-  try {
-    return timingSafeEqual(Buffer.from(hash), Buffer.from(hmacHeader));
-  } catch {
+  if (process.env.SHOPIFY_WEBHOOK_SECRET) {
+    secretsToCheck.push(process.env.SHOPIFY_WEBHOOK_SECRET);
+  }
+  if (process.env.SHOPIFY_CLIENT_SECRET) {
+    secretsToCheck.push(process.env.SHOPIFY_CLIENT_SECRET);
+  }
+
+  const uniqueSecrets = Array.from(new Set(secretsToCheck.map((s) => s.trim()).filter(Boolean)));
+  if (uniqueSecrets.length === 0) {
+    console.error("[Shopify Webhook] No webhook secret configured in app_settings or environment variables.");
     return false;
   }
+
+  const hmacBuf = Buffer.from(hmacHeader.trim());
+
+  for (const candidateSecret of uniqueSecrets) {
+    try {
+      const hash = createHmac("sha256", candidateSecret)
+        .update(rawBody, "utf8")
+        .digest("base64");
+
+      const hashBuf = Buffer.from(hash);
+      if (hashBuf.length === hmacBuf.length && timingSafeEqual(hashBuf, hmacBuf)) {
+        return true;
+      }
+    } catch {
+      // Continue to next secret
+    }
+  }
+
+  return false;
 }

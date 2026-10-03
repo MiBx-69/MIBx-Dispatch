@@ -105,4 +105,40 @@ describe("Security Hardening Tests", () => {
       expect(safeSecretCompare("", "")).toBe(false);
     });
   });
+
+  describe("Shopify Webhook HMAC Verification", () => {
+    const testSecret = "shpss_test_secret_key_1234567890";
+    const payload = JSON.stringify({ id: 987654321, email: "customer@example.com" });
+    const validHmac = crypto
+      .createHmac("sha256", testSecret)
+      .update(payload, "utf8")
+      .digest("base64");
+
+    it("verifies webhook with exact single secret", async () => {
+      const { verifyShopifyWebhook } = await import("../lib/shopify/client");
+      expect(verifyShopifyWebhook(payload, validHmac, testSecret)).toBe(true);
+    });
+
+    it("verifies webhook when valid secret is one of multiple candidate secrets", async () => {
+      const { verifyShopifyWebhook } = await import("../lib/shopify/client");
+      const candidates = ["shpss_wrong_secret_1", testSecret, "shpss_wrong_secret_2"];
+      expect(verifyShopifyWebhook(payload, validHmac, candidates)).toBe(true);
+    });
+
+    it("rejects webhook if body was tampered with", async () => {
+      const { verifyShopifyWebhook } = await import("../lib/shopify/client");
+      const tamperedPayload = JSON.stringify({ id: 987654321, email: "hacker@example.com" });
+      expect(verifyShopifyWebhook(tamperedPayload, validHmac, testSecret)).toBe(false);
+    });
+
+    it("rejects webhook with invalid HMAC header", async () => {
+      const { verifyShopifyWebhook } = await import("../lib/shopify/client");
+      expect(verifyShopifyWebhook(payload, "invalid_hmac_header", testSecret)).toBe(false);
+    });
+
+    it("rejects webhook if no secret is configured", async () => {
+      const { verifyShopifyWebhook } = await import("../lib/shopify/client");
+      expect(verifyShopifyWebhook(payload, validHmac, [])).toBe(false);
+    });
+  });
 });

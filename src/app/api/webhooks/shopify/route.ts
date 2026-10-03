@@ -9,13 +9,47 @@ export async function POST(request: NextRequest) {
   const hmac = request.headers.get("x-shopify-hmac-sha256") || "";
   const topic = request.headers.get("x-shopify-topic") || "";
 
-  // Verify webhook authenticity
-  if (!verifyShopifyWebhook(rawBody, hmac)) {
-    console.error("[Shopify Webhook] Invalid HMAC signature");
+  const supabase = createServiceClient();
+
+  // Fetch configured secrets from app_settings
+  const { data: settings } = await supabase
+    .from("app_settings")
+    .select("shopify_webhook_secret")
+    .single();
+
+  const candidateSecrets = [
+    settings?.shopify_webhook_secret,
+    process.env.SHOPIFY_WEBHOOK_SECRET,
+    process.env.SHOPIFY_CLIENT_SECRET,
+  ].filter(Boolean) as string[];
+
+  // Verify webhook authenticity against DB and ENV candidate secrets
+  if (!verifyShopifyWebhook(rawBody, hmac, candidateSecrets)) {
+    console.error("[Shopify Webhook] Invalid HMAC signature", {
+      topic,
+      hasHmacHeader: !!hmac,
+      configuredSecretsCount: candidateSecrets.length,
+      hasDbSecret: !!settings?.shopify_webhook_secret,
+      hasEnvWebhookSecret: !!process.env.SHOPIFY_WEBHOOK_SECRET,
+      hasEnvClientSecret: !!process.env.SHOPIFY_CLIENT_SECRET,
+    });
+
+    try {
+      await supabase.from("webhook_logs").insert({
+        source: "shopify",
+        topic: topic || "unauthorized",
+        shopify_order_id: null,
+        payload: { error: "Invalid HMAC signature", hmacHeaderPresent: !!hmac },
+        processed: false,
+        error: "Unauthorized: Invalid HMAC signature",
+      });
+    } catch {
+      // Do not block error response if logging fails
+    }
+
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const supabase = createServiceClient();
   let payload: ShopifyOrderWebhookPayload;
 
   try {
