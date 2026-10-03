@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { formatBstDate } from "@/lib/reporting-engine";
+import { formatBstDate, resolveDateRange } from "@/lib/date-utils";
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,10 +12,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Missing start or end date" }, { status: 400 });
     }
 
-    // Additional safeguard for Sept 1st minimum
-    const minDateStr = "2026-08-31T18:00:00.000Z";
-    const queryStart = startDate < minDateStr ? minDateStr : startDate;
-    const queryEnd = endDate < minDateStr ? minDateStr : endDate;
+    const { startDateStr: queryStart, endDateStr: queryEnd } = resolveDateRange("custom", startDate, endDate);
+    if (!queryStart || !queryEnd) {
+      return NextResponse.json({ error: "Invalid start or end date" }, { status: 400 });
+    }
 
     const supabase = createServiceClient();
 

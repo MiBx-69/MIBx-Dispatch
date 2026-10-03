@@ -18,10 +18,10 @@ export async function processAutoDeliveredOrders() {
     const cutoffISO = cutoffDate.toISOString();
 
     // 3. Find dispatched or hold orders that have a dispatch record older than cutoffDate
-    // First, find active dispatches older than cutoff
+    // First, find active dispatches older than cutoff, excluding returns, failures, and cancellations
     const { data: oldDispatches, error: dispatchErr } = await supabase
       .from("dispatches")
-      .select("order_id, consignment_id")
+      .select("order_id, consignment_id, pathao_order_status")
       .lt("dispatched_at", cutoffISO)
       .eq("is_cancelled", false);
 
@@ -32,12 +32,22 @@ export async function processAutoDeliveredOrders() {
 
     if (!oldDispatches || oldDispatches.length === 0) return;
 
-    const orderIdsToCheck = oldDispatches.map((d: any) => d.order_id);
+    // Filter out any dispatches with courier returns, failed pickups, or cancellations
+    const eligibleDispatches = oldDispatches.filter((d: any) => {
+      const st = (d.pathao_order_status || "").toLowerCase();
+      if (st.includes("return") || st.includes("fail") || st.includes("cancel")) return false;
+      return true;
+    });
+
+    if (eligibleDispatches.length === 0) return;
+
+    const orderIdsToCheck = Array.from(new Set(eligibleDispatches.map((d: any) => d.order_id)));
 
     // Filter orders to only those that are currently "dispatched" or "hold"
+    // and whose courier status does not indicate return or failure
     const { data: ordersToUpdate, error: orderErr } = await supabase
       .from("orders")
-      .select("id, shopify_order_name, customer_phone, customers(name, phone)")
+      .select("id, shopify_order_name, customer_phone, pathao_delivery_status, customers(name, phone)")
       .in("id", orderIdsToCheck)
       .in("internal_status", ["dispatched", "hold"]);
 
@@ -46,12 +56,18 @@ export async function processAutoDeliveredOrders() {
       return;
     }
 
-    if (!ordersToUpdate || ordersToUpdate.length === 0) return;
+    const filteredOrdersToUpdate = (ordersToUpdate || []).filter((o: any) => {
+      const pst = (o.pathao_delivery_status || "").toLowerCase();
+      if (pst.includes("return") || pst.includes("fail") || pst.includes("cancel")) return false;
+      return true;
+    });
 
-    console.log(`[Auto-Deliver] Found ${ordersToUpdate.length} orders to mark as delivered automatically.`);
+    if (filteredOrdersToUpdate.length === 0) return;
+
+    console.log(`[Auto-Deliver] Found ${filteredOrdersToUpdate.length} orders to mark as delivered automatically.`);
 
     // 4. Mark them as delivered
-    const orderIds = ordersToUpdate.map((o: any) => o.id);
+    const orderIds = filteredOrdersToUpdate.map((o: any) => o.id);
     const now = new Date().toISOString();
 
     await supabase

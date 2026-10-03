@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { format, parseISO, differenceInDays, subDays } from "date-fns";
+import { format, parseISO, subDays } from "date-fns";
 import { ReportsClient } from "./reports-client";
-import { getUnifiedReportMetrics, resolveDateRange } from "@/lib/reporting-engine";
+import { resolveDateRange, formatBstDate, getUnifiedReportMetrics } from "@/lib/reporting-engine";
 import { normalizeProductTitle } from "@/lib/product-utils";
 import type { Metadata } from "next";
 
@@ -16,40 +16,32 @@ export default async function ReportsPage({
   const params = await searchParams;
   const supabase = createServiceClient();
 
-  const now = new Date();
-  const MIN_DATE = new Date("2026-08-31T18:00:00.000Z"); // Sept 1st 00:00 BST
+  const filterType = params.filterType || (params.startDate && params.endDate ? "custom" : "last_30_days");
+  const { startDateStr, endDateStr } = resolveDateRange(filterType, params.startDate, params.endDate);
   
-  const { startDateStr: resStart, endDateStr: resEnd } = resolveDateRange(params.filterType, params.startDate, params.endDate);
-  let startDateStr = resStart || params.startDate || subDays(now, 30).toISOString();
-  let endDateStr = resEnd || params.endDate || now.toISOString();
+  const finalStart = startDateStr || subDays(new Date(), 30).toISOString();
+  const finalEnd = endDateStr || new Date().toISOString();
 
-  // Enforce minimum date of September 1, 2026 for accurate reporting
-  if (new Date(startDateStr) < MIN_DATE) {
-    startDateStr = MIN_DATE.toISOString();
-  }
-  if (new Date(endDateStr) < MIN_DATE) {
-    endDateStr = MIN_DATE.toISOString();
-  }
-
-  // 1. Fetch Orders in date range (exclude archived)
+  // 1. Fetch settings
   const { data: settings } = await supabase.from("app_settings").select("company_name, system_name").single();
 
+  // 2. Fetch Orders in date range (exclude archived)
   const { data: ordersData } = await supabase
     .from("orders")
-    .select("total_price, subtotal_price, shopify_created_at, created_at, line_items, financial_status, fulfillment_status, internal_status, fraud_status, returned_at, return_reason, return_delivery_fee")
+    .select("total_price, subtotal_price, shopify_created_at, created_at, line_items, financial_status, fulfillment_status, internal_status, fraud_status, returned_at, return_reason, return_delivery_fee, pathao_consignment_id")
     .eq("is_archived", false)
-    .gte("shopify_created_at", startDateStr)
-    .lte("shopify_created_at", endDateStr)
+    .gte("shopify_created_at", finalStart)
+    .lte("shopify_created_at", finalEnd)
     .order("shopify_created_at", { ascending: false });
 
   const orders = ordersData || [];
 
-  // 2. Fetch Dispatches in date range (exclude cancelled & archived)
+  // 3. Fetch Dispatches in date range (exclude cancelled & archived)
   const { data: dispatchesData } = await supabase
     .from("dispatches")
-    .select("dispatched_at, is_cancelled, pathao_order_status, orders!inner(line_items, total_price, internal_status, is_archived)")
-    .gte("dispatched_at", startDateStr)
-    .lte("dispatched_at", endDateStr)
+    .select("dispatched_at, is_cancelled, pathao_order_status, amount_to_collect, orders!inner(line_items, total_price, internal_status, is_archived)")
+    .gte("dispatched_at", finalStart)
+    .lte("dispatched_at", finalEnd)
     .eq("is_cancelled", false)
     .neq("orders.internal_status", "cancelled")
     .eq("orders.is_archived", false);
@@ -62,28 +54,29 @@ export default async function ReportsPage({
     return true;
   });
 
-  // 3. Fetch Returns in date range (from returns table for accurate fee tracking)
+  // 4. Fetch Returns in date range
   const { data: returnsData } = await supabase
     .from("returns")
     .select("id, order_total, return_delivery_fee, returned_at, return_reason, return_source, return_type, is_verified, refund_amount, returned_items")
-    .gte("returned_at", startDateStr)
-    .lte("returned_at", endDateStr);
+    .gte("returned_at", finalStart)
+    .lte("returned_at", finalEnd);
 
   const returns = returnsData || [];
 
-  // --- Process Data for Charts ---
+  // --- Process Data for Charts & Breakdowns ---
 
-  // A. Revenue Data (now excludes cancelled AND returned)
-  const revenueMap = new Map<string, { total: number, subtotal: number }>();
-  let daysDiff = differenceInDays(parseISO(endDateStr), parseISO(startDateStr));
-  if (daysDiff < 7) {
-     for (let i = 6; i >= 0; i--) {
-        revenueMap.set(format(subDays(parseISO(endDateStr), i), 'yyyy-MM-dd'), { total: 0, subtotal: 0 });
-     }
-  } else {
-     for (let i = daysDiff; i >= 0; i--) {
-        revenueMap.set(format(subDays(parseISO(endDateStr), i), 'yyyy-MM-dd'), { total: 0, subtotal: 0 });
-     }
+  // A. Revenue Data bucketed in BST (Asia/Dhaka)
+  const revenueMap = new Map<string, { total: number; subtotal: number }>();
+  const startBst = formatBstDate(finalStart);
+  const endBst = formatBstDate(finalEnd);
+  
+  let curr = new Date(`${startBst}T12:00:00+06:00`);
+  const endLimit = new Date(`${endBst}T12:00:00+06:00`);
+  let loopCount = 0;
+  while (curr <= endLimit && loopCount < 366) {
+    revenueMap.set(formatBstDate(curr), { total: 0, subtotal: 0 });
+    curr.setDate(curr.getDate() + 1);
+    loopCount++;
   }
 
   let totalGross = 0;
@@ -91,12 +84,11 @@ export default async function ReportsPage({
 
   orders.forEach((o: any) => {
     if (!o.shopify_created_at) return;
-    const dateStr = format(parseISO(o.shopify_created_at), 'yyyy-MM-dd');
+    const dateStr = formatBstDate(o.shopify_created_at);
     
     const orderTotal = Number(o.total_price) || 0;
     const orderSubtotal = Number(o.subtotal_price) || 0;
     
-    // Count ALL orders for gross totals (including returned/cancelled for reference)
     totalGross += orderTotal;
     totalSubtotal += orderSubtotal;
 
@@ -104,34 +96,41 @@ export default async function ReportsPage({
       const current = revenueMap.get(dateStr)!;
       revenueMap.set(dateStr, {
         total: current.total + orderTotal,
-        subtotal: current.subtotal + orderSubtotal
+        subtotal: current.subtotal + orderSubtotal,
+      });
+    } else {
+      revenueMap.set(dateStr, {
+        total: orderTotal,
+        subtotal: orderSubtotal,
       });
     }
   });
 
-  const revenueData = Array.from(revenueMap.entries()).map(([date, data]) => ({ 
-    date, 
-    displayDate: format(parseISO(date), "MMM d"),
-    revenue: data.total,
-    subtotal: data.subtotal
-  }));
+  const revenueData = Array.from(revenueMap.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, data]) => ({ 
+      date, 
+      displayDate: format(parseISO(date), "MMM d"),
+      revenue: data.total,
+      subtotal: data.subtotal,
+    }));
 
   // B. Top Selling Products
-  const productMap = new Map<string, { id: string, title: string, variant: string, qty: number, revenue: number }>();
+  const productMap = new Map<string, { id: string; title: string; variant: string; qty: number; revenue: number }>();
   orders.forEach((o: any) => {
     const items = o.line_items as any[];
     if (Array.isArray(items)) {
       items.forEach((item: any) => {
-        const rawTitle = item.title || item.name || 'Unknown';
+        const rawTitle = item.title || item.name || "Unknown Product";
         const normalizedTitle = normalizeProductTitle(rawTitle);
         const key = normalizedTitle;
         if (!productMap.has(key)) {
           productMap.set(key, { 
             id: key, 
             title: normalizedTitle, 
-            variant: 'Multiple Variations', 
+            variant: "Multiple Variations", 
             qty: 0, 
-            revenue: 0 
+            revenue: 0,
           });
         }
         const p = productMap.get(key)!;
@@ -145,20 +144,20 @@ export default async function ReportsPage({
     .slice(0, 10);
 
   // C. Dispatched Products (Quantity)
-  const dispatchedMap = new Map<string, { id: string, title: string, variant: string, qty: number }>();
+  const dispatchedMap = new Map<string, { id: string; title: string; variant: string; qty: number }>();
   dispatches.forEach((d: any) => {
     const items = d.orders?.line_items;
     if (Array.isArray(items)) {
       items.forEach((item: any) => {
-        const rawTitle = item.title || item.name || 'Unknown';
+        const rawTitle = item.title || item.name || "Unknown Product";
         const normalizedTitle = normalizeProductTitle(rawTitle);
         const key = normalizedTitle;
         if (!dispatchedMap.has(key)) {
           dispatchedMap.set(key, { 
             id: key, 
             title: normalizedTitle, 
-            variant: 'Multiple Variations', 
-            qty: 0
+            variant: "Multiple Variations", 
+            qty: 0,
           });
         }
         dispatchedMap.get(key)!.qty += item.quantity || 1;
@@ -169,41 +168,51 @@ export default async function ReportsPage({
     .sort((a, b) => b.qty - a.qty)
     .slice(0, 10);
 
-  // D. Return-adjusted calculations using single Unified Reporting Engine
-  const unifiedMetrics = await getUnifiedReportMetrics({
-    dateFilter: params.filterType,
-    startDate: startDateStr,
-    endDate: endDateStr,
-  });
+  // D. Fully reconciled metrics for orders in this period
+  const deliveredOrders = orders.filter((o: any) => o.internal_status === "delivered");
+  const returnedOrders = orders.filter((o: any) => o.internal_status === "returned");
+  const cancelledOrders = orders.filter((o: any) => o.internal_status === "cancelled");
+  const inTransitOrders = orders.filter(
+    (o: any) =>
+      ["dispatched", "in_transit"].includes(o.internal_status) ||
+      (o.pathao_consignment_id && !["delivered", "returned", "cancelled"].includes(o.internal_status))
+  );
 
-  const returnedOrders = orders.filter((o: any) => o.internal_status === 'returned');
-  const cancelledOrders = orders.filter((o: any) => o.internal_status === 'cancelled');
-  const deliveredOrders = orders.filter((o: any) => o.internal_status === 'delivered');
-
+  const deliveredRevenue = deliveredOrders.reduce((acc: number, o: any) => acc + (Number(o.total_price) || 0), 0);
   const cancelledRevenue = cancelledOrders.reduce((acc: number, o: any) => acc + (Number(o.total_price) || 0), 0);
-  const deliveredRevenue = unifiedMetrics.deliveredRevenue;
-  const totalReturnedRevenue = unifiedMetrics.returnedValue;
-  const totalReturnDeliveryFees = unifiedMetrics.returnFees;
-  const partialReturnDeductions = Math.max(0, unifiedMetrics.returnedValue - returnedOrders.reduce((acc: number, o: any) => acc + (Number(o.total_price) || 0), 0));
-  const totalDeductions = totalReturnedRevenue + cancelledRevenue;
-  const netCollectibleRevenue = Math.max(0, totalGross - totalDeductions);
+  const pendingDeliveryAmount = inTransitOrders.reduce((acc: number, o: any) => acc + (Number(o.total_price) || 0), 0);
+  const returnedRevenue = returnedOrders.reduce((acc: number, o: any) => acc + (Number(o.total_price) || 0), 0);
+
+  const dispatchedOrders = orders.filter(
+    (o: any) => o.pathao_consignment_id || ["dispatched", "delivered", "returned"].includes(o.internal_status)
+  );
+  const dispatchedOrdersCount = dispatchedOrders.length || dispatches.length;
+
+  const totalDispatchedAmount = dispatchedOrders.reduce(
+    (acc: number, o: any) => acc + (Number(o.total_price) || 0),
+    0
+  );
 
   // Success rate = Delivered / (Delivered + Returned) * 100
-  const totalFinalizedOrders = unifiedMetrics.deliveredCount + unifiedMetrics.returnedCount;
+  const totalFinalizedOrders = deliveredOrders.length + returnedOrders.length;
   const successRate = totalFinalizedOrders > 0
-    ? Math.round((unifiedMetrics.deliveredCount / totalFinalizedOrders) * 100)
-    : 100;
+    ? Math.round((deliveredOrders.length / totalFinalizedOrders) * 100)
+    : deliveredOrders.length > 0 ? 100 : 0;
 
   // General Order Stats
   const orderStats = {
-    totalOrders: unifiedMetrics.totalOrders || orders.length,
-    dispatchedOrders: unifiedMetrics.dispatchedCount,
-    deliveredOrders: unifiedMetrics.deliveredCount,
+    totalOrders: orders.length,
+    dispatchedOrders: dispatchedOrdersCount,
+    deliveredOrders: deliveredOrders.length,
     cancelledOrders: cancelledOrders.length,
-    returnedOrders: unifiedMetrics.returnedCount,
+    returnedOrders: returnedOrders.length,
   };
 
-  const totalDispatchedAmount = unifiedMetrics.amountToCollect;
+  const unifiedMetrics = await getUnifiedReportMetrics({
+    dateFilter: filterType,
+    startDate: params.startDate || finalStart,
+    endDate: params.endDate || finalEnd,
+  });
 
   return (
     <ReportsClient 
@@ -214,16 +223,17 @@ export default async function ReportsPage({
       totalGross={totalGross}
       totalSubtotal={totalSubtotal}
       totalDispatchedAmount={totalDispatchedAmount}
-      returnedRevenue={totalReturnedRevenue}
+      returnedRevenue={returnedRevenue}
       cancelledRevenue={cancelledRevenue}
       deliveredRevenue={deliveredRevenue}
-      pendingDeliveryAmount={unifiedMetrics.courierProcessingValue || 0}
+      pendingDeliveryAmount={pendingDeliveryAmount}
       successRate={successRate}
       companyName={settings?.company_name || "MiBx"}
       systemName={settings?.system_name || "MiBx Dispatch"}
-      initialStartDate={startDateStr}
-      initialEndDate={endDateStr}
-      initialFilterType={params.filterType || "last_30_days"}
+      initialStartDate={finalStart}
+      initialEndDate={finalEnd}
+      initialFilterType={filterType}
+      unifiedMetrics={unifiedMetrics}
     />
   );
 }

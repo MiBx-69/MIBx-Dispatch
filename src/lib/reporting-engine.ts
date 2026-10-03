@@ -57,7 +57,7 @@ export async function getUnifiedReportMetrics(params: {
   search?: string;
 }): Promise<UnifiedReportMetrics> {
   const supabase = createServiceClient();
-  const dateFilter = params.dateFilter || "all";
+  const dateFilter = params.dateFilter || (params.startDate && params.endDate ? "custom" : "all");
   const { startDateStr, endDateStr } = resolveDateRange(dateFilter, params.startDate, params.endDate);
 
   const startMs = startDateStr ? new Date(startDateStr).getTime() : null;
@@ -88,20 +88,9 @@ export async function getUnifiedReportMetrics(params: {
     .select("id, order_id, consignment_id, order_total, refund_amount, return_type, returned_items, return_delivery_fee, status, is_verified, returned_at, orders!inner(shopify_order_name, customer_name, customer_phone, shopify_created_at)");
 
   if (startDateStr && endDateStr) {
-    // For orders, we want items that were either created or delivered within the date range.
-    ordersQuery = ordersQuery.or(`shopify_created_at.gte.${startDateStr},delivered_at.gte.${startDateStr}`)
-                             .or(`shopify_created_at.lte.${endDateStr},delivered_at.lte.${endDateStr}`);
-    
-    // For dispatches, filter by dispatched_at
+    ordersQuery = ordersQuery.gte("shopify_created_at", startDateStr).lte("shopify_created_at", endDateStr);
     dispatchesQuery = dispatchesQuery.gte("dispatched_at", startDateStr).lte("dispatched_at", endDateStr);
-    
-    // For returns, we want items returned in this period or associated with orders created in this period
-    // Supabase JS doesn't support complex joined ORs easily in a single string if they span tables, 
-    // so we'll just pull a slightly wider net and let the JS filter handle the rest, or just filter by returned_at.
-    // For safety and exact match with previous logic, we will fetch without date filter for returns if it's too complex,
-    // OR we can just use returned_at since 99% of the time, that's what matters.
-    // Let's optimize just the main tables which are huge.
-    // returnsQuery = returnsQuery.gte("returned_at", startDateStr).lte("returned_at", endDateStr);
+    returnsQuery = returnsQuery.gte("returned_at", startDateStr).lte("returned_at", endDateStr);
   }
 
   const [
@@ -145,7 +134,7 @@ export async function getUnifiedReportMetrics(params: {
   }
 
   // Date range filtering
-  const filteredOrders = allOrders.filter((o: any) => isInDateRange(o.shopify_created_at || o.delivered_at));
+  const filteredOrders = allOrders.filter((o: any) => isInDateRange(o.shopify_created_at));
   const filteredDispatches = allDispatches.filter((d: any) => isInDateRange(d.dispatched_at));
   const filteredReturns = allReturns.filter((r: any) => isInDateRange(r.returned_at || r.orders?.shopify_created_at));
 

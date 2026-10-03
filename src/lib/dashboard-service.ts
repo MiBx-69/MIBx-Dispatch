@@ -13,13 +13,8 @@ export async function getCachedDashboardData(dateFilter: string) {
   const supabase = createServiceClient();
   const unifiedMetrics = await getUnifiedReportMetrics({ dateFilter });
   const { startDateStr: resolvedStart, endDateStr: resolvedEnd } = resolveDateRange(dateFilter);
-  let startDateStr = resolvedStart || subDays(new Date(), 30).toISOString();
-  let endDateStr = resolvedEnd || new Date().toISOString();
-
-  const MIN_DATE = new Date("2026-08-31T18:00:00.000Z");
-  if (new Date(startDateStr) < MIN_DATE) {
-    startDateStr = MIN_DATE.toISOString();
-  }
+  const startDateStr = resolvedStart || subDays(new Date(), 30).toISOString();
+  const endDateStr = resolvedEnd || new Date().toISOString();
 
   const { data: recentMonthOrders } = await supabase
     .from("orders")
