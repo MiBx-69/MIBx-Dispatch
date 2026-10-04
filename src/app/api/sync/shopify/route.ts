@@ -219,7 +219,15 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
     if (fs === "in_progress" || fs === "partial" || fs === "partially_fulfilled") {
       orderPayload.internal_status = "preparing";
     } else if (fs === "fulfilled") {
-      orderPayload.internal_status = "dispatched";
+      // ONLY mark as dispatched if it was really dispatched via the Dispatch web app (has Pathao consignment)
+      if (existingOrder?.pathao_consignment_id) {
+        orderPayload.internal_status = "dispatched";
+      } else {
+        // Not dispatched from Dispatch app: keep existing status, or revert to pending if falsely marked dispatched
+        orderPayload.internal_status = existingOrder?.internal_status === "dispatched"
+          ? "pending"
+          : (existingOrder?.internal_status || "pending");
+      }
     } else if (existingOrder?.internal_status === "hold" && !isShopifyHold) {
       // Hold was released in Shopify
       orderPayload.internal_status = existingOrder.pathao_consignment_id ? "dispatched" : "pending";

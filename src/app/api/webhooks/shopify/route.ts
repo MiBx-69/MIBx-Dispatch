@@ -143,7 +143,7 @@ async function processShopifyWebhook(
             if (ord) {
               await supabase.from("returns").delete().eq("order_id", ord.id);
               if (ord.internal_status === "returned") {
-                const restoredStatus = ord.fulfillment_status === "fulfilled" || ord.pathao_consignment_id ? "dispatched" : "pending";
+                const restoredStatus = ord.pathao_consignment_id ? "dispatched" : "pending";
                 await supabase.from("orders").update({
                   internal_status: restoredStatus,
                   returned_at: null,
@@ -174,7 +174,7 @@ async function processShopifyWebhook(
             if (ord) {
               await supabase.from("returns").delete().eq("order_id", ord.id);
               if (ord.internal_status === "returned") {
-                const restoredStatus = ord.fulfillment_status === "fulfilled" || ord.pathao_consignment_id ? "dispatched" : "pending";
+                const restoredStatus = ord.pathao_consignment_id ? "dispatched" : "pending";
                 await supabase.from("orders").update({
                   internal_status: restoredStatus,
                   returned_at: null,
@@ -219,6 +219,11 @@ async function processShopifyWebhook(
           break;
         }
 
+        // Fulfilled on Shopify but not yet dispatched here -> auto-dispatch via Pathao
+        if (p.fulfillment_status === "fulfilled") {
+          await autoDispatchOnShopifyFulfilled(supabase, payload);
+        }
+
         // Check if this update represents a return/refund on Shopify
         if (
           p.financial_status === "refunded" ||
@@ -231,7 +236,7 @@ async function processShopifyWebhook(
             if (ord) {
               await supabase.from("returns").delete().eq("order_id", ord.id);
               if (ord.internal_status === "returned") {
-                const restoredStatus = ord.fulfillment_status === "fulfilled" || ord.pathao_consignment_id ? "dispatched" : "pending";
+                const restoredStatus = ord.pathao_consignment_id ? "dispatched" : "pending";
                 await supabase.from("orders").update({
                   internal_status: restoredStatus,
                   returned_at: null,
@@ -279,6 +284,7 @@ async function processShopifyWebhook(
 
       case "orders/fulfilled":
         await upsertOrder(supabase, payload);
+        await autoDispatchOnShopifyFulfilled(supabase, payload);
         break;
 
       default:
@@ -298,6 +304,65 @@ async function processShopifyWebhook(
       .update({ error: err.message })
       .eq("shopify_order_id", effectiveOrderId)
       .eq("source", "shopify");
+  }
+}
+
+/**
+ * When an order is marked fulfilled on Shopify but has no Pathao consignment,
+ * dispatch it through Pathao automatically. The dispatch flow marks the order
+ * as dispatched (moving it to the Dispatched section) and writes the consignment
+ * id + tracking URL to both this app and Shopify.
+ * The order is only ever marked "dispatched" by a successful dispatch.
+ */
+async function autoDispatchOnShopifyFulfilled(
+  supabase: any,
+  payload: ShopifyOrderWebhookPayload
+) {
+  const shopifyOrderId = payload.id || (payload as any).order_id;
+  if (!shopifyOrderId) return;
+
+  const { data: order } = await supabase
+    .from("orders")
+    .select("id, internal_status, pathao_consignment_id, pathao_delivery_status")
+    .eq("shopify_order_id", shopifyOrderId)
+    .maybeSingle();
+
+  if (!order || order.pathao_consignment_id) return;
+  if (["cancelled", "returned", "delivered", "hold"].includes(order.internal_status)) return;
+
+  // Atomic claim so concurrent webhooks (orders/updated + orders/fulfilled) can't double-dispatch
+  const { data: claimed } = await supabase
+    .from("orders")
+    .update({ pathao_delivery_status: "Dispatching" })
+    .eq("id", order.id)
+    .is("pathao_consignment_id", null)
+    .is("pathao_delivery_status", null)
+    .select("id");
+  if (!claimed || claimed.length === 0) return;
+
+  try {
+    const { executeDispatchOrder } = await import("@/app/api/dispatch/route");
+    const result = await executeDispatchOrder({ order_id: order.id });
+    await logOrderEvent(
+      order.id,
+      "AUTO_DISPATCHED",
+      `Auto-dispatched via Pathao after Shopify fulfillment (Consignment: ${result.consignment_id})`,
+      { consignment_id: result.consignment_id, trackingUrl: result.tracking_url }
+    );
+  } catch (err: any) {
+    console.error("[Shopify Webhook] Auto-dispatch failed:", err);
+    // Release the claim and keep the order out of Dispatched
+    await supabase
+      .from("orders")
+      .update({ pathao_delivery_status: null })
+      .eq("id", order.id)
+      .is("pathao_consignment_id", null);
+    await logOrderEvent(
+      order.id,
+      "AUTO_DISPATCH_FAILED",
+      `Auto-dispatch failed: ${err?.message || "unknown error"}`
+    ).catch(() => {});
+    throw err;
   }
 }
 
@@ -418,7 +483,15 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload, i
       if (fs === "in_progress" || fs === "partial" || fs === "partially_fulfilled") {
         orderPayload.internal_status = "preparing";
       } else if (fs === "fulfilled") {
-        orderPayload.internal_status = "dispatched";
+        // ONLY mark as dispatched if it has actually been dispatched from the Dispatch web app (has Pathao consignment)
+        if (existingOrder?.pathao_consignment_id) {
+          orderPayload.internal_status = "dispatched";
+        } else {
+          // Not dispatched via Dispatch app: keep existing status, or revert to pending if falsely marked dispatched
+          orderPayload.internal_status = existingOrder?.internal_status === "dispatched"
+            ? "pending"
+            : (existingOrder?.internal_status || "pending");
+        }
       } else if (existingOrder?.internal_status === "hold" && !isShopifyHold) {
         // Hold was released in Shopify
         orderPayload.internal_status = existingOrder.pathao_consignment_id ? "dispatched" : "pending";

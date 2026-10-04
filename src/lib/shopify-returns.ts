@@ -111,7 +111,7 @@ export async function handleShopifyRefundOrReturn({
 
     // If order was mistakenly marked returned, restore it to dispatched or pending
     if (order.internal_status === "returned") {
-      const restoredStatus = order.fulfillment_status === "fulfilled" || order.pathao_consignment_id ? "dispatched" : "pending";
+      const restoredStatus = order.pathao_consignment_id ? "dispatched" : "pending";
       await supabase.from("orders").update({
         internal_status: restoredStatus,
         returned_at: null,

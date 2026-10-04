@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
-import { X, Truck, MapPin, Package, DollarSign, Weight, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { X, Truck, MapPin, Package, DollarSign, Weight, AlertTriangle, CheckCircle2, RotateCw } from "lucide-react";
 import type { Order } from "@/types/database";
 import { analyzeCustomerRisk } from "@/lib/risk-analytics";
 import {
@@ -135,10 +135,14 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
   const isReliableCustomer = riskAnalysis.isSafe && (riskAnalysis.delivered >= 3 || riskAnalysis.total >= 3);
   const [confirmedRisk, setConfirmedRisk] = useState(false);
 
+  const isRedispatch = Boolean(order.pathao_consignment_id || order.internal_status === "dispatched");
+  const [forceOverride, setForceOverride] = useState(isRedispatch);
+  const [conflictError, setConflictError] = useState<string | null>(null);
+
   const set = (field: string, value: string) =>
     setForm((f) => ({ ...f, [field]: value }));
 
-  const handleDispatch = async () => {
+  const handleDispatch = async (overrideForce?: boolean) => {
     if (isHighRisk && !confirmedRisk) {
       toast.error("Please confirm risk verification before dispatching this customer!");
       return;
@@ -146,7 +150,9 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
     if (!form.store_id) { toast.error("Please select a pickup store"); return; }
     if (!form.recipient_phone) { toast.error("Recipient phone is required"); return; }
 
+    const useForce = overrideForce !== undefined ? overrideForce : forceOverride;
     setLoading(true);
+    setConflictError(null);
     try {
       const res = await fetch("/api/dispatch", {
         method: "POST",
@@ -163,18 +169,31 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
           item_quantity: parseInt(form.item_quantity),
           item_weight: parseFloat(form.item_weight),
           amount_to_collect: parseFloat(form.amount_to_collect),
+          force: useForce,
         }),
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Dispatch failed");
+      if (!res.ok) {
+        if (res.status === 409 || data.error?.includes("force=true") || data.error?.includes("already dispatched")) {
+          setConflictError(data.error);
+          setForceOverride(true);
+          return;
+        }
+        throw new Error(data.error || "Dispatch failed");
+      }
 
       recordStoreUsage(form.store_id, 1);
 
-      toast.success(`Dispatched! Consignment: ${data.consignment_id}`, {
-        description: `Delivery fee: ৳${data.delivery_fee}`,
-        duration: 5000,
-      });
+      toast.success(
+        isRedispatch
+          ? `Re-dispatched! New Consignment: ${data.consignment_id}`
+          : `Dispatched! Consignment: ${data.consignment_id}`,
+        {
+          description: `Delivery fee: ৳${data.delivery_fee}`,
+          duration: 5000,
+        }
+      );
       onSuccess();
     } catch (err: any) {
       toast.error(err.message || "Dispatch failed");
@@ -197,13 +216,31 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-zinc-800">
           <div>
-            <h2 className="text-base font-bold text-zinc-100">Dispatch Order</h2>
+            <h2 className="text-base font-bold text-zinc-100">{isRedispatch ? "Re-dispatch Order" : "Dispatch Order"}</h2>
             <p className="text-xs text-zinc-500">{order.shopify_order_name} · {order.customer_name}</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors">
             <X size={18} />
           </button>
         </div>
+
+        {/* Re-dispatch info banner */}
+        {isRedispatch && (
+          <div className="px-4 py-2 bg-indigo-500/10 border-b border-indigo-500/20 flex items-center justify-between text-xs text-indigo-300">
+            <div className="flex items-center gap-2">
+              <RotateCw size={13} className="text-indigo-400 shrink-0" />
+              <span>
+                {order.pathao_consignment_id
+                  ? <>Re-dispatching order (Active Consignment: <strong className="font-mono text-zinc-100">{order.pathao_consignment_id}</strong>)</>
+                  : <>Re-dispatching order to Pathao Courier</>
+                }
+              </span>
+            </div>
+            <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300">
+              Re-dispatch
+            </span>
+          </div>
+        )}
 
         {/* Order summary */}
         <div className="px-4 py-3 bg-zinc-800/50 border-b border-zinc-800">
@@ -343,6 +380,29 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
             </Field>
           </Section>
 
+          {/* Conflict Error with Force Re-dispatch Action */}
+          {conflictError && (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2">
+              <div className="flex items-start gap-2 text-xs text-amber-300">
+                <AlertTriangle size={15} className="shrink-0 text-amber-400 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-amber-200">Consignment Notice</p>
+                  <p className="text-amber-300/80 mt-0.5">{conflictError}</p>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleDispatch(true)}
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow"
+                >
+                  <RotateCw size={13} />
+                  Force Re-dispatch Now
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Payment */}
           <Section icon={<DollarSign size={14} />} title="Payment">
             <Field label="Amount to Collect (COD) ৳">
@@ -360,7 +420,7 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
         {/* Footer */}
         <div className="p-4 border-t border-zinc-800 bg-zinc-900">
           <button
-            onClick={handleDispatch}
+            onClick={() => handleDispatch()}
             disabled={loading || (isHighRisk && !confirmedRisk)}
             className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-sm transition-all
               ${
@@ -376,17 +436,17 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                Dispatching...
+                {isRedispatch ? "Re-dispatching..." : "Dispatching..."}
               </>
             ) : isHighRisk && !confirmedRisk ? (
               <>
                 <AlertTriangle size={16} className="text-red-400" />
-                Confirm Risk Verification to Dispatch
+                Confirm Risk Verification to {isRedispatch ? "Re-dispatch" : "Dispatch"}
               </>
             ) : (
               <>
-                <Truck size={16} />
-                Dispatch to Pathao
+                {isRedispatch ? <RotateCw size={16} /> : <Truck size={16} />}
+                {isRedispatch ? "Re-dispatch to Pathao" : "Dispatch to Pathao"}
               </>
             )}
           </button>

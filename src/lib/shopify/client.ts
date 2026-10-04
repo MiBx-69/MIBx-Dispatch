@@ -271,6 +271,23 @@ export async function updateShopifyFulfillmentTracking(params: {
   return fulfillment;
 }
 
+/** Returns existing (non-cancelled) fulfillments of a Shopify order, newest first. */
+export async function getShopifyOrderFulfillments(
+  shopifyOrderId: string | number
+): Promise<Array<{ id: string; status: string }>> {
+  const raw = String(shopifyOrderId);
+  const gid = raw.startsWith("gid://shopify/Order/") ? raw : `gid://shopify/Order/${raw}`;
+  const res = await shopifyFetch(
+    `query GetOrderFulfillments($id: ID!) { order(id: $id) { fulfillments { id status createdAt } } }`,
+    { id: gid }
+  );
+  const list: Array<{ id: string; status: string; createdAt?: string }> =
+    res.data?.order?.fulfillments || [];
+  return list
+    .filter((f) => f.status !== "CANCELLED" && f.status !== "ERROR" && f.status !== "FAILURE")
+    .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+}
+
 // ─── Create Fulfillment Event (Mark as Delivered / In Transit) ────────────────
 const CREATE_FULFILLMENT_EVENT_MUTATION = `
   mutation CreateFulfillmentEvent($fulfillmentEvent: FulfillmentEventInput!) {

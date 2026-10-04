@@ -61,7 +61,7 @@ export default async function OrdersPage({
       .neq("internal_status", "cancelled")
       .is("cancel_reason", null)
       .neq("financial_status", "voided")
-      .or("internal_status.eq.dispatched,fulfillment_status.eq.fulfilled");
+      .or("internal_status.eq.dispatched,pathao_consignment_id.not.is.null");
   } else if (params.status === "delivered") {
     query = query.eq("is_archived", false).eq("internal_status", "delivered");
     if (startDateStr && endDateStr) {
@@ -83,8 +83,7 @@ export default async function OrdersPage({
       .neq("internal_status", "cancelled")
       .is("cancel_reason", null)
       .neq("financial_status", "voided")
-      .is("pathao_consignment_id", null)
-      .or("fulfillment_status.neq.fulfilled,fulfillment_status.is.null");
+      .is("pathao_consignment_id", null);
   } else {
     query = query.eq("is_archived", false).eq("internal_status", params.status);
   }
@@ -137,7 +136,7 @@ export default async function OrdersPage({
     .neq("internal_status", "cancelled")
     .is("cancel_reason", null)
     .neq("financial_status", "voided")
-    .or("internal_status.eq.dispatched,fulfillment_status.eq.fulfilled");
+    .or("internal_status.eq.dispatched,pathao_consignment_id.not.is.null");
 
   // Accurate count of on hold orders (combines Shopify on_hold and local hold)
   const { count: onHoldCount } = await supabase

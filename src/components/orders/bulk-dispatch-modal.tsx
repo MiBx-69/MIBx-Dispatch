@@ -31,6 +31,7 @@ export function BulkDispatchModal({ orderIds, storeId, onClose, onSuccess }: Bul
     item_type: "2",
     item_weight: "0.5",
   });
+  const [forceRedispatch, setForceRedispatch] = useState(false);
 
   useEffect(() => {
     const cachedStores = localStorage.getItem("pathao_stores_cache");
@@ -86,6 +87,7 @@ export function BulkDispatchModal({ orderIds, storeId, onClose, onSuccess }: Bul
             delivery_type: parseInt(form.delivery_type),
             item_type: parseInt(form.item_type),
             item_weight: parseFloat(form.item_weight),
+            force: forceRedispatch,
           }
         }),
       });
@@ -219,6 +221,17 @@ export function BulkDispatchModal({ orderIds, storeId, onClose, onSuccess }: Bul
                   <input type="number" step="0.1" min="0.1" value={form.item_weight}
                     onChange={(e) => set("item_weight", e.target.value)} className={inputCls} />
                 </Field>
+                <div className="pt-2">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-300 select-none hover:text-white transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={forceRedispatch}
+                      onChange={(e) => setForceRedispatch(e.target.checked)}
+                      className="rounded border-zinc-700 bg-zinc-800 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                    />
+                    <span>Allow re-dispatch (override orders with active consignments)</span>
+                  </label>
+                </div>
               </Section>
             </div>
 

@@ -146,8 +146,7 @@ export function OrdersClient({
               (isCancelled ||
                 updatedOrder.is_archived ||
                 updatedOrder.internal_status === "dispatched" ||
-                !!updatedOrder.pathao_consignment_id ||
-                updatedOrder.fulfillment_status === "fulfilled")
+                !!updatedOrder.pathao_consignment_id)
             ) {
               return prev.filter((o) => o.id !== updatedOrder.id);
             }

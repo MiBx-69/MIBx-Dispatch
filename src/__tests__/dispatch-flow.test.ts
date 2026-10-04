@@ -89,6 +89,31 @@ describe("Dispatch Flow & Logic Tests", () => {
       expect(result.allowed).toBe(true);
     });
 
+    it("allows redispatching if prior consignment was Return Completed or Failed", () => {
+      const res1 = canDispatchOrder({
+        internal_status: "returned",
+        pathao_consignment_id: "PT99999999",
+        pathao_delivery_status: "Return Completed",
+      });
+      expect(res1.allowed).toBe(true);
+
+      const res2 = canDispatchOrder({
+        internal_status: "preparing",
+        pathao_consignment_id: "PT99999999",
+        pathao_delivery_status: "Failed",
+      });
+      expect(res2.allowed).toBe(true);
+    });
+
+    it("allows dispatching order if internal_status is dispatched but pathao_consignment_id is null (e.g. Order #1994)", () => {
+      const result = canDispatchOrder({
+        internal_status: "dispatched",
+        pathao_consignment_id: null,
+        pathao_delivery_status: null,
+      });
+      expect(result.allowed).toBe(true);
+    });
+
     it("allows force redispatch if caller explicitly specifies force=true", () => {
       const result = canDispatchOrder(
         {

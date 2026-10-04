@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
         .neq("internal_status", "cancelled")
         .is("cancel_reason", null)
         .neq("financial_status", "voided")
-        .or("internal_status.eq.dispatched,fulfillment_status.eq.fulfilled");
+        .or("internal_status.eq.dispatched,pathao_consignment_id.not.is.null");
     } else if (status === "pending") {
       query = query
         .eq("is_archived", false)
@@ -80,8 +80,7 @@ export async function GET(request: NextRequest) {
         .neq("internal_status", "cancelled")
         .is("cancel_reason", null)
         .neq("financial_status", "voided")
-        .is("pathao_consignment_id", null)
-        .or("fulfillment_status.neq.fulfilled,fulfillment_status.is.null");
+        .is("pathao_consignment_id", null);
     } else {
       query = query.eq("is_archived", false).eq("internal_status", status);
     }

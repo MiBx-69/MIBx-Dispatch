@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient, createClient } from "@/lib/supabase/server";
 import { createPathaoOrder, getPathaoCities, getPathaoZones } from "@/lib/pathao/client";
-import { createShopifyFulfillment, updateShopifyOrder } from "@/lib/shopify/client";
+import {
+  createShopifyFulfillment,
+  updateShopifyOrder,
+  updateShopifyFulfillmentTracking,
+  getShopifyOrderFulfillments,
+} from "@/lib/shopify/client";
 import { logOrderEvent } from "@/lib/audit";
 
 export interface DispatchParams {
@@ -68,10 +73,13 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
     throw error;
   }
 
-  // Prevent duplicate dispatch & double billing unless force flag is explicitly true
-  if ((order.internal_status === "dispatched" || order.pathao_consignment_id) && !force) {
+  // Prevent duplicate consignment creation unless force flag is explicitly true
+  const isTerminalStatus = ["Cancelled", "Return Completed", "Failed"].includes(order.pathao_delivery_status || "");
+  const hasActiveConsignment = Boolean(order.pathao_consignment_id && !isTerminalStatus);
+
+  if (hasActiveConsignment && !force) {
     const error: any = new Error(
-      `Order ${order.shopify_order_name || order.id} is already dispatched with consignment ${order.pathao_consignment_id || "assigned"}. Use force=true to override.`
+      `Order ${order.shopify_order_name || order.id} is already dispatched with active consignment ${order.pathao_consignment_id}. Use force=true to override.`
     );
     error.statusCode = 409;
     error.consignment_id = order.pathao_consignment_id;
@@ -193,6 +201,21 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
     } : null,
   };
 
+  // If re-dispatching an order that already had a consignment, supersede previous open dispatches
+  const isRedispatch = Boolean(order.pathao_consignment_id);
+  if (isRedispatch) {
+    await supabase
+      .from("dispatches")
+      .update({
+        is_cancelled: true,
+        cancel_reason: `Superseded by re-dispatch (New Consignment: ${consignment_id})`,
+        cancelled_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("order_id", order.id)
+      .not("pathao_order_status", "in", '("Delivered","Returned","Return","Paid Return","Return Completed","Cancelled")');
+  }
+
   await supabase.from("dispatches").insert({
     order_id: order.id,
     shopify_order_id: order.shopify_order_id,
@@ -231,15 +254,19 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
       pathao_consignment_id: consignment_id,
       pathao_tracking_url: trackingUrl,
       pathao_delivery_status: "Pending",
+      returned_at: null,
+      return_reason: null,
     })
     .eq("id", order.id);
 
   const fraudAuditSuffix = riskAnalysis ? ` | Fraud: ${riskAnalysis.ratingLabel} (${riskAnalysis.successRatio}% DLV)` : "";
   await logOrderEvent(
     order.id,
-    "DISPATCHED",
-    `Order dispatched via Pathao (Consignment: ${consignment_id})${fraudAuditSuffix}`,
-    { consignment_id, trackingUrl, fraud_summary: pathaoResponseWithFraud.fraud_summary }
+    isRedispatch ? "RE_DISPATCHED" : "DISPATCHED",
+    isRedispatch
+      ? `Order re-dispatched via Pathao (New Consignment: ${consignment_id}, Previous: ${order.pathao_consignment_id})${fraudAuditSuffix}`
+      : `Order dispatched via Pathao (Consignment: ${consignment_id})${fraudAuditSuffix}`,
+    { consignment_id, previous_consignment_id: order.pathao_consignment_id || null, trackingUrl, fraud_summary: pathaoResponseWithFraud.fraud_summary }
   );
 
   // 4. Create Shopify fulfillment with tracking
@@ -258,7 +285,22 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
         notifyCustomer: true,
       });
       shopifyFulfillmentId = fulfillment.id;
+    } else {
+      // Already fulfilled on Shopify (or re-dispatch): update tracking on the existing fulfillment
+      const existing = await getShopifyOrderFulfillments(order.shopify_order_id);
+      if (existing[0]) {
+        await updateShopifyFulfillmentTracking({
+          fulfillmentId: existing[0].id,
+          trackingCompany: "Pathao",
+          trackingNumber: consignment_id,
+          trackingUrl,
+          notifyCustomer: true,
+        });
+        shopifyFulfillmentId = existing[0].id;
+      }
+    }
 
+    if (shopifyFulfillmentId) {
       await supabase
         .from("orders")
         .update({ shopify_fulfillment_id: shopifyFulfillmentId })
