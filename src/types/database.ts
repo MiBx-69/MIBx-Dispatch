@@ -48,6 +48,8 @@ export type Database = {
           delivery_charge_outside_dhaka: number | null
           fraud_check_enabled: boolean | null
           fraudspy_api_key: string | null
+          mr_fraud_checker_enabled: boolean | null
+          mr_fraud_checker_api_key: string | null
           id: string
           notification_email: string | null
           pathao_base_url: string | null
@@ -94,6 +96,8 @@ export type Database = {
           delivery_charge_outside_dhaka?: number | null
           fraud_check_enabled?: boolean | null
           fraudspy_api_key?: string | null
+          mr_fraud_checker_enabled?: boolean | null
+          mr_fraud_checker_api_key?: string | null
           id?: string
           notification_email?: string | null
           pathao_base_url?: string | null
@@ -140,6 +144,8 @@ export type Database = {
           delivery_charge_outside_dhaka?: number | null
           fraud_check_enabled?: boolean | null
           fraudspy_api_key?: string | null
+          mr_fraud_checker_enabled?: boolean | null
+          mr_fraud_checker_api_key?: string | null
           id?: string
           notification_email?: string | null
           pathao_base_url?: string | null
@@ -367,6 +373,7 @@ export type Database = {
           customer_shopify_id: number | null
           financial_status: string | null
           fraud_data: Json | null
+          mr_fraud_data?: Json | null
           fraud_risk_level: string | null
           fraud_risk_score: number | null
           fraud_score: number | null
@@ -409,6 +416,7 @@ export type Database = {
           customer_shopify_id?: number | null
           financial_status?: string | null
           fraud_data?: Json | null
+          mr_fraud_data?: Json | null
           fraud_risk_level?: string | null
           fraud_risk_score?: number | null
           fraud_score?: number | null
@@ -451,6 +459,7 @@ export type Database = {
           customer_shopify_id?: number | null
           financial_status?: string | null
           fraud_data?: Json | null
+          mr_fraud_data?: Json | null
           fraud_risk_level?: string | null
           fraud_risk_score?: number | null
           fraud_score?: number | null

@@ -14,7 +14,8 @@
 - **External Integrations:**
   - **Shopify GraphQL Admin API** (2026-07 / 2024-07)
   - **Pathao Courier Merchant API** (`https://api-hermes.pathao.com`)
-  - **FraudSpy API** (Customer return/delivery score lookup & blacklist reports)
+  - **FraudSpy API** (Customer return/delivery score lookup & blacklist reports — `fraudspy.com.bd`)
+  - **Mr. Fraud Checker API** (Multi-courier aggregation across Steadfast, Pathao, REDX, CarryBee — `fraudchecker.ocs-api.top`)
   - **MIM SMS Gateway** (Bangla/English transactional SMS)
 
 ---

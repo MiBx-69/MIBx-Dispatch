@@ -111,7 +111,7 @@ export function DispatchesClient({
 
   const manualFraudCheck = async (orderId: string) => {
     setIsCheckingFraud(true);
-    const toastId = toast.loading("Checking FraudSpy...");
+    const toastId = toast.loading("Checking fraud status...");
     try {
       const res = await fetch(`/api/orders/${orderId}/fraud-check`, {
         method: "POST",
@@ -125,7 +125,8 @@ export function DispatchesClient({
       const updatedOrder = {
         fraud_status: data.fraud_status, 
         fraud_score: data.fraud_score,
-        fraud_data: data.data 
+        fraud_data: data.data,
+        mr_fraud_data: data.mrFraudData,
       };
 
       setViewFraudOrder((prev: any) => prev?.id === orderId ? { ...prev, ...updatedOrder } : prev);

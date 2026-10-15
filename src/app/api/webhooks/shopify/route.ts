@@ -518,24 +518,77 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload, i
 
   // Perform fraud check if this is a new order
   if (isNew) {
-    const { data: settings } = await supabase.from("app_settings").select("fraud_check_enabled, fraudspy_api_key").single();
+    const { data: settings } = await supabase.from("app_settings").select("fraud_check_enabled, fraudspy_api_key, mr_fraud_checker_enabled, mr_fraud_checker_api_key").single();
     
-    if (settings?.fraud_check_enabled) {
-      let riskScore = 0;
-      let riskLevel = 'safe';
-      let fraudData = null;
+    const isFraudSpyActive = Boolean(settings?.fraud_check_enabled && settings?.fraudspy_api_key);
+    const isMrFraudActive = Boolean(settings?.mr_fraud_checker_enabled && settings?.mr_fraud_checker_api_key);
 
-      if (settings.fraudspy_api_key && customerPhone) {
-        // Use FraudSpy API
-        const { searchFraud } = await import("@/lib/fraudspy");
-        const fraudRes = await searchFraud(customerPhone, settings.fraudspy_api_key);
-        
-        if (fraudRes && fraudRes.ok) {
-          fraudData = fraudRes;
+    let riskScore = 0;
+    let riskLevel = 'safe';
+    let fraudData: any = null;
+    let mrFraudData: any = null;
+
+    if ((isFraudSpyActive || isMrFraudActive) && customerPhone) {
+      // Run active providers in parallel
+      const { searchFraud } = await import("@/lib/fraudspy");
+      const { checkMrFraud } = await import("@/lib/mr-fraud-checker");
+
+      const [fraudSpyResult, mrFraudResult] = await Promise.allSettled([
+        isFraudSpyActive
+          ? searchFraud(customerPhone, settings.fraudspy_api_key!)
+          : Promise.resolve(null),
+        isMrFraudActive
+          ? checkMrFraud(customerPhone, settings.mr_fraud_checker_api_key!)
+          : Promise.resolve(null),
+      ]);
+
+        if (fraudSpyResult.status === "fulfilled" && fraudSpyResult.value?.ok) {
+          fraudData = fraudSpyResult.value;
+        }
+        if (mrFraudResult.status === "fulfilled" && mrFraudResult.value?.ok) {
+          mrFraudData = mrFraudResult.value;
+        }
+
+        if (fraudData || mrFraudData) {
           const { analyzeCustomerRisk } = await import("@/lib/risk-analytics");
-          const riskAnalysis = analyzeCustomerRisk(fraudRes);
-          riskLevel = riskAnalysis.riskLevel;
-          riskScore = riskAnalysis.riskScore;
+
+          let primaryAnalysis = fraudData?.ok
+            ? analyzeCustomerRisk(fraudData)
+            : analyzeCustomerRisk({
+                overall: {
+                  total: (mrFraudData as any).total_parcel,
+                  delivered: (mrFraudData as any).success_parcel,
+                  returned: (mrFraudData as any).cancel_parcel,
+                  success_ratio: (mrFraudData as any).total_parcel > 0
+                    ? Math.round(((mrFraudData as any).success_parcel / (mrFraudData as any).total_parcel) * 100)
+                    : 0,
+                },
+                fraud_reports: { count: 0, risk: { level: "low", score: 0 }, reports: [] },
+                ok: true,
+              });
+
+          // Blend both if both available
+          if (fraudData?.ok && mrFraudData) {
+            const mrAnalysis = analyzeCustomerRisk({
+              overall: {
+                total: (mrFraudData as any).total_parcel,
+                delivered: (mrFraudData as any).success_parcel,
+                returned: (mrFraudData as any).cancel_parcel,
+                success_ratio: (mrFraudData as any).total_parcel > 0
+                  ? Math.round(((mrFraudData as any).success_parcel / (mrFraudData as any).total_parcel) * 100)
+                  : 0,
+              },
+              fraud_reports: { count: 0, risk: { level: "low", score: 0 }, reports: [] },
+              ok: true,
+            });
+            const combinedScore = Math.round((primaryAnalysis.riskScore * 0.6) + (mrAnalysis.riskScore * 0.4));
+            if (combinedScore > primaryAnalysis.riskScore) {
+              primaryAnalysis = { ...primaryAnalysis, riskScore: combinedScore };
+            }
+          }
+
+          riskLevel = primaryAnalysis.riskLevel;
+          riskScore = primaryAnalysis.riskScore;
         }
       } else {
         // Internal heuristic if no API key provided
@@ -592,26 +645,42 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload, i
         fraud_score: riskScore,
         fraud_status: riskLevel,
         fraud_data: fraudData,
+        mr_fraud_data: mrFraudData,
         fraud_risk_score: riskScore,
         fraud_risk_level: riskLevel,
       }).eq("shopify_order_id", payload.id);
 
-      if (fraudData) {
-        // Update Shopify Customer and Order notes
-        const tag = `FraudSpy: ${riskLevel === 'fraud' ? 'High Risk' : riskLevel === 'risky' ? 'Medium Risk' : 'Safe'}`;
+      if (fraudData || mrFraudData) {
+        // Build combined provider tag
+        const providerParts: string[] = [];
+        if (fraudData) providerParts.push("FraudSpy");
+        if (mrFraudData) providerParts.push("MrFraud");
+        const providerTag = providerParts.join("+") || "FraudSpy";
+        const riskLabel = riskLevel === 'fraud' ? 'High Risk' : riskLevel === 'risky' ? 'Medium Risk' : 'Safe';
+        const tag = `${providerTag}: ${riskLabel}`;
+        const verifiedTag = providerParts.length > 1 ? "Fraud Checked" : `${providerTag} Verified`;
 
         const { updateShopifyCustomer, updateShopifyOrder } = await import("@/lib/shopify/client");
         const { buildFraudSpyCustomAttributes, buildFraudSpyCustomerNote } = await import("@/lib/fraud-checker");
         const { analyzeCustomerRisk } = await import("@/lib/risk-analytics");
-        const riskAnalysis = analyzeCustomerRisk(fraudData);
-        const customAttributes = buildFraudSpyCustomAttributes(fraudData, riskAnalysis);
-        const customerNote = buildFraudSpyCustomerNote(fraudData, riskAnalysis);
+        const riskAnalysis = fraudData ? analyzeCustomerRisk(fraudData) : null;
+        const customAttributes = fraudData && riskAnalysis ? buildFraudSpyCustomAttributes(fraudData, riskAnalysis) : [];
+        if ((mrFraudData as any)?.ok) {
+          customAttributes.push(
+            { key: "MrFraud Status", value: (mrFraudData as any).status },
+            { key: "MrFraud Delivered", value: (mrFraudData as any).success_parcel.toString() },
+            { key: "MrFraud Returned", value: (mrFraudData as any).cancel_parcel.toString() },
+          );
+        }
+        const customerNote = fraudData && riskAnalysis
+          ? buildFraudSpyCustomerNote(fraudData, riskAnalysis)
+          : `Score: ${riskScore}/100\nMrFraud: ${(mrFraudData as any)?.status} (Del: ${(mrFraudData as any)?.success_parcel}, Ret: ${(mrFraudData as any)?.cancel_parcel})`;
         
         if (orderPayload.customer_shopify_id) {
           try {
             const { data: customerData } = await supabase.from("customers").select("shopify_tags").eq("shopify_customer_id", orderPayload.customer_shopify_id).single();
             const existingTags = customerData?.shopify_tags || [];
-            const mergedTags = Array.from(new Set([...existingTags, tag, 'FraudSpy Verified']));
+            const mergedTags = Array.from(new Set([...existingTags, tag, verifiedTag]));
 
             await updateShopifyCustomer({
               id: `gid://shopify/Customer/${orderPayload.customer_shopify_id}`,
@@ -627,7 +696,7 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload, i
           try {
             await updateShopifyOrder({
               id: `gid://shopify/Order/${orderPayload.shopify_order_id}`,
-              tags: [tag, 'FraudSpy Verified'],
+              tags: [tag, verifiedTag],
               customAttributes: customAttributes,
             });
           } catch (e) {
@@ -636,10 +705,9 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload, i
         }
       }
     }
-  }
 
-  return isNew;
-}
+    return isNew;
+  }
 
 async function sendOrderConfirmationSMS(supabase: any, payload: ShopifyOrderWebhookPayload) {
   const { data: settings } = await supabase.from("app_settings").select("*").single();

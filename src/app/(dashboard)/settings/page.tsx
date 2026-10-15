@@ -52,7 +52,7 @@ export default async function SettingsPage() {
       href: "/settings/fraud",
       color: "text-amber-400",
       bg: "bg-amber-500/10",
-      isConfigured: !!settings?.fraudspy_api_key,
+      isConfigured: !!((settings?.fraud_check_enabled && settings?.fraudspy_api_key) || (settings?.mr_fraud_checker_enabled && settings?.mr_fraud_checker_api_key)),
     },
     {
       title: "SMS Notifications",

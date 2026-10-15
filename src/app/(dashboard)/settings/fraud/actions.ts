@@ -9,28 +9,31 @@ export async function updateFraudSettings(formData: FormData) {
 
   const fraud_check_enabled = formData.get("fraud_check_enabled") === "true";
   const fraudspy_api_key = formData.get("fraudspy_api_key") as string;
+  const mr_fraud_checker_enabled = formData.get("mr_fraud_checker_enabled") === "true";
+  const mr_fraud_checker_api_key = formData.get("mr_fraud_checker_api_key") as string;
 
   const supabase = createServiceClient();
   const { data: currentSettings } = await supabase.from("app_settings").select("id").single();
 
   try {
+    const payload = {
+      fraud_check_enabled,
+      fraudspy_api_key: fraudspy_api_key?.trim() || null,
+      mr_fraud_checker_enabled,
+      mr_fraud_checker_api_key: mr_fraud_checker_api_key?.trim() || null,
+    };
+
     if (currentSettings?.id) {
       const { error } = await supabase
         .from("app_settings")
-        .update({
-          fraud_check_enabled,
-          fraudspy_api_key
-        })
+        .update(payload)
         .eq("id", currentSettings.id);
       
       if (error) throw error;
     } else {
       const { error } = await supabase
         .from("app_settings")
-        .insert({
-          fraud_check_enabled,
-          fraudspy_api_key
-        });
+        .insert(payload);
         
       if (error) throw error;
     }
@@ -42,6 +45,7 @@ export async function updateFraudSettings(formData: FormData) {
     throw new Error(error.message || "Failed to update fraud settings");
   }
 }
+
 
 export async function connectSteadfastAction(formData: FormData) {
   await requireAdmin();

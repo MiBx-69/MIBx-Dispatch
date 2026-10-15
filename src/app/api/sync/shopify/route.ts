@@ -247,22 +247,78 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
 
   if (!existingOrder) {
     if (!settings) {
-      const { data } = await supabase.from("app_settings").select("fraud_check_enabled, fraudspy_api_key, sms_auto_order_enabled, sms_auto_order_template").single();
+      const { data } = await supabase.from("app_settings").select("fraud_check_enabled, fraudspy_api_key, mr_fraud_checker_enabled, mr_fraud_checker_api_key, sms_auto_order_enabled, sms_auto_order_template").single();
       settings = data;
     }
     
     let fraudRes: any = null;
-    if (settings?.fraud_check_enabled && settings.fraudspy_api_key && orderPayload.customer_phone) {
+    let mrFraudRes: any = null;
+    const isFraudSpyActive = Boolean(settings?.fraud_check_enabled && settings?.fraudspy_api_key);
+    const isMrFraudActive = Boolean(settings?.mr_fraud_checker_enabled && settings?.mr_fraud_checker_api_key);
+    const hasPhone = Boolean(orderPayload.customer_phone);
+    const canRunFraudSpy = isFraudSpyActive && hasPhone;
+    const canRunMrFraud = isMrFraudActive && hasPhone;
+
+    if (canRunFraudSpy || canRunMrFraud) {
       const { searchFraud } = await import("@/lib/fraudspy");
-      fraudRes = await searchFraud(orderPayload.customer_phone, settings.fraudspy_api_key);
-      
-      if (fraudRes && fraudRes.ok) {
-        orderPayload.fraud_data = fraudRes;
-        const { analyzeCustomerRisk } = await import("@/lib/risk-analytics");
-        const riskAnalysis = analyzeCustomerRisk(fraudRes);
-        orderPayload.fraud_status = riskAnalysis.riskLevel;
-        orderPayload.fraud_score = riskAnalysis.riskScore;
+      const { checkMrFraud } = await import("@/lib/mr-fraud-checker");
+
+      const [fraudSpyResult, mrFraudResult] = await Promise.allSettled([
+        canRunFraudSpy ? searchFraud(orderPayload.customer_phone!, settings.fraudspy_api_key!) : Promise.resolve(null),
+        canRunMrFraud ? checkMrFraud(orderPayload.customer_phone!, settings.mr_fraud_checker_api_key!) : Promise.resolve(null),
+      ]);
+
+      if (fraudSpyResult.status === "fulfilled" && fraudSpyResult.value?.ok) {
+        fraudRes = fraudSpyResult.value;
       }
+      if (mrFraudResult.status === "fulfilled" && mrFraudResult.value?.ok) {
+        mrFraudRes = mrFraudResult.value;
+      }
+
+      if (fraudRes || mrFraudRes) {
+        const { analyzeCustomerRisk } = await import("@/lib/risk-analytics");
+
+        let primaryAnalysis = fraudRes?.ok
+          ? analyzeCustomerRisk(fraudRes)
+          : analyzeCustomerRisk({
+              overall: {
+                total: mrFraudRes.total_parcel,
+                delivered: mrFraudRes.success_parcel,
+                returned: mrFraudRes.cancel_parcel,
+                success_ratio: mrFraudRes.total_parcel > 0
+                  ? Math.round((mrFraudRes.success_parcel / mrFraudRes.total_parcel) * 100) : 0,
+              },
+              fraud_reports: { count: 0, risk: { level: "low", score: 0 }, reports: [] },
+              ok: true,
+            });
+
+        if (fraudRes?.ok && mrFraudRes) {
+          const mrAnalysis = analyzeCustomerRisk({
+            overall: {
+              total: mrFraudRes.total_parcel,
+              delivered: mrFraudRes.success_parcel,
+              returned: mrFraudRes.cancel_parcel,
+              success_ratio: mrFraudRes.total_parcel > 0
+                ? Math.round((mrFraudRes.success_parcel / mrFraudRes.total_parcel) * 100) : 0,
+            },
+            fraud_reports: { count: 0, risk: { level: "low", score: 0 }, reports: [] },
+            ok: true,
+          });
+          const combinedScore = Math.round((primaryAnalysis.riskScore * 0.6) + (mrAnalysis.riskScore * 0.4));
+          if (combinedScore > primaryAnalysis.riskScore) {
+            primaryAnalysis = { ...primaryAnalysis, riskScore: combinedScore };
+          }
+        }
+
+        if (fraudRes?.ok) orderPayload.fraud_data = fraudRes;
+        orderPayload.fraud_status = primaryAnalysis.riskLevel;
+        orderPayload.fraud_score = primaryAnalysis.riskScore;
+      }
+    }
+
+    // Add mr_fraud_data to orderPayload before upsert
+    if (mrFraudRes?.ok) {
+      (orderPayload as any).mr_fraud_data = mrFraudRes;
     }
 
     const { data: upsertedOrder } = await supabase.from("orders").upsert(
@@ -273,8 +329,14 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
     // Fire off async side effects concurrently after saving to DB to avoid blocking
     const sideEffects = [];
     
-    if (fraudRes && fraudRes.ok) {
-      const tag = `FraudSpy: ${orderPayload.fraud_status === 'fraud' ? 'High Risk' : orderPayload.fraud_status === 'risky' ? 'Medium Risk' : 'Safe'}`;
+    if (fraudRes?.ok || mrFraudRes?.ok) {
+      const providerParts: string[] = [];
+      if (fraudRes?.ok) providerParts.push("FraudSpy");
+      if (mrFraudRes?.ok) providerParts.push("MrFraud");
+      const providerTag = providerParts.join("+") || "FraudSpy";
+      const riskLabel = orderPayload.fraud_status === 'fraud' ? 'High Risk' : orderPayload.fraud_status === 'risky' ? 'Medium Risk' : 'Safe';
+      const tag = `${providerTag}: ${riskLabel}`;
+      const verifiedTag = providerParts.length > 1 ? "Fraud Checked" : `${providerTag} Verified`;
 
       const { updateShopifyCustomer, updateShopifyOrder } = await import("@/lib/shopify/client");
       
@@ -283,7 +345,7 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
           supabase.from("customers").select("shopify_tags").eq("shopify_customer_id", orderPayload.customer_shopify_id).single()
             .then(async ({ data: customerData }: any) => {
               const existingTags = customerData?.shopify_tags || [];
-              const mergedTags = Array.from(new Set([...existingTags, tag, 'FraudSpy Verified']));
+              const mergedTags = Array.from(new Set([...existingTags, tag, verifiedTag]));
               await updateShopifyCustomer({
                 id: `gid://shopify/Customer/${orderPayload.customer_shopify_id}`,
                 tags: mergedTags
@@ -294,18 +356,29 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
       }
 
       if (orderPayload.shopify_order_id) {
+        const customAttributes: Array<{ key: string; value: string }> = [];
+        if (fraudRes?.ok) {
+          customAttributes.push(
+            { key: "FraudSpy Status", value: (orderPayload.fraud_status || "").toUpperCase() },
+            { key: "FraudSpy Score", value: (orderPayload.fraud_score || 0).toString() },
+            { key: "FraudSpy Delivered", value: (fraudRes.overall?.delivered || 0).toString() },
+            { key: "FraudSpy Returned", value: (fraudRes.overall?.returned || 0).toString() },
+            { key: "FraudSpy Success Ratio", value: `${fraudRes.overall?.success_ratio || 0}%` },
+            { key: "FraudSpy Last Checked", value: new Date().toLocaleString() }
+          );
+        }
+        if (mrFraudRes?.ok) {
+          customAttributes.push(
+            { key: "MrFraud Status", value: mrFraudRes.status },
+            { key: "MrFraud Delivered", value: mrFraudRes.success_parcel.toString() },
+            { key: "MrFraud Returned", value: mrFraudRes.cancel_parcel.toString() },
+          );
+        }
         sideEffects.push(
           updateShopifyOrder({
             id: `gid://shopify/Order/${orderPayload.shopify_order_id}`,
-            tags: [tag, 'FraudSpy Verified'],
-            customAttributes: [
-              { key: "FraudSpy Status", value: orderPayload.fraud_status.toUpperCase() },
-              { key: "FraudSpy Score", value: orderPayload.fraud_score.toString() },
-              { key: "FraudSpy Delivered", value: (fraudRes.overall?.delivered || 0).toString() },
-              { key: "FraudSpy Returned", value: (fraudRes.overall?.returned || 0).toString() },
-              { key: "FraudSpy Success Ratio", value: `${fraudRes.overall?.success_ratio || 0}%` },
-              { key: "FraudSpy Last Checked", value: new Date().toLocaleString() }
-            ]
+            tags: [tag, verifiedTag],
+            customAttributes,
           }).catch((e: any) => console.error("Failed to update Shopify order during sync:", e))
         );
       }
