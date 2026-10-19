@@ -11,6 +11,7 @@ import { DeliverModal } from "@/components/orders/deliver-modal";
 import { FraudDetailsModal } from "@/components/modals/fraud-details-modal";
 import { BulkImportDeliveriesModal } from "@/components/orders/bulk-import-deliveries-modal";
 import { DispatchesReportingHeader, DispatchStats } from "@/components/dispatches/dispatches-reporting-header";
+import { formatPathaoTrackingUrl } from "@/lib/pathao/client";
 
 const PATHAO_STATUS_COLORS: Record<string, string> = {
   "Pending": "bg-zinc-800 text-zinc-400 border-zinc-700",
@@ -314,7 +315,10 @@ export function DispatchesClient({
 
           const statusColor = PATHAO_STATUS_COLORS[friendlyStatus] || PATHAO_STATUS_COLORS["Pending"] || "bg-zinc-800 text-zinc-400 border-zinc-700";
 
-          const trackingUrl = `https://merchant.pathao.com/tracking?consignment_id=${d.consignment_id}&phone=${encodeURIComponent(d.recipient_phone || order?.customer_phone || "")}`;
+          const trackingUrl = formatPathaoTrackingUrl(
+            d.consignment_id,
+            d.recipient_phone || order?.customer_phone
+          );
 
           return (
             <div key={d.id} className={`p-4 rounded-xl border transition-all ${selected.has(d.id) ? 'border-indigo-500/50 bg-indigo-500/5' : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700'}`}>
@@ -339,8 +343,17 @@ export function DispatchesClient({
                     </span>
                   </div>
 
-                  <p className="text-xs text-indigo-400 mt-0.5 font-mono">
-                    {d.consignment_id}
+                  <p className="mt-0.5">
+                    <a
+                      href={trackingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-indigo-400 hover:text-indigo-300 hover:underline font-mono inline-flex items-center gap-1 transition-colors"
+                      title="Track parcel on Pathao"
+                    >
+                      {d.consignment_id}
+                      <ExternalLink size={10} className="opacity-70" />
+                    </a>
                   </p>
 
                   {/* Customer */}

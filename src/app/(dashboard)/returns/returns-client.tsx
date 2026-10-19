@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   RotateCcw, Package, Search, TrendingDown, Truck, CheckCircle, XCircle,
-  AlertCircle, Eye, ChevronDown, Clock, ArrowRight, Upload
+  AlertCircle, Eye, ChevronDown, Clock, ArrowRight, Upload, ExternalLink
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { formatPathaoTrackingUrl } from "@/lib/pathao/client";
 import type { Return } from "@/types/database";
 
 const STATUS_STYLES: Record<string, { label: string; class: string; icon: any }> = {
@@ -708,7 +709,20 @@ export function ReturnsClient({
                       </div>
                       <div>
                         <p className="text-zinc-500 mb-0.5">Consignment</p>
-                        <p className="text-zinc-200 font-medium font-mono">{ret.consignment_id || "—"}</p>
+                        {ret.consignment_id ? (
+                          <a
+                            href={formatPathaoTrackingUrl(ret.consignment_id, ret.orders?.customer_phone)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-indigo-400 hover:text-indigo-300 hover:underline font-medium font-mono inline-flex items-center gap-1 transition-colors"
+                            title="Track parcel on Pathao"
+                          >
+                            {ret.consignment_id}
+                            <ExternalLink size={10} className="opacity-70" />
+                          </a>
+                        ) : (
+                          <p className="text-zinc-200 font-medium font-mono">—</p>
+                        )}
                       </div>
                       <div>
                         <p className="text-zinc-500 mb-0.5">Return Date</p>

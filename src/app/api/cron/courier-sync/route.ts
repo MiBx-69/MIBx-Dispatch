@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { getPathaoOrderStatus } from "@/lib/pathao/client";
+import { getPathaoOrderStatus, formatPathaoTrackingUrl } from "@/lib/pathao/client";
 import { markShopifyOrderAsDelivered, markShopifyOrderAsPartialDelivered } from "@/lib/shopify/client";
 import { Receiver } from "@upstash/qstash";
 
@@ -70,6 +70,7 @@ async function handleCron(request: NextRequest) {
       .select(`
         id,
         consignment_id,
+        recipient_phone,
         amount_to_collect,
         pathao_order_status,
         order_id,
@@ -135,9 +136,10 @@ async function handleCron(request: NextRequest) {
         }
 
             const now = new Date().toISOString();
-            const orderId = (d.orders as any)?.id;
-            const shopifyOrderId = (d.orders as any)?.shopify_order_id;
-            const shopifyFulfillmentId = (d.orders as any)?.shopify_fulfillment_id;
+            const orderRecord = Array.isArray(d.orders) ? d.orders[0] : d.orders;
+            const orderId = (orderRecord as any)?.id;
+            const shopifyOrderId = (orderRecord as any)?.shopify_order_id;
+            const shopifyFulfillmentId = (orderRecord as any)?.shopify_fulfillment_id;
 
             // 1. Partial Delivery
             if (newStatus.includes("partial")) {
@@ -287,10 +289,15 @@ async function handleCron(request: NextRequest) {
               }
 
               if (orderId) {
+                const trackingUrl = formatPathaoTrackingUrl(
+                  d.consignment_id,
+                  (d as any).recipient_phone || (orderRecord as any)?.customer_phone
+                );
                 await supabase.from("orders").update({
                   pathao_delivery_status: label,
                   internal_status: "dispatched",
                   delivered_at: null,
+                  pathao_tracking_url: trackingUrl,
                 }).eq("id", orderId);
               }
               updatedCount++;

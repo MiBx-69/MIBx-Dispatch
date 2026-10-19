@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, ShieldAlert, ShieldCheck, Shield, AlertTriangle, Copy, Check, UserCheck, MessageSquareWarning, Zap } from "lucide-react";
+import { X, ShieldAlert, ShieldCheck, Shield, AlertTriangle, Copy, Check, UserCheck, MessageSquareWarning, Zap, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import type { Order } from "@/types/database";
 import { analyzeCustomerRisk } from "@/lib/risk-analytics";
+import { formatPathaoTrackingUrl } from "@/lib/pathao/client";
 
 interface FraudDetailsModalProps {
   order: Order | null;
@@ -203,6 +204,20 @@ export function FraudDetailsModal({ order, onClose, onCheckAgain, isChecking }: 
               <p className="text-xs text-zinc-400 mt-0.5">
                 Phone: {order.customer_phone || "N/A"} {order.customer_name ? `• ${order.customer_name}` : ""}
               </p>
+              {order.pathao_consignment_id && (
+                <div className="mt-1">
+                  <a
+                    href={order.pathao_tracking_url || formatPathaoTrackingUrl(order.pathao_consignment_id, order.customer_phone)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-indigo-400 hover:text-indigo-300 hover:underline inline-flex items-center gap-1 font-mono transition-colors"
+                    title="Track parcel on Pathao"
+                  >
+                    📦 Consignment: {order.pathao_consignment_id}
+                    <ExternalLink size={10} className="opacity-70" />
+                  </a>
+                </div>
+              )}
             </div>
             <div className="ml-auto text-right shrink-0">
                <div className="text-2xl font-black text-zinc-100">{analysis.riskScore}</div>

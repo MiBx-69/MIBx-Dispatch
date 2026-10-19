@@ -75,6 +75,7 @@ export function buildDispatchCustomAttributes({
 
 export function buildDispatchCombinedNote({
   consignmentId,
+  trackingUrl,
   existingNote,
 }: {
   consignmentId: string;
@@ -83,7 +84,9 @@ export function buildDispatchCombinedNote({
   fraudData?: any;
   riskAnalysis?: CustomerRiskAnalysis;
 }): string {
-  const dispatchHeader = `Pathao Consignment: ${consignmentId}`;
+  const dispatchHeader = trackingUrl
+    ? `Pathao Consignment: ${consignmentId}\nPathao Tracking: ${trackingUrl}`
+    : `Pathao Consignment: ${consignmentId}`;
 
   if (!existingNote || !existingNote.trim()) {
     return dispatchHeader;
@@ -94,9 +97,10 @@ export function buildDispatchCombinedNote({
     return existingNote;
   }
 
-  // Remove any previous Pathao Consignment references and duplicate [Order Note] headers
+  // Remove any previous Pathao Consignment/Tracking references and duplicate [Order Note] headers
   const cleanedExisting = existingNote
     .replace(/Pathao Consignment:\s*[^\n\r]+/gi, "")
+    .replace(/Pathao Tracking:\s*[^\n\r]+/gi, "")
     .replace(/\[Order Note\]/gi, "")
     .trim();
 

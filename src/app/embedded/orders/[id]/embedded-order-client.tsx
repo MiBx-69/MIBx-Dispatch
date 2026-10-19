@@ -9,6 +9,7 @@ import {
 import { StatusBadge } from "@/components/ui/status-badge";
 import { getOrderDisplayStatus } from "@/lib/order-status";
 import { DispatchModal } from "@/components/orders/dispatch-modal";
+import { formatPathaoTrackingUrl } from "@/lib/pathao/client";
 
 interface EmbeddedOrderClientProps {
   order: any;
@@ -22,6 +23,8 @@ export function EmbeddedOrderClient({ order: initialOrder, pathaoStoreId }: Embe
 
   const activeDispatch = order.dispatches?.find((d: any) => !d.is_cancelled) || order.dispatches?.[0];
   const consignmentId = activeDispatch?.consignment_id || order.pathao_consignment_id;
+  const trackingPhone = activeDispatch?.recipient_phone || order.customer_phone || order.shipping_address?.phone || "";
+  const trackingUrl = order.pathao_tracking_url || formatPathaoTrackingUrl(consignmentId, trackingPhone);
   const isDelivered = order.internal_status === "delivered" || Boolean(order.delivered_at) || getOrderDisplayStatus(order) === "delivered";
   const isReturned = order.internal_status === "returned" || Boolean(order.returned_at) || getOrderDisplayStatus(order) === "returned";
 
@@ -168,7 +171,7 @@ export function EmbeddedOrderClient({ order: initialOrder, pathaoStoreId }: Embe
               )}
               <div className="pt-2 flex gap-2">
                 <a
-                  href={`https://merchant.pathao.com/cn-tracking/${consignmentId}`}
+                  href={trackingUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex-1 py-2 rounded-xl bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-600/30 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"

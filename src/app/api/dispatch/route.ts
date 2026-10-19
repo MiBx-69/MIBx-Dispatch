@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient, createClient } from "@/lib/supabase/server";
-import { createPathaoOrder, getPathaoCities, getPathaoZones } from "@/lib/pathao/client";
+import { createPathaoOrder, getPathaoCities, getPathaoZones, formatPathaoTrackingUrl } from "@/lib/pathao/client";
 import {
   createShopifyFulfillment,
   updateShopifyOrder,
@@ -245,8 +245,8 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
   });
 
   // 3. Update order in DB with consignment ID and status
-  const recipientPhoneStr = recipient_phone || order.customer_phone || "";
-  const trackingUrl = `https://merchant.pathao.com/tracking?consignment_id=${consignment_id}&phone=${encodeURIComponent(recipientPhoneStr)}`;
+  const recipientPhoneStr = recipient_phone || order.customer_phone || (order.shipping_address as any)?.phone || "";
+  const trackingUrl = formatPathaoTrackingUrl(consignment_id, recipientPhoneStr);
   await supabase
     .from("orders")
     .update({

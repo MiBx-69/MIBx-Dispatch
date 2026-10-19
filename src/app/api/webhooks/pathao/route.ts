@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse, after } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { updateShopifyFulfillmentTracking, markShopifyOrderAsDelivered, markShopifyOrderAsPartialDelivered } from "@/lib/shopify/client";
+import { formatPathaoTrackingUrl } from "@/lib/pathao/client";
 
 export const dynamic = "force-dynamic";
 
@@ -381,6 +382,16 @@ async function processPathaoWebhook(payload: any, storedSecret: string, logId?: 
         }
       }
 
+      // Compute proper Pathao tracking URL with consignment ID and phone
+      const recipientPhone =
+        dispatch?.recipient_phone ||
+        order.customer_phone ||
+        (order.customers as any)?.phone ||
+        (order.shipping_address as any)?.phone ||
+        "";
+      const trackingUrl = formatPathaoTrackingUrl(consignmentId, recipientPhone);
+      orderUpdate.pathao_tracking_url = trackingUrl;
+
       // Update order internal status in database
       await supabase
         .from("orders")
@@ -395,7 +406,7 @@ async function processPathaoWebhook(payload: any, storedSecret: string, logId?: 
             fulfillmentId: activeFulfillmentId,
             trackingNumber: consignmentId,
             trackingCompany: "Pathao",
-            trackingUrl: `https://merchant.pathao.com/cn-tracking/${consignmentId}`,
+            trackingUrl,
             notifyCustomer: false,
           });
         } catch (shopifyErr) {
@@ -417,7 +428,7 @@ async function processPathaoWebhook(payload: any, storedSecret: string, logId?: 
         ) {
           const { data: appSettings } = await supabase.from("app_settings").select("*").single();
           if (appSettings?.sms_api_key && appSettings?.sms_master_enabled !== false) {
-            const phone = order?.customer_phone || order?.customers?.phone;
+            const phone = order?.customer_phone || order?.customers?.phone || recipientPhone;
             if (phone) {
               const { sendSMS } = await import("@/lib/sms");
               let template = null;
@@ -442,7 +453,7 @@ async function processPathaoWebhook(payload: any, storedSecret: string, logId?: 
                 let msg = template
                   .replace(/\{\{order_id\}\}/g, order.shopify_order_name || order.id)
                   .replace(/\{\{customer_name\}\}/g, customerName)
-                  .replace(/\{\{tracking_url\}\}/g, `https://merchant.pathao.com/cn-tracking/${consignmentId}`)
+                  .replace(/\{\{tracking_url\}\}/g, trackingUrl)
                   .replace(/\{\{consignment_id\}\}/g, consignmentId || "")
                   .replace(/\{\{total_price\}\}/g, total);
 

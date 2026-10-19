@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { getPathaoOrderStatus } from "@/lib/pathao/client";
+import { getPathaoOrderStatus, formatPathaoTrackingUrl } from "@/lib/pathao/client";
 import { markShopifyOrderAsDelivered, markShopifyOrderAsPartialDelivered } from "@/lib/shopify/client";
 
 export const dynamic = "force-dynamic";
@@ -303,10 +303,15 @@ export async function POST(request: NextRequest) {
           }
 
           if (orderId) {
+            const trackingUrl = formatPathaoTrackingUrl(
+              d.consignment_id,
+              d.recipient_phone || order?.customer_phone
+            );
             await supabase.from("orders").update({
               pathao_delivery_status: label,
               internal_status: "dispatched",
               delivered_at: null,
+              pathao_tracking_url: trackingUrl,
             }).eq("id", orderId);
           }
           updatedCount++;

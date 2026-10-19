@@ -327,7 +327,7 @@ export function SMSSettingsForm({ settings }: SMSSettingsFormProps) {
       .replace(/\{\{customer_name\}\}/g, "Rakibul Hasan")
       .replace(/\{\{order_id\}\}/g, "#1824")
       .replace(/\{\{total_price\}\}/g, "1450")
-      .replace(/\{\{tracking_url\}\}/g, "https://merchant.pathao.com/cn-tracking/DU110926854GH8")
+      .replace(/\{\{tracking_url\}\}/g, "https://merchant.pathao.com/tracking?consignment_id=DU110926854GH8&phone=%2B8801712200891")
       .replace(/\{\{consignment_id\}\}/g, "DU110926854GH8");
   };
 

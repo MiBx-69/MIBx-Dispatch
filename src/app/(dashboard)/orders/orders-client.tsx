@@ -5,10 +5,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   Search, Filter, ChevronLeft, ChevronRight, ChevronDown,
-  Truck, Package, X, CheckCircle, PauseCircle, AlertCircle, Archive, ArchiveRestore, Copy, Check, MessageSquare, ShieldCheck, List, Loader2, RotateCcw, UploadCloud
+  Truck, Package, X, CheckCircle, PauseCircle, AlertCircle, Archive, ArchiveRestore, Copy, Check, MessageSquare, ShieldCheck, List, Loader2, RotateCcw, UploadCloud, ExternalLink
 } from "lucide-react";
 import { StatusBadge, ShopifyFinancialBadge, ShopifyFulfillmentBadge } from "@/components/ui/status-badge";
 import { getOrderDisplayStatus } from "@/lib/order-status";
+import { formatPathaoTrackingUrl } from "@/lib/pathao/client";
 import { DispatchModal } from "@/components/orders/dispatch-modal";
 import { BulkDispatchModal } from "@/components/orders/bulk-dispatch-modal";
 import { SendSMSModal } from "@/components/orders/send-sms-modal";
@@ -977,14 +978,26 @@ export function OrdersClient({
                   )}
 
                   {/* Pathao consignment if dispatched */}
-                  {order.pathao_consignment_id && (
-                    <p className="text-xs text-indigo-400 mt-1">
-                      📦 {order.pathao_consignment_id}
-                      {order.pathao_delivery_status && (
-                        <span className="ml-2 text-zinc-500">· {order.pathao_delivery_status}</span>
-                      )}
-                    </p>
-                  )}
+                  {order.pathao_consignment_id && (() => {
+                    const trackingUrl = order.pathao_tracking_url || formatPathaoTrackingUrl(order.pathao_consignment_id, order.customer_phone);
+                    return (
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <a
+                          href={trackingUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-indigo-400 hover:text-indigo-300 hover:underline inline-flex items-center gap-1 font-mono transition-colors"
+                          title="Track parcel on Pathao"
+                        >
+                          📦 {order.pathao_consignment_id}
+                          <ExternalLink size={10} className="opacity-70" />
+                        </a>
+                        {order.pathao_delivery_status && (
+                          <span className="text-xs text-zinc-500 font-sans">· {order.pathao_delivery_status}</span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Amount */}
@@ -1033,6 +1046,18 @@ export function OrdersClient({
                   <button onClick={() => setViewFraudOrder(order)} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700 hover:text-white transition-colors whitespace-nowrap">
                     <ShieldCheck size={11} /> Check
                   </button>
+                )}
+
+                {order.pathao_consignment_id && (
+                  <a
+                    href={order.pathao_tracking_url || formatPathaoTrackingUrl(order.pathao_consignment_id, order.customer_phone)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md bg-indigo-600/15 text-indigo-400 border border-indigo-600/25 hover:bg-indigo-600/25 transition-colors whitespace-nowrap"
+                    title="Track parcel live on Pathao"
+                  >
+                    <ExternalLink size={11} /> Track
+                  </a>
                 )}
 
                 {(() => {

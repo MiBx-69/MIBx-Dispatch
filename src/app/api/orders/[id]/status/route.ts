@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient, createClient } from "@/lib/supabase/server";
 import type { OrderStatus } from "@/types/database";
+import { formatPathaoTrackingUrl } from "@/lib/pathao/client";
 
 export async function PATCH(
   request: NextRequest,
@@ -103,9 +104,10 @@ export async function PATCH(
 
           if (template) {
             const customerName = order.customers?.name || "Customer";
-            const trackingUrl = order.pathao_consignment_id
-              ? `https://merchant.pathao.com/cn-tracking/${order.pathao_consignment_id}`
-              : "";
+            const trackingUrl = formatPathaoTrackingUrl(
+              order.pathao_consignment_id,
+              phone || order.customer_phone
+            );
             const total = order.total_price !== undefined && order.total_price !== null ? order.total_price.toString() : "0";
 
             const msg = template
