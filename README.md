@@ -2,492 +2,279 @@
 
 # 🚀 MiBx Dispatch
 
-### Shopify → Fraud Intelligence → Bulk Dispatch → Courier Tracking → SMS → Returns → Finance → Reporting
+### The operations backbone for Shopify COD commerce in Bangladesh
 
-<p>
-  <strong>Production-focused e-commerce dispatch & operations platform built to eliminate repetitive logistics work.</strong>
-</p>
+**Shopify → Fraud Intelligence → Bulk Dispatch → Courier Tracking → SMS → Returns → Finance → Reporting**
 
-<p>
-  <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js" alt="Next.js" /></a>
-  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" /></a>
-  <a href="https://supabase.com/"><img src="https://img.shields.io/badge/Supabase-PostgreSQL%20%7C%20Auth-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase" /></a>
-  <a href="https://upstash.com/"><img src="https://img.shields.io/badge/Upstash-Redis%20%7C%20QStash-00E699?style=for-the-badge&logo=upstash&logoColor=white" alt="Upstash" /></a>
-  <a href="https://tailwindcss.com/"><img src="https://img.shields.io/badge/Tailwind%20CSS-4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS" /></a>
-</p>
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL%20%7C%20Auth%20%7C%20RLS-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com/)
+[![Upstash](https://img.shields.io/badge/Upstash-Redis%20%7C%20QStash-00E699?style=for-the-badge&logo=upstash&logoColor=white)](https://upstash.com/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
+[![Vitest](https://img.shields.io/badge/Tested%20with-Vitest-6E9F18?style=for-the-badge&logo=vitest&logoColor=white)](https://vitest.dev/)
 
-<p>
-  <img src="https://img.shields.io/badge/Domain-E--commerce%20Operations-111827?style=flat-square" />
-  <img src="https://img.shields.io/badge/Architecture-Event--Driven-111827?style=flat-square" />
-  <img src="https://img.shields.io/badge/UI-Desktop%20%2B%20Mobile--First-111827?style=flat-square" />
-</p>
+[**Live demo**](https://mibxdispatch.vercel.app) · [**Architecture**](./ARCHITECTURE.md) · [**Security policy**](./SECURITY.md)
 
 </div>
 
 ---
 
-## 🎯 What is MiBx Dispatch?
+## Overview
 
-**MiBx Dispatch** is a custom Shopify operations platform built around a real e-commerce problem: a growing order volume was being processed with repetitive manual dispatch, delivery, return, reporting, and customer-communication work.
+**MiBx Dispatch** is a production e-commerce operations platform that replaces a day of repetitive logistics work with a single dashboard. It connects **Shopify**, the **Pathao Courier** API, **fraud-intelligence** services and an **SMS gateway** into one automated order lifecycle, and gives the team live KPIs, finance tracking and one-click reporting on top.
 
-Instead of treating dispatch as a simple order form, the system connects the entire operational chain into one workflow:
+It was built for a real business problem: a growing Shopify store with 50–100 Cash-on-Delivery orders a day, where dispatching, status-checking, customer messaging and month-end reporting were all done by hand.
 
-> **Shopify Order → Verification → Fraud Intelligence → Operational Review → Bulk Dispatch → Courier Events → Customer SMS → Delivery / Return → Finance → KPI Reporting**
+```mermaid
+flowchart LR
+    A[Shopify order] --> B[Verification & fraud check]
+    B -->|safe| C[Bulk dispatch via Pathao]
+    B -->|risky| H[Hold for review]
+    C --> D[Courier webhooks + hourly sync]
+    D --> E[Customer SMS]
+    D --> F{Outcome}
+    F -->|delivered| G[Finance & KPI reporting]
+    F -->|returned / partial| R[Returns ledger] --> G
+```
 
-The project combines **business-process automation, API integrations, warehouse-oriented UX, real-time operational data, and secure backend workflows** in a single application.
+## Highlights
 
----
-
-## 💼 The Business Problem
-
-Before MiBx Dispatch, key daily operations depended heavily on manual work:
-
-| Operational problem | What was built |
+| | |
 |---|---|
-| 50–100 orders/day required repetitive manual dispatch entry | **One-click bulk dispatch workflow** for high-volume order processing |
-| Large batches of orders took significant operator time | **Batch processing** capable of dispatching **1,000+ orders within seconds** under the designed workflow |
-| Month-end reporting required manual collection and preparation | **Daily + monthly reporting with live KPI visibility** |
-| Delivery and return statuses had to be checked and updated manually | **Courier webhook/event synchronization** with automated status updates |
-| Customer updates were repetitive and easy to miss | **Automated SMS communication pipelines** for operational events |
-| COD/fraud checks required manual investigation | **Customer history + fraud intelligence workflow** with risk tagging |
-| Operational data lived across multiple systems | **Centralized dispatch, finance, reporting, customer and courier operations** |
+| ⚡ **Bulk dispatch** | Select many orders, validate, and create Pathao consignments in one action, with duplicate-consignment protection |
+| 🛡️ **Fraud intelligence** | Customer and phone history checked through FraudSpy / Mr. Fraud Checker; risky orders are tagged and held before COD dispatch |
+| 🔄 **Two-way courier sync** | Signed Pathao webhooks plus an hourly QStash reconciliation job keep order state accurate, including partial deliveries and paid returns |
+| 💬 **Automated SMS** | Dispatch and delivery notifications with editable Bangla/English templates through the MIM SMS gateway |
+| 📊 **Live KPIs and reports** | Daily and monthly reporting, cached dashboard metrics, CSV and PDF export |
+| 💰 **Finance ledger** | Income and expense transactions with COD collection and reconciliation views |
+| 📱 **Warehouse-ready UI** | Responsive, touch-friendly interface for desktop managers and mobile warehouse staff |
+| 🧩 **Shopify embedded view** | Order detail pages that render inside the Shopify admin |
 
-### 📈 Result
+> **Impact (internal estimate):** the system automates 15+ operational pain points and cut targeted manual workload by roughly 45%. The batch pipeline is designed for bursts of 1,000+ orders; real throughput is bounded by courier API limits.
 
-MiBx Dispatch was designed around actual day-to-day business requirements and automated **15+ operational pain points**, reducing repetitive/manual workload by approximately **45%** across the targeted workflows.
-
----
-
-## ⚡ Flagship Capability: Bulk Dispatch
-
-The most important workflow in the system is the **bulk dispatch engine**.
-
-Instead of entering courier information order-by-order, operators can:
-
-```text
-Select eligible orders
-        ↓
-Run validation / operational checks
-        ↓
-Bulk dispatch request
-        ↓
-Courier API integration
-        ↓
-Waybill / dispatch confirmation
-        ↓
-Persist status + tracking information
-        ↓
-Trigger customer communication
-```
-
-### Why it matters
-
-- Designed for **high-volume order operations**
-- Removes repetitive manual data entry
-- Keeps the order lifecycle connected to courier events
-- Makes warehouse dispatch a **batch operation instead of a one-order-at-a-time task**
-- Supports large operational bursts, with the current README documenting **1,000+ order dispatch processing within seconds**
-
----
-
-## 🧠 Fraud & Customer Intelligence
-
-MiBx Dispatch does more than move orders between systems.
-
-The platform can evaluate customer/order history through an external fraud-checking workflow and use the result to support operational decisions.
-
-Typical flow:
-
-```text
-Shopify Order
-    ↓
-Customer / Phone History
-    ↓
-Fraud Intelligence API
-    ↓
-Risk Assessment
-    ↓
-Shopify / Dispatch Tags
-    ↓
-Safe → Dispatch Queue
-High Risk → Review / Hold
-```
-
-This reduces the amount of manual investigation required before COD fulfillment and gives operators a faster view of customer history, returns, delivery behavior, and order risk.
-
----
-
-## 📊 Operations & Reporting
-
-The reporting layer was built to replace manual month-end preparation with **continuous operational visibility**.
-
-### Dashboard & KPI visibility
-
-- Daily order volume
-- Sales and revenue KPIs
-- Dispatch performance
-- Delivery performance
-- Return activity
-- COD / collection information
-- Courier operational metrics
-- Financial reconciliation data
-
-### Reporting
-
-- Daily performance reporting
-- Monthly business reporting
-- Operational filtering
-- Detailed report views
-- CSV / PDF export workflows
-
-The goal is not only to store data—it is to turn operational data into **actionable management information**.
-
----
-
-## 🔄 Delivery, Returns & Courier Synchronization
-
-MiBx Dispatch connects internal order records with courier-side events.
-
-```text
-Courier Event
-     ↓
-Webhook / Sync Endpoint
-     ↓
-Validate Event
-     ↓
-Map Courier Status
-     ↓
-Update Dispatch Record
-     ↓
-Update Shopify / Internal State
-     ↓
-Trigger Relevant Notification
-```
-
-This supports a more reliable lifecycle for:
-
-**Pending → Dispatched → In Transit → Out for Delivery → Delivered / Returned**
-
-The architecture also provides a foundation for integrating additional courier providers beyond the current implementation.
-
----
-
-## 📱 Built for Warehouse Operations
-
-Warehouse teams do not always work from a desktop workstation. MiBx Dispatch therefore includes a **mobile-first operational interface** with touch-friendly navigation and workflows designed around quick actions.
+## Screenshots
 
 ### Desktop
 
-<div align="center">
-  <table>
-    <tr>
-      <td align="center"><b>Dashboard & Analytics</b><br><i>Live KPIs & operations overview</i></td>
-      <td align="center"><b>Orders & Dispatching</b><br><i>Filtering, bulk actions & dispatch</i></td>
-      <td align="center"><b>Dispatches & Returns</b><br><i>Tracking & return operations</i></td>
-    </tr>
-    <tr>
-      <td><img src="./public/demo-data/dashboard.png" alt="MiBx Dispatch Dashboard" width="300" /></td>
-      <td><img src="./public/demo-data/orders.png" alt="MiBx Dispatch Orders" width="300" /></td>
-      <td><img src="./public/demo-data/dispatches.png" alt="MiBx Dispatch Dispatches" width="300" /></td>
-    </tr>
-    <tr>
-      <td align="center"><b>Finance & Reconciliation</b><br><i>Cashflow & collection tracking</i></td>
-      <td align="center"><b>Reporting</b><br><i>Operational reports & exports</i></td>
-      <td align="center"><b>Settings & Integrations</b><br><i>System configuration & rules</i></td>
-    </tr>
-    <tr>
-      <td><img src="./public/demo-data/finance.png" alt="MiBx Dispatch Finance" width="300" /></td>
-      <td><img src="./public/demo-data/report.png" alt="MiBx Dispatch Reports" width="300" /></td>
-      <td><img src="./public/demo-data/settings.png" alt="MiBx Dispatch Settings" width="300" /></td>
-    </tr>
-  </table>
-</div>
+| Dashboard & analytics | Orders & dispatching | Dispatches & returns |
+|:--:|:--:|:--:|
+| ![Dashboard](./public/demo-data/dashboard.png) | ![Orders](./public/demo-data/orders.png) | ![Dispatches](./public/demo-data/dispatches.png) |
+| **Finance & reconciliation** | **Reporting** | **Settings & integrations** |
+| ![Finance](./public/demo-data/finance.png) | ![Reports](./public/demo-data/report.png) | ![Settings](./public/demo-data/settings.png) |
 
-### Mobile / Warehouse UI
+### Mobile / warehouse
 
-<div align="center">
-  <table>
-    <tr>
-      <td align="center"><b>Dashboard</b></td>
-      <td align="center"><b>Orders</b></td>
-      <td align="center"><b>Reports</b></td>
-      <td align="center"><b>Settings</b></td>
-    </tr>
-    <tr>
-      <td><img src="./public/demo-data/mobile-dashboard.png" alt="Mobile Dashboard" width="200" /></td>
-      <td><img src="./public/demo-data/mobile-orders.png" alt="Mobile Orders" width="200" /></td>
-      <td><img src="./public/demo-data/mobile-report.png" alt="Mobile Reports" width="200" /></td>
-      <td><img src="./public/demo-data/mobil-setting.png" alt="Mobile Settings" width="200" /></td>
-    </tr>
-  </table>
-</div>
+| Dashboard | Orders | Reports | Settings |
+|:--:|:--:|:--:|:--:|
+| ![Mobile dashboard](./public/demo-data/mobile-dashboard.png) | ![Mobile orders](./public/demo-data/mobile-orders.png) | ![Mobile reports](./public/demo-data/mobile-report.png) | ![Mobile settings](./public/demo-data/mobil-setting.png) |
 
----
+## How it works
 
-## 🏗️ System Architecture
+### 1. Order ingestion
+Shopify webhooks (`orders/create`, `orders/updated`, `orders/cancelled`, `orders/paid`, `refunds/create`, `returns/*`) hit `/api/webhooks/shopify`. Each request is verified with **HMAC-SHA256** before the order and customer are upserted into PostgreSQL. If fraud checking is enabled, the customer is scored and the Shopify order is tagged automatically.
 
-```text
-                         ┌──────────────────────┐
-                         │       Shopify        │
-                         │ Orders + Webhooks    │
-                         └──────────┬───────────┘
-                                    │
-                                    ▼
-                    ┌─────────────────────────────┐
-                    │      MiBx Dispatch Core    │
-                    │   Next.js App + Server Ops  │
-                    └──────────────┬──────────────┘
-                                   │
-             ┌─────────────────────┼─────────────────────┐
-             │                     │                     │
-             ▼                     ▼                     ▼
-      ┌─────────────┐      ┌───────────────┐      ┌─────────────┐
-      │ Fraud /     │      │   Supabase    │      │   Upstash   │
-      │ Customer    │      │ PostgreSQL +  │      │ Redis /     │
-      │ Intelligence│      │ Auth + RLS    │      │ QStash      │
-      └──────┬──────┘      └───────┬───────┘      └──────┬──────┘
-             │                     │                     │
-             └─────────────────────┼─────────────────────┘
-                                   │
-                                   ▼
-                        ┌─────────────────────┐
-                        │ Dispatch / Workflow │
-                        │ Automation Layer    │
-                        └──────────┬──────────┘
-                                   │
-                 ┌─────────────────┼─────────────────┐
-                 │                 │                 │
-                 ▼                 ▼                 ▼
-          ┌─────────────┐   ┌────────────┐   ┌─────────────┐
-          │ Courier API │   │ SMS / Mail │   │ Reporting & │
-          │ + Webhooks  │   │ Pipelines  │   │ Finance     │
-          └─────────────┘   └────────────┘   └─────────────┘
+### 2. Dispatch
+Staff pick eligible orders and confirm the Pathao store and delivery mode. For each order the platform:
+
+1. Checks for an existing active consignment (returns `409 Conflict` unless explicitly forced)
+2. Creates the Pathao consignment and delivery fee
+3. Writes the `dispatches` record and moves the order to `dispatched`
+4. Creates the Shopify fulfillment with tracking number and URL
+5. Tags the Shopify order and sends the customer an SMS with the tracking link and COD amount
+
+### 3. Delivery and return reconciliation
+Pathao posts status events (`Delivered`, `Partial Delivered`, `Returned`, `Paid Return`, `Cancelled`, `Out for Delivery`) to `/api/webhooks/pathao`. An **hourly QStash job** (`/api/cron/courier-sync`) reconciles in-flight parcels in case a webhook is missed.
+
+| Courier event | System reaction |
+|---|---|
+| Delivered | `delivered_at` set, Shopify fulfillment marked delivered, SMS sent |
+| Partial delivery | `returns` record created, line items and totals adjusted |
+| Returned / Paid return | `returned_at` set, return fee tracked, order moved to returned |
+
+Every transition purges the relevant Redis dashboard cache keys so KPIs stay fresh.
+
+## Architecture
+
+```mermaid
+flowchart TB
+    SH[Shopify<br/>Webhooks + Admin GraphQL] --> APP
+    PA[Pathao Courier<br/>API + Webhooks] <--> APP
+    subgraph APP[Next.js 16 app on Vercel]
+        UI[Dashboard UI<br/>desktop + mobile]
+        API[Route handlers<br/>and server actions]
+        GUARD[Auth guards<br/>requireAuth / requireAdmin]
+    end
+    APP <--> SB[(Supabase<br/>PostgreSQL + Auth + RLS)]
+    APP <--> RD[(Upstash Redis<br/>cache + rate limiting)]
+    QS[Upstash QStash<br/>scheduled jobs] --> APP
+    APP --> FR[FraudSpy /<br/>Mr. Fraud Checker]
+    APP --> SMS[MIM SMS gateway]
+    APP --> MAIL[SMTP email]
 ```
 
-### Architecture principles
+**Design principles**
 
-- **Server-side integrations** for sensitive credentials and privileged operations
-- **Event-driven workflows** for webhooks and courier events
-- **PostgreSQL-backed operational state** for orders, dispatches and reporting
-- **Background processing** through QStash for asynchronous jobs
-- **Redis caching / rate-limiting** for high-frequency operations
-- **Responsive application layer** for desktop management and warehouse mobile usage
+- **Server-side integrations.** Courier, fraud, SMS and Shopify credentials never reach the browser.
+- **Event-driven.** Webhooks drive state changes; scheduled reconciliation is the safety net.
+- **Postgres as the source of truth** for orders, dispatches, returns, events and finance.
+- **Fail closed.** Webhook and cron endpoints reject requests when their secret is missing or invalid.
 
----
+### Data model
 
-## 🔐 Security Engineering
+| Table | Purpose |
+|---|---|
+| `profiles` | Users mapped to Supabase Auth, with `admin` / `staff` roles |
+| `app_settings` | Global configuration, store settings, delivery defaults, SMS templates |
+| `customers` | Denormalized Shopify customers with order totals and preferences |
+| `orders` | Central order table with Shopify metadata, line items, financial and internal status |
+| `dispatches` | Pathao consignments, fees, status timeline, dispatcher attribution |
+| `returns` | Returns, partial rejections, restocking status, return charges |
+| `order_events` | Audit trail of every lifecycle event |
+| `webhook_logs` / `sync_logs` | Telemetry for inbound webhooks and background syncs |
+| `shopify_orders`, `shopify_products`, `shopify_collections`, `shopify_line_items` | Reporting tables for sales analytics |
+| `transactions` | Income and expense ledger |
 
-Security is part of the application design rather than an afterthought.
+## Security
 
-### Database security
+Security was treated as a feature and then verified with a full hardening audit.
 
-- **Supabase Row Level Security (RLS)** is used to control data access at the database layer.
-- Authenticated users can be restricted to authorized organization / tenant data.
+- **Authentication and RBAC.** Supabase Auth sessions (`httpOnly`, `secure`, `sameSite`) refreshed in middleware. Privileged server actions pass through a central guard (`requireAuth()` / `requireAdmin()`); team invitations, settings and financial deletions are admin-only.
+- **Webhook integrity.** Shopify HMAC-SHA256 verification; Pathao secret verification with `crypto.timingSafeEqual`; QStash signature verification on cron endpoints.
+- **Fail-closed endpoints.** No hardcoded fallbacks; missing secrets mean `401`.
+- **Abuse protection.** Upstash Redis rate limiting on login; open-redirect protection on `redirectTo`; PostgREST filter sanitization for search input.
+- **Browser hardening.** HSTS (preload), `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, COOP, and a CSP `frame-ancestors` policy tailored to the Shopify embedded admin.
+- **Secrets hygiene.** `.env*` is git-ignored (only `.env.example` is tracked), production credentials are scoped to the Production environment on Vercel, and `npm audit` reports zero known vulnerabilities.
 
-### Server-side secret handling
+Found a vulnerability? Please follow the [security policy](./SECURITY.md).
 
-Sensitive operations stay on the server, including:
+## Engineering quality
 
-- Courier API credentials
-- Fraud API credentials
-- SMS provider credentials
-- Service-role database access
-- Webhook verification secrets
+- **TypeScript** end to end; `tsc --noEmit` passes with zero errors
+- **Vitest** suite covering dispatch flows, duplicate-consignment protection, status transitions and dates, SMS templating, redirect sanitization, search sanitization and timing-safe secret checks
+- **GitHub Actions CI**: type-check, tests, production build and high-severity dependency audit on every push
+- **Performance work**: PDF libraries loaded on demand (about 400 KB removed from the initial Reports bundle), composite indexes on `orders`, `dispatches` and `webhook_logs`, Redis-cached dashboard metrics, explicit function timeouts for long sync jobs
+- **51 routes** building cleanly with Turbopack
 
-### Webhook integrity
+## Tech stack
 
-Incoming integrations are verified before sensitive state changes are accepted.
+| Layer | Technology |
+|---|---|
+| Framework | Next.js 16 (App Router, Turbopack), React 19 |
+| Language | TypeScript 5 |
+| UI | Tailwind CSS 4, shadcn/ui, Radix UI, Lucide, Sonner, Recharts |
+| Database & auth | Supabase (PostgreSQL, Auth, Row Level Security) |
+| Cache & queues | Upstash Redis, Upstash QStash |
+| Integrations | Shopify Admin GraphQL, Pathao Hermes API, FraudSpy, Mr. Fraud Checker, MIM SMS, SMTP |
+| Reporting | jsPDF + AutoTable, CSV export |
+| Testing & CI | Vitest, ESLint, GitHub Actions |
+| Hosting | Vercel + Supabase + Upstash |
 
-- **Shopify:** HMAC-SHA256 webhook verification
-- **Courier integrations:** secret-based validation / integration checks
-
-### Operational security
-
-- Environment variables for secret configuration
-- No production secrets committed to source control
-- Scoped service credentials for privileged background operations
-- Authentication and authorization enforced around operational data
-
----
-
-## 🛠️ Technology Stack
-
-| Layer | Technology | Purpose |
-| :--- | :--- | :--- |
-| **Application** | Next.js 16 | Full-stack React application and server-side workflows |
-| **Language** | TypeScript 5 | Type-safe application development |
-| **UI** | Tailwind CSS 4 + shadcn/ui | Responsive, reusable operations interface |
-| **Database** | Supabase / PostgreSQL | Operational data, reporting and persistence |
-| **Authentication** | Supabase Auth | User authentication and session management |
-| **Authorization** | PostgreSQL RLS | Database-level access control |
-| **Background Jobs** | Upstash QStash | Deferred / asynchronous workflow execution |
-| **Caching** | Upstash Redis | Low-latency caching and rate limiting |
-| **Charts** | Recharts | KPI and analytics visualizations |
-| **Documents** | jsPDF + AutoTable | PDF report generation |
-| **Integrations** | Shopify + Courier APIs | Order, dispatch and delivery synchronization |
-| **Messaging** | SMS / Email APIs | Automated customer communication |
-
-Current dependency configuration includes Next.js 16.3.3, React 19.2.8, TypeScript 5, Supabase SSR/JS, Upstash QStash/Redis, Tailwind CSS 4 and Recharts. 
-
----
-
-## 🔌 Core Integrations
-
-### Shopify
-
-- Order ingestion
-- Webhook-driven synchronization
-- Order tagging
-- Fraud / risk metadata
-- Operational status updates
-
-### Courier
-
-- Dispatch API integration
-- Waybill generation / assignment
-- Delivery status synchronization
-- Return event handling
-
-### Customer communication
-
-- Automated dispatch notifications
-- Delivery status notifications
-- Custom operational messaging
-- SMS workflow integration
-
----
-
-## 🚀 Getting Started
+## Getting started
 
 ### Prerequisites
 
-- **Node.js 18+**
-- **Supabase project**
-- **Upstash Redis + QStash**
-- **Shopify Partner / Custom App credentials**
-- **Courier merchant/API credentials**
+- Node.js 20.9+ (required by Next.js 16)
+- A Supabase project
+- Upstash Redis and QStash
+- A Shopify custom app with Admin API access
+- Pathao merchant API credentials
+- Optional: FraudSpy / Mr. Fraud Checker keys, MIM SMS account, SMTP account
 
-### 1. Clone
+### Setup
 
 ```bash
 git clone https://github.com/MiBx-69/MIBx-Dispatch.git
 cd MIBx-Dispatch
-```
-
-### 2. Install
-
-```bash
 npm install
+cp .env.example .env.local
 ```
 
-### 3. Configure environment variables
-
-```bash
-cp .env.example .env
-```
-
-Configure the required values for:
-
-- Supabase URL / anon key
-- Supabase service role key
-- QStash credentials
-- Redis credentials
-- Shopify API credentials
-- Courier API credentials
-- SMS provider credentials
-- Fraud intelligence API credentials, where enabled
-
-> **Never commit `.env` or production secrets.**
-
-### 4. Prepare the database
+Fill in `.env.local` (see below), then prepare the database:
 
 ```bash
 supabase link --project-ref <your-project-ref>
 supabase db push
 ```
 
-### 5. Run locally
+Run it:
 
 ```bash
-npm run dev
+npm run dev      # http://localhost:3000
 ```
 
-Open `http://localhost:3000`.
+### Environment variables
 
-### Useful scripts
+Never commit real values. `.env*` is git-ignored except `.env.example`.
+
+| Group | Variables |
+|---|---|
+| Supabase | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` |
+| Upstash Redis | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` |
+| QStash / cron | `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY`, `CRON_SECRET` |
+| Shopify | `SHOPIFY_SHOP_DOMAIN`, `SHOPIFY_ACCESS_TOKEN`, `SHOPIFY_WEBHOOK_SECRET`, `SHOPIFY_API_VERSION` |
+| Pathao | `PATHAO_BASE_URL`, `PATHAO_CLIENT_ID`, `PATHAO_CLIENT_SECRET`, `PATHAO_USERNAME`, `PATHAO_PASSWORD`, `PATHAO_WEBHOOK_SECRET` |
+| Email | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` |
+| App | `NEXT_PUBLIC_APP_URL`, `APP_SECRET`, `NEXT_PUBLIC_APP_NAME` |
+| Fraud (optional) | `FRAUDSPY_API_KEY`, `MR_FRAUD_CHECKER_API_KEY` |
+
+Generate strong secrets with `openssl rand -hex 32`.
+
+### Scripts
 
 ```bash
 npm run dev      # development server
 npm run build    # production build
-npm run start    # production server
+npm run start    # run the production build
 npm run lint     # ESLint
+npx vitest       # unit / integration tests
 ```
 
----
+## Deployment
 
-## ☁️ Deployment
+Designed for **Vercel + Supabase + Upstash**.
 
-The application is designed for modern serverless deployment, including **Vercel + Supabase + Upstash**.
+1. Import the repo into Vercel and add the environment variables to the **Production** environment only
+2. Apply the database migrations to your Supabase project
+3. Point Shopify webhooks to `/api/webhooks/shopify` and Pathao webhooks to `/api/webhooks/pathao`
+4. Create a QStash schedule for `/api/cron/courier-sync` (hourly) and `/api/cron/sales-sync`
+5. Deploy; `vercel.json` sets longer function timeouts for sync jobs
 
-Typical production setup:
+## Project structure
 
 ```text
-Vercel
-  ├── Next.js application
-  ├── Server-side integrations
-  └── Cron / webhook endpoints
-
-Supabase
-  ├── PostgreSQL
-  ├── Auth
-  ├── RLS
-  └── Storage
-
-Upstash
-  ├── Redis
-  └── QStash
+.
+├── .github/workflows/   # CI: type-check, tests, build, dependency audit
+├── public/demo-data/    # Screenshots used in this README
+├── scripts/             # Operational scripts
+├── src/
+│   ├── app/
+│   │   ├── (dashboard)/ # Orders, dispatches, finance, reports, settings
+│   │   ├── embedded/    # Views rendered inside the Shopify admin
+│   │   └── api/         # dispatch, orders, customers, auth, webhooks, cron
+│   ├── lib/             # Shared logic, incl. auth-guard (RBAC)
+│   ├── proxy.ts         # Session refresh and route protection
+│   └── types/           # Database types
+├── supabase/            # Migrations
+├── schema.sql           # Database schema
+├── ARCHITECTURE.md      # Deeper data-flow documentation
+└── SECURITY.md          # Vulnerability reporting
 ```
 
-After deployment, configure all required environment variables and ensure external webhook providers point to the production endpoints.
+## Why this project matters
 
----
+MiBx Dispatch is the result of one repeatable approach: **find the repetitive work, model the real process, connect the systems, automate the bottleneck, expose the right KPIs, and secure the workflow.** It is not a demo dashboard. It runs a real store's daily operations, and it has been through a structured audit, a test suite and a CI pipeline.
 
-## 📌 Why This Project Matters
+## Author
 
-MiBx Dispatch demonstrates a practical engineering approach to business automation:
+**Moinul Islam Bappi**: Head of IT & Online Executive and full-stack developer focused on e-commerce automation, Shopify systems, logistics integrations and secure web architecture.
 
-> **Find the repetitive work → model the operational process → connect the systems → automate the bottleneck → expose the right KPIs → secure the workflow.**
-
-This is not a generic demo dashboard. The product was shaped around real e-commerce operations and focuses on measurable reductions in repetitive work, faster dispatch execution, centralized visibility, and more reliable order lifecycle management.
-
----
-
-## 👨‍💻 Project Context
-
-**MiBx Dispatch** was designed and developed by **Moinul Islam Bappi** as an internal e-commerce operations and automation project.
-
-The broader engineering focus includes:
-
-- E-commerce operations automation
-- Shopify systems
-- Courier / logistics API integration
-- CRM and workflow automation
-- Business reporting and KPI dashboards
-- AI-assisted development
-- Secure web application architecture
-
-### Related profile
-
-- 🌐 Portfolio: https://moinulislam.pro
-- 💼 LinkedIn: https://linkedin.com/in/moinul-islam-bappi
-- 🏢 MiBrand Agency: https://mibrand.agency
-
----
+- 🌐 Portfolio: [moinulislam.pro](https://moinulislam.pro)
+- 💼 LinkedIn: [linkedin.com/in/moinul-islam-bappi](https://linkedin.com/in/moinul-islam-bappi)
+- 🐙 GitHub: [@MiBx-69](https://github.com/MiBx-69)
 
 <div align="center">
 
-### ⚙️ Built to turn manual e-commerce operations into software.
-
-**Architected for scale. Designed around real operational problems.**
+**Built to turn manual e-commerce operations into software.**
 
 </div>

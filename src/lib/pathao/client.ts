@@ -299,3 +299,45 @@ export function verifyPathaoWebhook(
     return false;
   }
 }
+
+// ─── Tracking Link Generation ────────────────────────────────────────────────
+
+/**
+ * Normalizes a Bangladeshi phone number to international E.164-style with +880...
+ * e.g. "01712200891"   -> "+8801712200891"
+ *      "8801712200891"  -> "+8801712200891"
+ *      "+8801712200891" -> "+8801712200891"
+ *      "1712200891"     -> "+8801712200891"
+ */
+export function normalizeBdPhoneForPathao(phone?: string | null): string {
+  if (!phone) return "";
+  const digits = phone.replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("880")) {
+    return `+${digits}`;
+  }
+  if (digits.startsWith("01")) {
+    return `+88${digits}`;
+  }
+  if (digits.startsWith("1") && digits.length === 10) {
+    return `+880${digits}`;
+  }
+  return `+${digits}`;
+}
+
+/**
+ * Builds the official Pathao live parcel tracking URL with consignment_id and phone:
+ * https://merchant.pathao.com/tracking?consignment_id=DU171026QMF76R&phone=%2B8801712200891
+ */
+export function formatPathaoTrackingUrl(
+  consignmentId?: string | null,
+  phone?: string | null
+): string {
+  if (!consignmentId) return "";
+  const normalizedPhone = normalizeBdPhoneForPathao(phone);
+  if (normalizedPhone) {
+    return `https://merchant.pathao.com/tracking?consignment_id=${encodeURIComponent(consignmentId)}&phone=${encodeURIComponent(normalizedPhone)}`;
+  }
+  return `https://merchant.pathao.com/tracking?consignment_id=${encodeURIComponent(consignmentId)}`;
+}
+
