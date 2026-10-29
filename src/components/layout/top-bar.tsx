@@ -17,6 +17,11 @@ const PAGE_TITLES: Record<string, string> = {
   "/settings/account": "Account",
   "/settings/webhooks": "Webhooks",
   "/returns": "Returns",
+  "/inventory": "Inventory Overview",
+  "/inventory/stock-in": "Stock In Entry",
+  "/inventory/stock-out": "Stock Out Entry",
+  "/inventory/history": "Stock Ledger & History",
+  "/inventory/categories": "Source Categories",
 };
 
 interface TopBarProps {

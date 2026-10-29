@@ -984,6 +984,229 @@ export type Database = {
           },
         ]
       }
+      inventory_products: {
+        Row: {
+          id: string
+          product_name: string
+          sku: string | null
+          style_code: string | null
+          description: string | null
+          status: string
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          product_name: string
+          sku?: string | null
+          style_code?: string | null
+          description?: string | null
+          status?: string
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          product_name?: string
+          sku?: string | null
+          style_code?: string | null
+          description?: string | null
+          status?: string
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_products_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      inventory_source_categories: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          is_active: boolean
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          is_active?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          is_active?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_source_categories_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      inventory_transactions: {
+        Row: {
+          id: string
+          transaction_number: string
+          product_id: string
+          transaction_type: string
+          quantity: number
+          source_category_id: string | null
+          source_category_snapshot: string | null
+          stock_out_reason: string | null
+          reference_id: string | null
+          brought_by: string | null
+          received_by: string | null
+          unit_cost: number | null
+          total_cost: number | null
+          notes: string | null
+          transaction_date: string
+          created_by: string | null
+          created_at: string
+          idempotency_key: string | null
+        }
+        Insert: {
+          id?: string
+          transaction_number: string
+          product_id: string
+          transaction_type: string
+          quantity: number
+          source_category_id?: string | null
+          source_category_snapshot?: string | null
+          stock_out_reason?: string | null
+          reference_id?: string | null
+          brought_by?: string | null
+          received_by?: string | null
+          unit_cost?: number | null
+          total_cost?: number | null
+          notes?: string | null
+          transaction_date?: string
+          created_by?: string | null
+          created_at?: string
+          idempotency_key?: string | null
+        }
+        Update: {
+          id?: string
+          transaction_number?: string
+          product_id?: string
+          transaction_type?: string
+          quantity?: number
+          source_category_id?: string | null
+          source_category_snapshot?: string | null
+          stock_out_reason?: string | null
+          reference_id?: string | null
+          brought_by?: string | null
+          received_by?: string | null
+          unit_cost?: number | null
+          total_cost?: number | null
+          notes?: string | null
+          transaction_date?: string
+          created_by?: string | null
+          created_at?: string
+          idempotency_key?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_transactions_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_product_stock_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_source_category_id_fkey"
+            columns: ["source_category_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_source_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      inventory_transaction_corrections: {
+        Row: {
+          id: string
+          original_transaction_id: string
+          correction_transaction_id: string
+          reason: string
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          original_transaction_id: string
+          correction_transaction_id: string
+          reason: string
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          original_transaction_id?: string
+          correction_transaction_id?: string
+          reason?: string
+          created_by?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_transaction_corrections_original_transaction_id_fkey"
+            columns: ["original_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transaction_corrections_correction_transaction_id_fkey"
+            columns: ["correction_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transaction_corrections_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       dashboard_stats: {
@@ -1054,8 +1277,100 @@ export type Database = {
           },
         ]
       }
+      inventory_ledger_view: {
+        Row: {
+          id: string
+          transaction_number: string
+          product_id: string
+          transaction_type: string
+          quantity: number
+          source_category_id: string | null
+          source_category_snapshot: string | null
+          stock_out_reason: string | null
+          reference_id: string | null
+          brought_by: string | null
+          received_by: string | null
+          unit_cost: number | null
+          total_cost: number | null
+          notes: string | null
+          transaction_date: string
+          created_by: string | null
+          created_at: string
+          product_name: string
+          sku: string | null
+          style_code: string | null
+          product_status: string
+          staff_name: string | null
+          category_name: string | null
+          correction_id: string | null
+          correction_reason: string | null
+          corrected_at: string | null
+          corrected_by_name: string | null
+        }
+        Relationships: []
+      }
+      inventory_product_stock_view: {
+        Row: {
+          id: string
+          product_id: string
+          product_name: string
+          sku: string | null
+          style_code: string | null
+          description: string | null
+          status: string
+          created_at: string
+          updated_at: string
+          total_stock_in: number
+          total_stock_out: number
+          current_stock: number
+          last_transaction_date: string | null
+          transaction_count: number
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      record_stock_transaction: {
+        Args: {
+          p_product_id: string
+          p_transaction_type: string
+          p_quantity: number
+          p_source_category_id?: string | null
+          p_source_category_snapshot?: string | null
+          p_stock_out_reason?: string | null
+          p_reference_id?: string | null
+          p_brought_by?: string | null
+          p_received_by?: string | null
+          p_unit_cost?: number | null
+          p_total_cost?: number | null
+          p_notes?: string | null
+          p_transaction_date?: string | null
+          p_created_by?: string | null
+          p_idempotency_key?: string | null
+        }
+        Returns: Database["public"]["Tables"]["inventory_transactions"]["Row"]
+      }
+      inventory_overview_stats: {
+        Args: never
+        Returns: {
+          total_products: number
+          total_stock_in: number
+          total_stock_out: number
+          available_stock: number
+          today_stock_in: number
+          today_stock_out: number
+        }[]
+      }
+      correct_stock_transaction: {
+        Args: {
+          p_original_transaction_id: string
+          p_action: string
+          p_reason: string
+          p_new_quantity?: number | null
+          p_created_by?: string | null
+        }
+        Returns: Database["public"]["Tables"]["inventory_transactions"]["Row"]
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
     }
@@ -1195,6 +1510,14 @@ export const Constants = {
 } as const
 
 // ─── Convenient Type Aliases ──────────────────────────────────────────────────
+
+export type InventoryProductRow = Database["public"]["Tables"]["inventory_products"]["Row"];
+export type InventoryProductInsert = Database["public"]["Tables"]["inventory_products"]["Insert"];
+export type InventorySourceCategoryRow = Database["public"]["Tables"]["inventory_source_categories"]["Row"];
+export type InventoryTransactionRow = Database["public"]["Tables"]["inventory_transactions"]["Row"];
+export type InventoryTransactionInsert = Database["public"]["Tables"]["inventory_transactions"]["Insert"];
+export type InventoryTransactionCorrectionRow = Database["public"]["Tables"]["inventory_transaction_corrections"]["Row"];
+export type InventoryStockViewRow = Database["public"]["Views"]["inventory_product_stock_view"]["Row"];
 
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 export type AppSettings = Database["public"]["Tables"]["app_settings"]["Row"];
