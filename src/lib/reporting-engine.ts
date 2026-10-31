@@ -41,6 +41,14 @@ export interface UnifiedReportMetrics {
   courierProcessingValue: number;
   courierPickupIssueCount: number;
   courierPickupIssueValue: number;
+  courierPickupPendingCount?: number;
+  courierPickedUpCount?: number;
+  courierInTransitCount?: number;
+  courierOutForDeliveryCount?: number;
+  courierPartialDeliveryCount?: number;
+  courierReturnInTransitCount?: number;
+  courierReturnedToMerchantCount?: number;
+  courierOnHoldOrFailedCount?: number;
   courierActiveTotalCount: number;
   courierActiveTotalValue: number;
   courierTotalCount: number;
@@ -272,6 +280,14 @@ export async function getUnifiedReportMetrics(params: {
   let courierProcessingValue = 0;
   let courierPickupIssueCount = 0;
   let courierPickupIssueValue = 0;
+  let courierPickupPendingCount = 0;
+  let courierPickedUpCount = 0;
+  let courierInTransitCount = 0;
+  let courierOutForDeliveryCount = 0;
+  let courierPartialDeliveryCount = 0;
+  let courierReturnInTransitCount = 0;
+  let courierReturnedToMerchantCount = 0;
+  let courierOnHoldOrFailedCount = 0;
   let courierActiveTotalCount = 0;
   let courierActiveTotalValue = 0;
   let courierTotalCount = 0;
@@ -280,6 +296,7 @@ export async function getUnifiedReportMetrics(params: {
 
   filteredDispatches.forEach((d: any) => {
     const st = (d.pathao_order_status || "").toLowerCase().trim();
+    const normSt = (d.normalized_status || "").toUpperCase().trim();
     const rawVal =
       d.amount_to_collect != null
         ? Number(d.amount_to_collect)
@@ -303,6 +320,56 @@ export async function getUnifiedReportMetrics(params: {
     courierTotalCount++;
     courierTotalValue += rawVal;
     courierSettledAmount += Number(d.actual_received_amount || 0);
+
+    // Discrete Mutually Exclusive Parcel Stages
+    if (
+      normSt === "ORDER_CREATED" ||
+      normSt === "PICKUP_REQUESTED" ||
+      normSt === "ASSIGNED_FOR_PICKUP" ||
+      st === "pending" ||
+      st.includes("assigned_for_pickup") ||
+      st.includes("assigned-for-pickup")
+    ) {
+      courierPickupPendingCount++;
+    } else if (normSt === "PICKED_UP" || st === "picked up" || st.includes("pickup_collected")) {
+      courierPickedUpCount++;
+    } else if (
+      normSt === "AT_SORTING_HUB" ||
+      normSt === "IN_TRANSIT" ||
+      normSt === "RECEIVED_AT_LAST_MILE_HUB" ||
+      st === "in transit" ||
+      st.includes("in_transit") ||
+      st.includes("at_delivery_hub") ||
+      st.includes("sorting")
+    ) {
+      courierInTransitCount++;
+    } else if (
+      normSt === "ASSIGNED_FOR_DELIVERY" ||
+      st === "out for delivery" ||
+      st.includes("assigned_for_delivery") ||
+      st.includes("assigned-for-delivery") ||
+      st === "ready for delivery"
+    ) {
+      courierOutForDeliveryCount++;
+    } else if (normSt === "PARTIALLY_DELIVERED" || st.includes("partial")) {
+      courierPartialDeliveryCount++;
+    } else if (
+      normSt === "RETURN_INITIATED" ||
+      normSt === "RETURN_ID_CREATED" ||
+      normSt === "RETURN_IN_TRANSIT" ||
+      (st.includes("return") && !st.includes("paid") && !st.includes("completed") && !st.includes("returned"))
+    ) {
+      courierReturnInTransitCount++;
+    } else if (
+      normSt === "RETURNED_TO_MERCHANT" ||
+      st === "return completed" ||
+      st === "returned" ||
+      st.includes("returned-to-merchant")
+    ) {
+      courierReturnedToMerchantCount++;
+    } else if (isCancelledOrFailed || normSt === "ON_HOLD" || st.includes("hold")) {
+      courierOnHoldOrFailedCount++;
+    }
 
     if (st === "delivered" || st.includes("partial")) {
       courierDeliveredCount++;
@@ -436,6 +503,14 @@ export async function getUnifiedReportMetrics(params: {
     courierProcessingValue,
     courierPickupIssueCount,
     courierPickupIssueValue,
+    courierPickupPendingCount,
+    courierPickedUpCount,
+    courierInTransitCount,
+    courierOutForDeliveryCount,
+    courierPartialDeliveryCount,
+    courierReturnInTransitCount,
+    courierReturnedToMerchantCount,
+    courierOnHoldOrFailedCount,
     courierActiveTotalCount,
     courierActiveTotalValue,
     courierTotalCount,

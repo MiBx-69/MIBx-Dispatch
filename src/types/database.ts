@@ -1010,6 +1010,41 @@ export type Database = {
         }
         Relationships: []
       }
+      dispatch_claims: {
+        Row: {
+          claimed_at: string
+          consignment_id: string | null
+          error_message: string | null
+          expires_at: string
+          order_id: string
+          status: string
+        }
+        Insert: {
+          claimed_at?: string
+          consignment_id?: string | null
+          error_message?: string | null
+          expires_at?: string
+          order_id: string
+          status?: string
+        }
+        Update: {
+          claimed_at?: string
+          consignment_id?: string | null
+          error_message?: string | null
+          expires_at?: string
+          order_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dispatch_claims_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       pathao_payment_invoices: {
         Row: {
           actual_received_settlement: number

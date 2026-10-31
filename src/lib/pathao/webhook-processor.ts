@@ -8,6 +8,7 @@ import {
 } from "@/lib/pathao/status-engine";
 import { syncPathaoStatusToShopifyFulfillment } from "@/lib/shopify/client";
 import { triggerAutoSms } from "@/lib/sms";
+import { computeInvoiceFinancials, invoiceIdempotencyKey } from "@/lib/pathao/settlement";
 
 export interface PathaoWebhookPayload {
   consignment_id?: string;
@@ -361,47 +362,21 @@ export async function processPathaoWebhookEvent(params: {
 
   // 6. Handle PAYMENT_INVOICE_EVENT (Financial / COD Settlement Event)
   if (norm.normalizedStatus === "PAYMENT_INVOICE_EVENT") {
-    const expectedCod = Number(
-      dispatch?.expected_cod ?? dispatch?.amount_to_collect ?? order?.total_price ?? 0
-    );
-    const collectedCod = Number(
-      payload.collected_amount ??
-        payload.cod_collected ??
-        dispatch?.actual_cod_collected ??
-        expectedCod
-    );
-    const deliveryCharge = Number(
-      payload.delivery_fee ?? dispatch?.delivery_fee ?? order?.delivery_charge ?? 0
-    );
-    const returnCharge = Number(
-      payload.return_fee ?? payload.return_charge ?? dispatch?.return_charge ?? 0
-    );
-    const otherDeductions = Number(
-      payload.other_deductions ?? dispatch?.other_deductions ?? 0
-    );
-    const expectedSettlement = Math.max(
-      0,
-      collectedCod - deliveryCharge - returnCharge - otherDeductions
-    );
-    const actualReceivedSettlement = Number(
-      payload.settlement_amount ??
-        payload.received_amount ??
-        expectedSettlement
-    );
+    const fin = computeInvoiceFinancials(payload, dispatch, order);
     const invoiceRef =
       payload.invoice_id ||
       payload.payment_invoice_id ||
       payload.invoice_reference ||
       payload.payment_reference ||
       `INV-${consignmentId || dispatch?.consignment_id}`;
+    const invoiceKey = invoiceIdempotencyKey(
+      payload,
+      String(consignmentId || dispatch?.consignment_id || "UNKNOWN"),
+      eventTimestamp
+    );
 
-    const settlementStatus =
-      actualReceivedSettlement >= expectedSettlement && expectedSettlement >= 0
-        ? "settled"
-        : actualReceivedSettlement > 0
-          ? "partially_settled"
-          : "pending";
-
+    // Idempotent upsert: a replayed/duplicate invoice webhook maps to ONE row.
+    // actual_received_settlement stays NULL (unknown) unless Pathao explicitly sent it.
     await supabase.from("pathao_payment_invoices").upsert(
       {
         consignment_id: consignmentId || dispatch?.consignment_id || "UNKNOWN",
@@ -413,48 +388,56 @@ export async function processPathaoWebhookEvent(params: {
           order?.shopify_order_name ||
           null,
         invoice_reference: String(invoiceRef),
-        expected_cod: expectedCod,
-        collected_cod: collectedCod,
-        delivery_charge: deliveryCharge,
-        return_charge: returnCharge,
-        other_deductions: otherDeductions,
-        expected_settlement: expectedSettlement,
-        actual_received_settlement: actualReceivedSettlement,
-        settlement_status: settlementStatus,
+        expected_cod: fin.expectedCod,
+        collected_cod: fin.collectedCod,
+        delivery_charge: fin.deliveryCharge,
+        return_charge: fin.returnCharge,
+        other_deductions: fin.otherDeductions,
+        expected_settlement: fin.expectedSettlement ?? 0,
+        actual_received_settlement: fin.actualReceivedSettlement,
+        settlement_status: fin.settlementStatus,
         payment_date: eventTimestamp,
         raw_payload: payload as any,
-        idempotency_key: idempotencyKey,
+        idempotency_key: invoiceKey,
         updated_at: new Date().toISOString(),
-      },
+      } as any,
       { onConflict: "idempotency_key" }
     );
 
     if (dispatch) {
+      const dispatchFinancialUpdate: Record<string, any> = {
+        delivery_fee: fin.deliveryCharge,
+        return_charge: fin.returnCharge,
+        other_deductions: fin.otherDeductions,
+        settlement_status: fin.settlementStatus,
+        payment_reference: String(invoiceRef),
+        payment_invoice_details: {
+          invoice_reference: invoiceRef,
+          expected_cod: fin.expectedCod,
+          collected_cod: fin.collectedCod,
+          delivery_charge: fin.deliveryCharge,
+          return_charge: fin.returnCharge,
+          other_deductions: fin.otherDeductions,
+          expected_settlement: fin.expectedSettlement,
+          actual_received_settlement: fin.actualReceivedSettlement,
+          payment_date: eventTimestamp,
+        },
+        updated_at: new Date().toISOString(),
+      };
+      if (fin.collectedCod !== null) {
+        dispatchFinancialUpdate.actual_cod_collected = fin.collectedCod;
+      }
+      if (fin.expectedSettlement !== null) {
+        dispatchFinancialUpdate.settlement_amount = fin.expectedSettlement;
+      }
+      if (fin.actualReceivedSettlement !== null) {
+        dispatchFinancialUpdate.actual_received_amount =
+          fin.actualReceivedSettlement;
+        dispatchFinancialUpdate.settlement_date = eventTimestamp.slice(0, 10);
+      }
       await supabase
         .from("dispatches")
-        .update({
-          actual_cod_collected: collectedCod,
-          delivery_fee: deliveryCharge,
-          return_charge: returnCharge,
-          other_deductions: otherDeductions,
-          settlement_amount: expectedSettlement,
-          actual_received_amount: actualReceivedSettlement,
-          settlement_status: settlementStatus,
-          settlement_date: eventTimestamp.slice(0, 10),
-          payment_reference: String(invoiceRef),
-          payment_invoice_details: {
-            invoice_reference: invoiceRef,
-            expected_cod: expectedCod,
-            collected_cod: collectedCod,
-            delivery_charge: deliveryCharge,
-            return_charge: returnCharge,
-            other_deductions: otherDeductions,
-            expected_settlement: expectedSettlement,
-            actual_received_settlement: actualReceivedSettlement,
-            payment_date: eventTimestamp,
-          },
-          updated_at: new Date().toISOString(),
-        })
+        .update(dispatchFinancialUpdate as any)
         .eq("id", dispatch.id);
     }
 
@@ -708,10 +691,8 @@ export async function processPathaoWebhookEvent(params: {
     if (norm.internalOrderStatus) {
       orderUpdates.internal_status = norm.internalOrderStatus;
     }
-    if (
-      norm.normalizedStatus === "DELIVERED" ||
-      norm.normalizedStatus === "PARTIALLY_DELIVERED"
-    ) {
+    // Partial delivery is NOT a full delivery: never stamp order.delivered_at for it.
+    if (norm.normalizedStatus === "DELIVERED") {
       orderUpdates.delivered_at = order?.delivered_at || eventTimestamp;
     }
     if (payload.delivery_fee !== undefined && payload.delivery_fee !== null) {

@@ -64,9 +64,35 @@ export async function GET() {
  * validates signature/secret, stores raw event immutably, and returns 202 fast.
  */
 export async function POST(request: NextRequest) {
+  // Reject unsupported content-types early
+  const contentType = request.headers.get("content-type") || "";
+  if (contentType && !contentType.includes("application/json") && !contentType.includes("text/plain")) {
+    return NextResponse.json(
+      { error: "Unsupported media type. JSON expected." },
+      { status: 415 }
+    );
+  }
+
   const rawBody = await request.text();
   const configuredSecret = await resolvePathaoWebhookSecret();
   const responseHeaders = buildResponseHeaders(configuredSecret);
+
+  // Reject oversized payloads (> 1MB)
+  if (rawBody.length > 1_048_576) {
+    return NextResponse.json(
+      { error: "Payload too large (> 1MB)" },
+      { status: 413, headers: responseHeaders }
+    );
+  }
+
+  // Fail closed in production if webhook secret is not configured
+  if (!configuredSecret && process.env.NODE_ENV === "production") {
+    console.error("[Pathao Webhook] Webhook secret is unconfigured. Failing closed in production.");
+    return NextResponse.json(
+      { error: "Webhook authentication unconfigured" },
+      { status: 500, headers: responseHeaders }
+    );
+  }
 
   // 1. Parse JSON safely
   let payload: PathaoWebhookPayload = {};

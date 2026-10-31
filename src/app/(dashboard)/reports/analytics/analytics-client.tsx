@@ -181,7 +181,7 @@ export function AnalyticsClient({ dispatches }: AnalyticsClientProps) {
           </Link>
           <h1 className="text-2xl font-bold text-white tracking-tight">Delivery & COD Analytics</h1>
           <p className="text-sm text-zinc-500 mt-1">
-            Regional performance, return risk zones, and COD settlement overview.
+            Regional performance, return risk zones, and delivery overview.
           </p>
         </div>
 
@@ -231,7 +231,7 @@ export function AnalyticsClient({ dispatches }: AnalyticsClientProps) {
             barColor: "bg-indigo-500",
           },
           {
-            label: "Net Settlement Est.",
+            label: "Net Delivery Payout",
             value: `৳${metrics.netExpectedPayout.toLocaleString()}`,
             sub: `Courier fees ≈ ৳${metrics.totalCourierFees.toLocaleString()}`,
             icon: Truck,

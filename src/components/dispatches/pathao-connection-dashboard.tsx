@@ -4,12 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  Activity,
   CheckCircle2,
   AlertTriangle,
   RefreshCw,
   Truck,
-  Banknote,
   Webhook,
   RotateCcw,
   ChevronDown,
@@ -37,14 +35,6 @@ export interface PathaoDashboardTelemetry {
     returnedToMerchant: number;
     onHoldOrFailed: number;
   };
-  financialOverview: {
-    expectedCod: number;
-    deliveredCod: number;
-    pendingSettlement: number;
-    paymentInvoiceReceivedAmount: number;
-    paymentInvoiceCount: number;
-    paidReturnCount: number;
-  };
 }
 
 export function PathaoConnectionDashboard({
@@ -57,7 +47,7 @@ export function PathaoConnectionDashboard({
   const [isReconciling, setIsReconciling] = useState(false);
   const [isRetryingWebhooks, setIsRetryingWebhooks] = useState(false);
 
-  const { connection, parcelOverview, financialOverview } = telemetry;
+  const { connection, parcelOverview } = telemetry;
 
   const formatTimeBst = (iso: string | null) => {
     if (!iso) return "Never";
@@ -292,60 +282,6 @@ export function PathaoConnectionDashboard({
                 </span>
                 <span className="text-xs font-bold font-mono text-rose-400">
                   {parcelOverview.onHoldOrFailed.toLocaleString()}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Financial & COD Settlement Overview (5 Metrics) */}
-          <div>
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-400 mb-1.5">
-              <Banknote className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Pathao COD & Settlement Overview</span>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
-              <div className="bg-zinc-950/60 border border-zinc-800/70 rounded-lg px-2.5 py-2">
-                <span className="text-[10px] text-zinc-500 block">
-                  Expected COD
-                </span>
-                <span className="text-xs font-bold font-mono text-zinc-200">
-                  ৳{financialOverview.expectedCod.toLocaleString()}
-                </span>
-              </div>
-              <div className="bg-zinc-950/60 border border-zinc-800/70 rounded-lg px-2.5 py-2">
-                <span className="text-[10px] text-emerald-400 block">
-                  Delivered COD
-                </span>
-                <span className="text-xs font-bold font-mono text-emerald-400">
-                  ৳{financialOverview.deliveredCod.toLocaleString()}
-                </span>
-              </div>
-              <div className="bg-zinc-950/60 border border-zinc-800/70 rounded-lg px-2.5 py-2">
-                <span className="text-[10px] text-amber-400 block">
-                  Pending Settlement
-                </span>
-                <span className="text-xs font-bold font-mono text-amber-300">
-                  ৳{financialOverview.pendingSettlement.toLocaleString()}
-                </span>
-              </div>
-              <div className="bg-zinc-950/60 border border-zinc-800/70 rounded-lg px-2.5 py-2">
-                <span className="text-[10px] text-indigo-400 block">
-                  Payment Invoice Received
-                </span>
-                <span className="text-xs font-bold font-mono text-indigo-300">
-                  ৳
-                  {financialOverview.paymentInvoiceReceivedAmount.toLocaleString()}{" "}
-                  <span className="text-[10px] text-zinc-500 font-normal">
-                    ({financialOverview.paymentInvoiceCount})
-                  </span>
-                </span>
-              </div>
-              <div className="bg-zinc-950/60 border border-zinc-800/70 rounded-lg px-2.5 py-2">
-                <span className="text-[10px] text-rose-400 block">
-                  Paid Return Count
-                </span>
-                <span className="text-xs font-bold font-mono text-rose-300">
-                  {financialOverview.paidReturnCount.toLocaleString()}
                 </span>
               </div>
             </div>

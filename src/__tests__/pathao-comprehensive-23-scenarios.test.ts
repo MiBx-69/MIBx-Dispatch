@@ -122,7 +122,8 @@ describe("MiBx Dispatch — Advanced Pathao Integration (23 Required Scenarios)"
       const res = normalizePathaoEvent("order.partial-delivery");
       expect(res.normalizedStatus).toBe("PARTIALLY_DELIVERED");
       expect(res.displayLabel).toBe("Partial Delivered");
-      expect(res.internalOrderStatus).toBe("delivered");
+      expect(res.internalOrderStatus).toBeNull();
+      expect(res.shopifyFulfillmentEvent).toBeNull();
       expect(res.isReturnLifecycle).toBe(true);
       expect(res.isTerminalDelivery).toBe(true);
     });

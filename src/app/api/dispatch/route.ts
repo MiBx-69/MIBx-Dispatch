@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient, createClient } from "@/lib/supabase/server";
-import { createPathaoOrder, getPathaoCities, getPathaoZones, formatPathaoTrackingUrl } from "@/lib/pathao/client";
+import {
+  createPathaoOrder,
+  getPathaoCities,
+  getPathaoZones,
+  formatPathaoTrackingUrl,
+  normalizeBdPhoneForPathao,
+} from "@/lib/pathao/client";
 import {
   createShopifyFulfillment,
   updateShopifyOrder,
@@ -86,64 +92,123 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
     throw error;
   }
 
-  // Get settings for store_id and special instructions
-  const { data: settings } = await supabase
-    .from("app_settings")
-    .select("pathao_store_id, pathao_special_instruction")
-    .single();
+  // 1. Atomic Concurrency Lock: Prevent duplicate consignments during concurrent requests
+  const nowIso = new Date().toISOString();
+  const { data: activeClaim } = await supabase
+    .from("dispatch_claims")
+    .select("*")
+    .eq("order_id", order.id)
+    .eq("status", "in_progress")
+    .gt("expires_at", nowIso)
+    .maybeSingle();
 
-  const pathaoStoreId = store_id || settings?.pathao_store_id;
-  if (!pathaoStoreId) {
-    const error: any = new Error("Pathao store_id not configured. Check Settings.");
-    error.statusCode = 400;
+  if (activeClaim) {
+    const error: any = new Error(
+      `Dispatch for order ${order.shopify_order_name || order.id} is already in progress. Please wait a moment.`
+    );
+    error.statusCode = 409;
     throw error;
   }
 
-  // Keep default store in sync with active usage
-  if (pathaoStoreId && (!settings?.pathao_store_id || settings.pathao_store_id !== pathaoStoreId)) {
-    supabase
+  // Acquire atomic claim with a 2-minute window
+  const claimExpiresAt = new Date(Date.now() + 120_000).toISOString();
+  await supabase.from("dispatch_claims").upsert(
+    {
+      order_id: order.id,
+      claimed_at: nowIso,
+      status: "in_progress",
+      expires_at: claimExpiresAt,
+      error_message: null,
+    },
+    { onConflict: "order_id" }
+  );
+
+  try {
+    // Get settings for store_id and special instructions
+    const { data: settings } = await supabase
       .from("app_settings")
-      .update({ pathao_store_id: pathaoStoreId })
-      .neq("id", "00000000-0000-0000-0000-000000000000")
-      .then(() => {});
-  }
+      .select("pathao_store_id, pathao_special_instruction")
+      .single();
 
-  let finalAddress = recipient_address || (order.shipping_address as any)?.address1 || "";
-  const cityProv = `${(order.shipping_address as any)?.city || ""} ${(order.shipping_address as any)?.province || ""}`.trim();
-  if (finalAddress.length < 10) {
-    finalAddress = `${finalAddress}, ${cityProv}`.trim();
-    if (finalAddress.length < 10) {
-      finalAddress = finalAddress.padEnd(10, ".");
+    const pathaoStoreId = store_id || settings?.pathao_store_id;
+    if (!pathaoStoreId) {
+      const error: any = new Error("Pathao store_id not configured. Check Settings.");
+      error.statusCode = 400;
+      throw error;
     }
-  }
 
-  // Auto-resolve City & Zone if missing
-  let finalCity = recipient_city ? parseInt(String(recipient_city), 10) : undefined;
-  let finalZone = recipient_zone ? parseInt(String(recipient_zone), 10) : undefined;
-  let finalArea = recipient_area ? parseInt(String(recipient_area), 10) : undefined;
+    // Keep default store in sync with active usage
+    if (pathaoStoreId && (!settings?.pathao_store_id || settings.pathao_store_id !== pathaoStoreId)) {
+      supabase
+        .from("app_settings")
+        .update({ pathao_store_id: pathaoStoreId })
+        .neq("id", "00000000-0000-0000-0000-000000000000")
+        .then(() => {});
+    }
 
-  if (!finalCity) {
-    const addressString = `${finalAddress} ${cityProv}`.toLowerCase();
-    const cities = await getPathaoCities();
-    const dhaka = cities.find((c: any) => c.city_name.toLowerCase().includes("dhaka"));
+    // Strict validation of recipient phone
+    let finalPhone = recipient_phone || order.customer_phone || (order.shipping_address as any)?.phone || "";
+    finalPhone = normalizeBdPhoneForPathao(finalPhone);
+    if (!finalPhone || finalPhone.length !== 11 || !finalPhone.startsWith("01")) {
+      const err: any = new Error(
+        `Invalid recipient phone number "${finalPhone || "missing"}". A valid 11-digit Bangladeshi mobile number starting with 01 (e.g. 01712200891) is required.`
+      );
+      err.statusCode = 400;
+      throw err;
+    }
 
-    const matchedCity = cities.find((c: any) => addressString.includes(c.city_name.toLowerCase()));
-    finalCity = matchedCity ? matchedCity.city_id : (dhaka ? dhaka.city_id : (cities[0]?.city_id || 1));
+    // Strict validation of recipient address length
+    let finalAddress = (recipient_address || (order.shipping_address as any)?.address1 || "").trim();
+    const cityProv = `${(order.shipping_address as any)?.city || ""} ${(order.shipping_address as any)?.province || ""}`.trim();
+    if (finalAddress.length < 10 && cityProv) {
+      finalAddress = `${finalAddress}, ${cityProv}`.trim();
+    }
+    if (finalAddress.length < 10) {
+      const err: any = new Error(
+        `Recipient address is too short (${finalAddress.length} chars). Pathao requires at least 10 characters.`
+      );
+      err.statusCode = 400;
+      throw err;
+    }
+
+    // Strict City & Zone resolution (NO GUESSING! NO SILENT FALLBACK TO DHAKA OR ID 1!)
+    let finalCity = recipient_city ? parseInt(String(recipient_city), 10) : undefined;
+    let finalZone = recipient_zone ? parseInt(String(recipient_zone), 10) : undefined;
+    let finalArea = recipient_area ? parseInt(String(recipient_area), 10) : undefined;
+
+    if (!finalCity) {
+      const addressString = `${finalAddress} ${cityProv}`.toLowerCase();
+      const cities = await getPathaoCities();
+      const matchedCity = cities.find((c: any) =>
+        addressString.includes(c.city_name.toLowerCase())
+      );
+      if (matchedCity) {
+        finalCity = matchedCity.city_id;
+      } else {
+        const err: any = new Error(
+          `Recipient city could not be verified with Pathao for ${order.shopify_order_name || order.id} from address "${finalAddress}". Please select a city explicitly.`
+        );
+        err.statusCode = 400;
+        throw err;
+      }
+    }
 
     if (!finalZone && finalCity) {
+      const addressString = `${finalAddress} ${cityProv}`.toLowerCase();
       const zones = await getPathaoZones(finalCity);
-      const matchedZone = zones.find((z: any) => addressString.includes(z.zone_name.toLowerCase()));
-      finalZone = matchedZone ? matchedZone.zone_id : (zones[0]?.zone_id || 1);
+      const matchedZone = zones.find((z: any) =>
+        addressString.includes(z.zone_name.toLowerCase())
+      );
+      if (matchedZone) {
+        finalZone = matchedZone.zone_id;
+      } else {
+        const err: any = new Error(
+          `Recipient zone could not be verified with Pathao for city ID ${finalCity}. Please select a zone explicitly.`
+        );
+        err.statusCode = 400;
+        throw err;
+      }
     }
-  }
-
-  let finalPhone = recipient_phone || order.customer_phone || "";
-  // Sanitize phone for BD format
-  finalPhone = finalPhone.replace(/\D/g, "");
-  if (finalPhone.startsWith("880")) finalPhone = finalPhone.substring(2);
-  if (finalPhone.startsWith("80")) finalPhone = finalPhone.substring(1);
-  if (!finalPhone.startsWith("0")) finalPhone = "0" + finalPhone;
-  if (finalPhone.length > 11) finalPhone = finalPhone.substring(finalPhone.length - 11);
 
   const finalAmount = Math.round(parseFloat(String(amount_to_collect ?? (order.total_price || "0"))));
 
@@ -442,13 +507,37 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
     console.error("[Dispatch] SMS send error (non-fatal):", smsErr);
   }
 
-  return {
-    success: true,
-    consignment_id,
-    delivery_fee,
-    tracking_url: trackingUrl,
-    shopify_fulfillment_id: shopifyFulfillmentId,
-  };
+    // Mark atomic claim as completed
+    await supabase.from("dispatch_claims").upsert(
+      {
+        order_id: order.id,
+        status: "completed",
+        consignment_id,
+        expires_at: new Date().toISOString(),
+      },
+      { onConflict: "order_id" }
+    );
+
+    return {
+      success: true,
+      consignment_id,
+      delivery_fee,
+      tracking_url: trackingUrl,
+      shopify_fulfillment_id: shopifyFulfillmentId,
+    };
+  } catch (dispatchErr: any) {
+    // Release atomic claim on failure so subsequent retry is unblocked
+    await supabase.from("dispatch_claims").upsert(
+      {
+        order_id: order.id,
+        status: "failed",
+        error_message: dispatchErr.message || "Dispatch failed",
+        expires_at: new Date().toISOString(),
+      },
+      { onConflict: "order_id" }
+    );
+    throw dispatchErr;
+  }
 }
 
 export async function POST(request: NextRequest) {

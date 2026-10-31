@@ -3,7 +3,6 @@ import {
   getMonthRange,
   getAvailableMonths,
   findMatchingMonth,
-  getBstToday,
   resolveDateRange,
   formatBstDate,
   MONTH_NAMES,

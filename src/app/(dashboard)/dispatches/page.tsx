@@ -72,7 +72,6 @@ export default async function DispatchesPage({
     { data: lastWebhookLog },
     { count: failedWebhookCount },
     { data: lastSyncLog },
-    { data: paymentInvoicesAgg },
   ] = await Promise.all([
     query,
     getUnifiedReportMetrics({
@@ -81,18 +80,14 @@ export default async function DispatchesPage({
       endDate: params.endDate,
       search: params.search,
     }),
-    supabase.from("app_settings").select("pathao_store_id, pathao_client_id, pathao_client_secret, pathao_username, pathao_password, pathao_webhook_secret").single(),
+    supabase.from("app_settings").select("pathao_store_id, pathao_client_id, pathao_client_secret, pathao_webhook_secret").single(),
     supabase.from("webhook_logs").select("received_at").eq("source", "pathao").order("received_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("webhook_logs").select("id", { count: "exact", head: true }).eq("source", "pathao").or("processing_status.eq.failed,shopify_sync_status.eq.failed"),
     supabase.from("sync_logs").select("completed_at, started_at").eq("sync_type", "pathao_reconciliation").order("started_at", { ascending: false }).limit(1).maybeSingle(),
-    supabase.from("pathao_payment_invoices").select("actual_received_settlement, id").limit(500),
   ]);
   
-  const dispatches = rawDispatches?.sort((a: any, b: any) => {
-    const numA = parseInt(a.orders.shopify_order_name.replace(/\D/g, ""));
-    const numB = parseInt(b.orders.shopify_order_name.replace(/\D/g, ""));
-    return numB - numA;
-  });
+  // Stable pagination: preserve SQL ordering by dispatched_at DESC
+  const dispatches = rawDispatches;
 
   const apiConfigured = Boolean(
     (process.env.PATHAO_CLIENT_ID && process.env.PATHAO_CLIENT_SECRET) ||
@@ -100,11 +95,6 @@ export default async function DispatchesPage({
   );
   const webhookSecretConfigured = Boolean(
     process.env.PATHAO_WEBHOOK_SECRET || settings?.pathao_webhook_secret
-  );
-
-  const paymentInvoiceReceivedAmount = (paymentInvoicesAgg || []).reduce(
-    (sum, inv) => sum + Number(inv.actual_received_settlement || 0),
-    0
   );
 
   const pathaoTelemetry = {
@@ -118,23 +108,15 @@ export default async function DispatchesPage({
     },
     parcelOverview: {
       totalDispatched: metrics.dispatchedCount,
-      pickupPending: metrics.courierProcessingCount,
-      pickedUp: metrics.courierActiveTotalCount,
-      inTransit: metrics.courierActiveTotalCount,
-      outForDelivery: metrics.courierActiveTotalCount,
+      pickupPending: metrics.courierPickupPendingCount ?? metrics.courierProcessingCount,
+      pickedUp: metrics.courierPickedUpCount ?? 0,
+      inTransit: metrics.courierInTransitCount ?? 0,
+      outForDelivery: metrics.courierOutForDeliveryCount ?? 0,
       delivered: metrics.deliveredCount,
-      partialDelivery: metrics.courierPaidReturnCount || 0,
-      returnInTransit: metrics.courierReturnedCount,
-      returnedToMerchant: metrics.returnedCount,
-      onHoldOrFailed: metrics.courierPickupIssueCount,
-    },
-    financialOverview: {
-      expectedCod: metrics.amountToCollect,
-      deliveredCod: metrics.deliveredRevenue,
-      pendingSettlement: Math.max(0, metrics.deliveredRevenue - paymentInvoiceReceivedAmount),
-      paymentInvoiceReceivedAmount,
-      paymentInvoiceCount: (paymentInvoicesAgg || []).length,
-      paidReturnCount: metrics.paidReturnsCount || metrics.courierPaidReturnCount || 0,
+      partialDelivery: metrics.courierPartialDeliveryCount ?? 0,
+      returnInTransit: metrics.courierReturnInTransitCount ?? metrics.courierReturnedCount,
+      returnedToMerchant: metrics.courierReturnedToMerchantCount ?? metrics.returnedCount,
+      onHoldOrFailed: metrics.courierOnHoldOrFailedCount ?? metrics.courierPickupIssueCount,
     },
   };
 

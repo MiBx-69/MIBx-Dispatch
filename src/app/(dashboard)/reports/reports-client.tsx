@@ -643,7 +643,7 @@ export function ReportsClient({
       {/* TAB 1: MONTHLY BUSINESS REPORT (ALL 18 MANAGEMENT QUESTIONS) */}
       {activeTab === "overview" && (
         <div className="space-y-5 animate-fade-in">
-          {/* View Mode Selector: Courier Settlement vs Storefront Orders */}
+          {/* View Mode Selector: Courier Dispatches vs Storefront Orders */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-900/80 border border-zinc-800/80 p-2.5 rounded-2xl shadow-sm">
             <div className="flex items-center gap-1.5 p-1 bg-zinc-950/70 border border-zinc-800/60 rounded-xl">
               <button
@@ -657,7 +657,7 @@ export function ReportsClient({
                 )}
               >
                 <Truck className="w-3.5 h-3.5" />
-                Pathao Courier Settlement
+                Pathao Courier Parcels
                 <span
                   className={cn(
                     "px-1.5 py-0.2 rounded text-[10px] font-bold",
@@ -986,7 +986,7 @@ export function ReportsClient({
             </div>
           )}
 
-          {/* Revenue Chart & Pathao Courier Settlement */}
+          {/* Revenue Chart & Pathao Courier Dispatches */}
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
             <div className="xl:col-span-7 rounded-2xl border border-zinc-800/60 bg-zinc-900/60 p-5 flex flex-col justify-between">
               <div>

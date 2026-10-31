@@ -115,53 +115,55 @@ export default async function OrdersPage({
     };
   }
 
-  const { data: orders, count } = await query;
-
-  // Accurate count of preparing orders (combines Shopify in_progress/partial and local preparing)
-  const { count: preparingCount } = await supabase
-    .from("orders")
-    .select("*", { count: "exact", head: true })
-    .eq("is_archived", false)
-    .or("internal_status.in.(preparing,in_progress),fulfillment_status.in.(in_progress,partial)")
-    .neq("internal_status", "dispatched")
-    .neq("internal_status", "cancelled")
-    .is("cancel_reason", null)
-    .neq("financial_status", "voided")
-    .is("pathao_consignment_id", null);
-
-  const { count: dispatchedCount } = await supabase
-    .from("orders")
-    .select("*", { count: "exact", head: true })
-    .eq("is_archived", false)
-    .neq("internal_status", "cancelled")
-    .is("cancel_reason", null)
-    .neq("financial_status", "voided")
-    .or("internal_status.eq.dispatched,pathao_consignment_id.not.is.null");
-
-  // Accurate count of on hold orders (combines Shopify on_hold and local hold)
-  const { count: onHoldCount } = await supabase
-    .from("orders")
-    .select("*", { count: "exact", head: true })
-    .eq("is_archived", false)
-    .or("internal_status.in.(hold,on_hold),fulfillment_status.in.(on_hold,hold)")
-    .neq("internal_status", "cancelled")
-    .is("cancel_reason", null)
-    .neq("financial_status", "voided");
-
-  const { count: cancelledCount } = await supabase
-    .from("orders")
-    .select("*", { count: "exact", head: true })
-    .eq("is_archived", false)
-    .or("internal_status.eq.cancelled,cancel_reason.not.is.null,financial_status.eq.voided");
-
-  const { count: partialDeliveryCount } = await supabase
-    .from("orders")
-    .select("*", { count: "exact", head: true })
-    .eq("is_archived", false)
-    .ilike("pathao_delivery_status", "%partial%");
-
-  // Get Pathao location lists for dispatch modal
-  const { data: settings } = await supabase.from("app_settings").select("pathao_store_id").single();
+  // Run main order query, all filter count queries, and settings concurrently
+  const [
+    { data: orders, count },
+    { count: preparingCount },
+    { count: dispatchedCount },
+    { count: onHoldCount },
+    { count: cancelledCount },
+    { count: partialDeliveryCount },
+    { data: settings },
+  ] = await Promise.all([
+    query,
+    supabase
+      .from("orders")
+      .select("*", { count: "exact", head: true })
+      .eq("is_archived", false)
+      .or("internal_status.in.(preparing,in_progress),fulfillment_status.in.(in_progress,partial)")
+      .neq("internal_status", "dispatched")
+      .neq("internal_status", "cancelled")
+      .is("cancel_reason", null)
+      .neq("financial_status", "voided")
+      .is("pathao_consignment_id", null),
+    supabase
+      .from("orders")
+      .select("*", { count: "exact", head: true })
+      .eq("is_archived", false)
+      .neq("internal_status", "cancelled")
+      .is("cancel_reason", null)
+      .neq("financial_status", "voided")
+      .or("internal_status.eq.dispatched,pathao_consignment_id.not.is.null"),
+    supabase
+      .from("orders")
+      .select("*", { count: "exact", head: true })
+      .eq("is_archived", false)
+      .or("internal_status.in.(hold,on_hold),fulfillment_status.in.(on_hold,hold)")
+      .neq("internal_status", "cancelled")
+      .is("cancel_reason", null)
+      .neq("financial_status", "voided"),
+    supabase
+      .from("orders")
+      .select("*", { count: "exact", head: true })
+      .eq("is_archived", false)
+      .or("internal_status.eq.cancelled,cancel_reason.not.is.null,financial_status.eq.voided"),
+    supabase
+      .from("orders")
+      .select("*", { count: "exact", head: true })
+      .eq("is_archived", false)
+      .ilike("pathao_delivery_status", "%partial%"),
+    supabase.from("app_settings").select("pathao_store_id").single(),
+  ]);
 
   return (
     <OrdersClient

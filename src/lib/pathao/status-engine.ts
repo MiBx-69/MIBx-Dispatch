@@ -354,10 +354,13 @@ const STATUS_METADATA: Record<NormalizedPathaoStatus, StatusMetadata> = {
     isReturnLifecycle: false,
     isFinancialOnlyEvent: false,
   },
+  // Pathao's generic partial-delivery event carries no verified line-item quantities,
+  // so it must NEVER be treated as a full delivery: no order "delivered" status and no
+  // Shopify DELIVERED fulfillment event. Staff/verified payload reconciliation decides quantities.
   PARTIALLY_DELIVERED: {
     displayLabel: "Partial Delivered",
-    internalOrderStatus: "delivered",
-    shopifyFulfillmentEvent: "DELIVERED",
+    internalOrderStatus: null,
+    shopifyFulfillmentEvent: null,
     stageRank: 90,
     isTerminalDelivery: true,
     isReturnLifecycle: true,
