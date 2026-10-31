@@ -216,33 +216,71 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
       .not("pathao_order_status", "in", '("Delivered","Returned","Return","Paid Return","Return Completed","Cancelled")');
   }
 
-  await supabase.from("dispatches").insert({
-    order_id: order.id,
-    shopify_order_id: order.shopify_order_id,
-    shopify_order_name: order.shopify_order_name,
-    consignment_id,
-    merchant_order_id: order.shopify_order_name,
-    pathao_order_status: "Pending",
-    delivery_fee,
-    recipient_name: recipient_name || order.customer_name,
-    recipient_phone: recipient_phone || order.customer_phone,
-    recipient_address:
-      recipient_address ||
-      (order.shipping_address as any)?.address1 ||
-      "",
-    recipient_city: finalCity,
-    recipient_zone: finalZone,
-    amount_to_collect: amount_to_collect !== undefined && amount_to_collect !== null
-      ? Number(amount_to_collect)
-      : (order.total_price !== null ? Number(order.total_price) : 0),
-    item_weight,
-    item_quantity,
-    delivery_type,
-    item_type,
-    item_description,
-    pathao_response: pathaoResponseWithFraud as any,
-    dispatched_by: profileId || null,
-  });
+  const nowIso = new Date().toISOString();
+  const { data: insertedDispatch } = await supabase
+    .from("dispatches")
+    .insert({
+      order_id: order.id,
+      shopify_order_id: order.shopify_order_id,
+      shopify_order_name: order.shopify_order_name,
+      consignment_id,
+      merchant_order_id: order.shopify_order_name,
+      pathao_order_status: "Order Created",
+      normalized_status: "ORDER_CREATED",
+      last_pathao_event: "order.created",
+      last_event_timestamp: nowIso,
+      delivery_fee,
+      recipient_name: recipient_name || order.customer_name,
+      recipient_phone: recipient_phone || order.customer_phone,
+      recipient_address:
+        recipient_address ||
+        (order.shipping_address as any)?.address1 ||
+        "",
+      recipient_city: finalCity,
+      recipient_zone: finalZone,
+      amount_to_collect:
+        amount_to_collect !== undefined && amount_to_collect !== null
+          ? Number(amount_to_collect)
+          : order.total_price !== null
+            ? Number(order.total_price)
+            : 0,
+      expected_cod: finalAmount,
+      settlement_status: "pending",
+      item_weight,
+      item_quantity,
+      delivery_type,
+      item_type,
+      item_description,
+      pathao_response: pathaoResponseWithFraud as any,
+      tracking_history: [
+        {
+          status: "Order Created",
+          normalized_status: "ORDER_CREATED",
+          event: "order.created",
+          timestamp: nowIso,
+          applied: true,
+        },
+      ] as any,
+      dispatched_by: profileId || null,
+    })
+    .select("id")
+    .maybeSingle();
+
+  // Record initial ORDER_CREATED in pathao_status_history
+  await supabase.from("pathao_status_history").upsert(
+    {
+      dispatch_id: insertedDispatch?.id || null,
+      order_id: order.id,
+      consignment_id,
+      merchant_order_id: order.shopify_order_name,
+      raw_event: "order.created",
+      normalized_status: "ORDER_CREATED",
+      event_timestamp: nowIso,
+      raw_payload: pathaoResponse.data as any,
+      idempotency_key: `pathao:${consignment_id}:ORDER_CREATED:dispatch`,
+    },
+    { onConflict: "idempotency_key" }
+  );
 
   // 3. Update order in DB with consignment ID and status
   const recipientPhoneStr = recipient_phone || order.customer_phone || (order.shipping_address as any)?.phone || "";
@@ -253,7 +291,7 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
       internal_status: "dispatched",
       pathao_consignment_id: consignment_id,
       pathao_tracking_url: trackingUrl,
-      pathao_delivery_status: "Pending",
+      pathao_delivery_status: "Order Created",
       returned_at: null,
       return_reason: null,
     })
@@ -305,9 +343,29 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
         .from("orders")
         .update({ shopify_fulfillment_id: shopifyFulfillmentId })
         .eq("id", order.id);
+
+      if (insertedDispatch?.id) {
+        await supabase
+          .from("dispatches")
+          .update({
+            shopify_fulfillment_id: shopifyFulfillmentId,
+            shopify_sync_status: "synced",
+            last_synced_at: new Date().toISOString(),
+          })
+          .eq("id", insertedDispatch.id);
+      }
     }
-  } catch (shopifyErr) {
+  } catch (shopifyErr: any) {
     console.error("[Dispatch] Shopify fulfillment error (non-fatal):", shopifyErr);
+    if (insertedDispatch?.id) {
+      await supabase
+        .from("dispatches")
+        .update({
+          shopify_sync_status: "failed",
+          shopify_sync_error: shopifyErr?.message || "Shopify fulfillment failed",
+        })
+        .eq("id", insertedDispatch.id);
+    }
   }
 
   // 5. Attach tracking & fraud report to Shopify Order Note & Tags

@@ -11,6 +11,10 @@ import { DeliverModal } from "@/components/orders/deliver-modal";
 import { FraudDetailsModal } from "@/components/modals/fraud-details-modal";
 import { BulkImportDeliveriesModal } from "@/components/orders/bulk-import-deliveries-modal";
 import { DispatchesReportingHeader, DispatchStats } from "@/components/dispatches/dispatches-reporting-header";
+import {
+  PathaoConnectionDashboard,
+  type PathaoDashboardTelemetry,
+} from "@/components/dispatches/pathao-connection-dashboard";
 import { formatPathaoTrackingUrl } from "@/lib/pathao/client";
 
 const PATHAO_STATUS_COLORS: Record<string, string> = {
@@ -47,6 +51,7 @@ export function DispatchesClient({
   totalAmount = 0,
   totalQuantity = 0,
   stats,
+  telemetry,
   page = 1,
   pageSize = 50,
 }: {
@@ -61,6 +66,7 @@ export function DispatchesClient({
   totalAmount?: number;
   totalQuantity?: number;
   stats?: DispatchStats | null;
+  telemetry?: PathaoDashboardTelemetry | null;
   page?: number;
   pageSize?: number;
 }) {
@@ -165,6 +171,9 @@ export function DispatchesClient({
 
   return (
     <div className="space-y-3 animate-fade-in">
+      {/* Pathao Courier Connection, Telemetry & Webhook Status Panel */}
+      {telemetry && <PathaoConnectionDashboard telemetry={telemetry} />}
+
       {/* Small, Sleek Dispatches Reporting Header */}
       <DispatchesReportingHeader
         stats={stats || null}

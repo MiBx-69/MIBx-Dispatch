@@ -66,18 +66,18 @@ export function formatShortDate(dateStr: string): string {
   }
 }
 
-export function generateCsv(headers: string[], rows: (string | number)[][]): string {
-  const escapeCell = (cell: string | number) => {
-    const str = String(cell ?? "");
-    if (str.includes(",") || str.includes('"') || str.includes("\n")) {
-      return `"${str.replace(/"/g, '""')}"`;
-    }
-    return str;
-  };
+export function escapeCsvCell(cell: unknown): string {
+  const str = String(cell ?? "");
+  if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
 
+export function generateCsv(headers: string[], rows: (string | number)[][]): string {
   const content = [
-    headers.map(escapeCell).join(","),
-    ...rows.map((row) => row.map(escapeCell).join(",")),
+    headers.map(escapeCsvCell).join(","),
+    ...rows.map((row) => row.map(escapeCsvCell).join(",")),
   ].join("\n");
 
   return content;

@@ -9,30 +9,38 @@ export interface OrderStatusInfo {
   returnedOrderIds: Set<string>;
 }
 
-const STATUS_CACHE_KEY = "sales:order_status_map";
-const STATUS_CACHE_TTL = 120; // 2 minutes — order statuses don't change that frequently
+const STATUS_CACHE_KEY = "sales:order_status_map:v2";
+const STATUS_CACHE_TTL = 120;
 
-/**
- * Fetches order internal_status mapping from the dispatch orders table.
- * Uses Redis caching to avoid hitting the DB on every single API call.
- */
 export async function getOrderStatusMap(supabase: SupabaseClient): Promise<OrderStatusInfo> {
-  // Try Redis cache first for the raw status data
-  const cached = await getCache<Array<{ shopify_order_id: string; shopify_order_name: string | null; internal_status: string }>>(STATUS_CACHE_KEY);
+  const cached = await getCache<
+    Array<{ shopify_order_id: string; shopify_order_name: string | null; internal_status: string }>
+  >(STATUS_CACHE_KEY);
 
   let ordersData: any[] | null = cached;
 
   if (!ordersData) {
-    const { data: orders, error } = await supabase
-      .from("orders")
-      .select("shopify_order_id, shopify_order_name, internal_status");
+    const allOrders: any[] = [];
+    let offset = 0;
+    const pageSize = 1000;
+    while (true) {
+      const { data: batch, error } = await supabase
+        .from("orders")
+        .select("shopify_order_id, shopify_order_name, internal_status")
+        .eq("is_archived", false)
+        .range(offset, offset + pageSize - 1);
 
-    if (error) {
-      console.error("[SalesStatusHelper] Error fetching orders status:", error);
+      if (error) {
+        console.error("[SalesStatusHelper] Error fetching orders status:", error);
+        break;
+      }
+      if (!batch || batch.length === 0) break;
+      allOrders.push(...batch);
+      if (batch.length < pageSize) break;
+      offset += pageSize;
     }
 
-    ordersData = orders || [];
-    // Cache the raw data in Redis
+    ordersData = allOrders;
     await setCache(STATUS_CACHE_KEY, ordersData, STATUS_CACHE_TTL);
   }
 
@@ -56,18 +64,11 @@ export async function getOrderStatusMap(supabase: SupabaseClient): Promise<Order
   return { statusMap, deliveredOrderIds, returnedOrderIds };
 }
 
-/**
- * Invalidate the cached order status map (call after sync or status change)
- */
 export async function invalidateOrderStatusCache(): Promise<void> {
   const { deleteCache } = await import("@/lib/redis");
   await deleteCache(STATUS_CACHE_KEY);
 }
 
-/**
- * Filter line items based on order status filter
- * Default: 'delivered' (ONLY show successfully delivered as sold, exclude returns)
- */
 export function filterLineItemsByStatus<T extends { shopify_order_id: string }>(
   items: T[],
   statusMap: Map<string, string>,
@@ -80,12 +81,10 @@ export function filterLineItemsByStatus<T extends { shopify_order_id: string }>(
     const status = statusMap.get(rawId) || "pending";
 
     if (filter === "delivered") {
-      // ONLY successfully delivered as sold (excludes returns, cancellations, pending, in transit)
       return status === "delivered";
     }
 
     if (filter === "exclude_returns") {
-      // Exclude returns and cancellations
       return status !== "returned" && status !== "cancelled";
     }
 

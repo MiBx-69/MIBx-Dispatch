@@ -842,17 +842,28 @@ export function OrdersClient({
                     {isSelected && <Check size={12} strokeWidth={3} />}
                   </button>
                   <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                    <h3 className="font-bold text-zinc-100 text-sm truncate">{order.shopify_order_name}</h3>
+                    <a
+                      href={`/orders/${order.id}`}
+                      className="font-bold text-zinc-100 hover:text-indigo-400 text-sm truncate transition-colors"
+                    >
+                      {order.shopify_order_name}
+                    </a>
                     <StatusBadge status={getOrderDisplayStatus(order)} />
-                    {(order as any).returns?.some((r: any) => r.return_type === "partial" && !r.is_verified) && (
+                    {(order as any).returns?.length > 0 && (
                       <a
-                        href="/returns?filter=pending_verification"
+                        href={`/orders/${order.id}`}
                         onClick={(e) => e.stopPropagation()}
-                        className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/35 hover:bg-amber-500/30 transition-colors flex items-center gap-1 shrink-0 animate-pulse"
-                        title="Partial return from Shopify awaiting admin verification & approval in Returns"
+                        className={`px-2 py-0.5 text-[10px] font-bold rounded-full border transition-colors flex items-center gap-1 shrink-0 ${
+                          (order as any).returns.some((r: any) => r.return_type === "full") ||
+                          order.internal_status === "returned"
+                            ? "bg-rose-500/15 text-rose-300 border-rose-500/30 hover:bg-rose-500/25"
+                            : "bg-amber-500/15 text-amber-300 border-amber-500/30 hover:bg-amber-500/25"
+                        }`}
                       >
-                        <AlertCircle size={10} className="text-amber-400" />
-                        Needs Attention
+                        {(order as any).returns.some((r: any) => r.return_type === "full") ||
+                        order.internal_status === "returned"
+                          ? "Full Return"
+                          : "Partial Return"}
                       </a>
                     )}
                   </div>
@@ -979,7 +990,7 @@ export function OrdersClient({
 
                   {/* Pathao consignment if dispatched */}
                   {order.pathao_consignment_id && (() => {
-                    const trackingUrl = order.pathao_tracking_url || formatPathaoTrackingUrl(order.pathao_consignment_id, order.customer_phone);
+                    const trackingUrl = formatPathaoTrackingUrl(order.pathao_consignment_id, order.customer_phone) || order.pathao_tracking_url || "#";
                     return (
                       <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                         <a

@@ -145,21 +145,25 @@ export async function GET(request: NextRequest) {
     const successRate = finalizedCount > 0 ? `${((deliveredCount / finalizedCount) * 100).toFixed(1)}%` : "0.0%";
     const returnRate = finalizedCount > 0 ? `${((returnedCount / finalizedCount) * 100).toFixed(1)}%` : "0.0%";
 
-    const totalGrossRevenue = orders.reduce((sum: number, o: any) => sum + (Number(o.total_price) || 0), 0);
-    const deliveredRevenue = deliveredOrders.reduce((sum: number, o: any) => sum + (Number(o.total_price) || 0), 0);
+    const getOrigTotal = (o: any) => Number(o.original_total_price ?? o.total_price ?? 0);
+    const totalGrossRevenue = orders.reduce((sum: number, o: any) => sum + getOrigTotal(o), 0);
+    const deliveredRevenue = deliveredOrders.reduce((sum: number, o: any) => sum + getOrigTotal(o), 0);
     const returnedValue = Math.round(
       returns.reduce((sum: number, r: any) => {
         if (r.return_type === "partial") {
+          if (r.is_verified === false) return sum;
+          if (Number(r.returned_product_value) > 0) return sum + Number(r.returned_product_value);
           if (Number(r.refund_amount) > 0) return sum + Number(r.refund_amount);
           if (Array.isArray(r.returned_items) && r.returned_items.length > 0) {
-            const itemsSum = r.returned_items.reduce((s: number, i: any) => s + (Number(i.price || 0) * Number(i.quantity || 1)), 0);
+            const itemsSum = r.returned_items.reduce((s: number, i: any) => s + (Number(i.price || 0) * Number(i.return_quantity ?? i.quantity ?? 0)), 0);
             if (itemsSum > 0) return sum + itemsSum;
           }
+          return sum;
         }
-        return sum + (Number(r.order_total) || 0);
+        return sum + (Number(r.returned_product_value || r.refund_amount || r.order_total) || 0);
       }, 0)
     );
-    const cancelledRevenue = cancelledOrders.reduce((sum: number, o: any) => sum + (Number(o.total_price) || 0), 0);
+    const cancelledRevenue = cancelledOrders.reduce((sum: number, o: any) => sum + getOrigTotal(o), 0);
     const totalDeductions = returnedValue + cancelledRevenue;
     const netCollectibleRevenue = Math.max(0, totalGrossRevenue - totalDeductions);
 

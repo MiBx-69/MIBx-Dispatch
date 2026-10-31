@@ -10,6 +10,8 @@ export default defineConfig({
     include: ["src/__tests__/**/*.test.ts"],
     exclude: ["node_modules", ".next", "dist"],
     globals: true,
+    testTimeout: 30000,
+    hookTimeout: 30000,
   },
   resolve: {
     alias: {

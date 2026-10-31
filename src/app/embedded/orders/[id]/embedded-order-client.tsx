@@ -9,6 +9,7 @@ import {
 import { StatusBadge } from "@/components/ui/status-badge";
 import { getOrderDisplayStatus } from "@/lib/order-status";
 import { DispatchModal } from "@/components/orders/dispatch-modal";
+import { OrderReturnSection } from "@/components/orders/order-return-section";
 import { formatPathaoTrackingUrl } from "@/lib/pathao/client";
 
 interface EmbeddedOrderClientProps {
@@ -295,6 +296,14 @@ export function EmbeddedOrderClient({ order: initialOrder, pathaoStoreId }: Embe
             ))}
           </div>
         </div>
+
+        {/* Return Section */}
+        <OrderReturnSection
+          order={order}
+          onUpdated={() => {
+            window.location.reload();
+          }}
+        />
       </div>
 
       {/* Dispatch Modal */}

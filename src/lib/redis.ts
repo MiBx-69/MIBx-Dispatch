@@ -1,10 +1,17 @@
 import { Redis } from "@upstash/redis";
 
+const hasRedisConfig =
+  typeof process !== "undefined" &&
+  Boolean(process.env?.UPSTASH_REDIS_REST_URL) &&
+  Boolean(process.env?.UPSTASH_REDIS_REST_TOKEN);
+
 // Upstash Redis client — works via REST API (no TCP needed, works in Next.js edge/serverless)
-export const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL!,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-});
+export const redis = hasRedisConfig
+  ? new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    })
+  : (null as unknown as Redis);
 
 // ─── Cache Keys ──────────────────────────────────────────────────────────────
 export const CACHE_KEYS = {
@@ -34,6 +41,7 @@ export const TTL = {
 
 // ─── Cache Helpers ────────────────────────────────────────────────────────────
 export async function getCache<T>(key: string): Promise<T | null> {
+  if (!hasRedisConfig || !redis) return null;
   try {
     const data = await redis.get<T>(key);
     return data;
@@ -48,6 +56,7 @@ export async function setCache<T>(
   value: T,
   ttl: number
 ): Promise<void> {
+  if (!hasRedisConfig || !redis) return;
   try {
     await redis.set(key, value, { ex: ttl });
   } catch (err) {
@@ -56,6 +65,7 @@ export async function setCache<T>(
 }
 
 export async function deleteCache(key: string): Promise<void> {
+  if (!hasRedisConfig || !redis) return;
   try {
     await redis.del(key);
   } catch (err) {
@@ -63,7 +73,10 @@ export async function deleteCache(key: string): Promise<void> {
   }
 }
 
+export const invalidateCache = deleteCache;
+
 export async function deleteCachePattern(pattern: string): Promise<void> {
+  if (!hasRedisConfig || !redis) return;
   try {
     const keys = await redis.keys(pattern);
     if (keys.length > 0) {
@@ -80,6 +93,9 @@ export async function checkRateLimit(
   limit: number,
   windowSeconds: number
 ): Promise<{ allowed: boolean; remaining: number }> {
+  if (!hasRedisConfig || !redis) {
+    return { allowed: true, remaining: limit };
+  }
   try {
     const current = await redis.incr(key);
     if (current === 1) {

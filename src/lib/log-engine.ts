@@ -5,9 +5,15 @@ export interface UnifiedLogEntry {
   id: string;
   source: "shopify" | "pathao" | "sms" | "order" | "sync" | "system";
   topic: string;
+  normalizedEvent?: string | null;
   reference: string | null;
+  consignmentId?: string | null;
+  merchantOrderId?: string | null;
   orderId?: string | null;
   status: "success" | "error" | "pending";
+  processingStatus?: string | null;
+  shopifySyncStatus?: string | null;
+  retryCount?: number;
   summary: string;
   payload: any;
   error: string | null;
@@ -56,10 +62,28 @@ function normalizeWebhookLog(row: any): UnifiedLogEntry {
     reference = String(row.payload.idempotencyKey);
   }
 
+  const consignmentId =
+    row.pathao_consignment_id || row.payload?.consignment_id || null;
+  const merchantOrderId =
+    row.merchant_order_id || row.payload?.merchant_order_id || null;
+  const processingStatus =
+    row.processing_status ||
+    (row.error ? "failed" : row.processed === false ? "pending" : "processed");
+  const shopifySyncStatus = row.shopify_sync_status || null;
+  const retryCount = Number(row.retry_count || 0);
+
   let status: "success" | "error" | "pending" = "success";
-  if (row.error) {
+  if (
+    row.error ||
+    processingStatus === "failed" ||
+    shopifySyncStatus === "failed"
+  ) {
     status = "error";
-  } else if (row.processed === false) {
+  } else if (
+    row.processed === false ||
+    processingStatus === "pending" ||
+    processingStatus === "retrying"
+  ) {
     status = "pending";
   }
 
@@ -76,16 +100,23 @@ function normalizeWebhookLog(row: any): UnifiedLogEntry {
   } else if (row.source === "shopify") {
     summary = `Shopify ${row.topic}${reference ? ` (${reference})` : ""}`;
   } else if (row.source === "pathao") {
-    summary = `Pathao ${row.topic}${reference ? ` (${reference})` : ""}`;
+    const orderInfo = merchantOrderId ? ` • Order ${merchantOrderId}` : "";
+    summary = `Pathao ${row.topic}${consignmentId ? ` (${consignmentId}${orderInfo})` : ""}`;
   }
 
   return {
     id: row.id,
     source: row.source,
     topic: row.topic,
-    reference,
+    normalizedEvent: row.normalized_event || row.event_type || null,
+    reference: consignmentId || reference,
+    consignmentId,
+    merchantOrderId,
     orderId: row.shopify_order_id ? String(row.shopify_order_id) : null,
     status,
+    processingStatus,
+    shopifySyncStatus,
+    retryCount,
     summary,
     payload: row.payload,
     error: row.error,

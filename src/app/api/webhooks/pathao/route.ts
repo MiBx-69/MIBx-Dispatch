@@ -1,548 +1,286 @@
-import { type NextRequest, NextResponse, after } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { updateShopifyFulfillmentTracking, markShopifyOrderAsDelivered, markShopifyOrderAsPartialDelivered } from "@/lib/shopify/client";
-import { formatPathaoTrackingUrl } from "@/lib/pathao/client";
+import { verifyPathaoWebhook } from "@/lib/pathao/client";
+import {
+  normalizePathaoEvent,
+  computePathaoEventIdempotencyKey,
+} from "@/lib/pathao/status-engine";
+import {
+  processPathaoWebhookEvent,
+  type PathaoWebhookPayload,
+} from "@/lib/pathao/webhook-processor";
+import { enqueueJob } from "@/lib/qstash";
 
-export const dynamic = "force-dynamic";
-
-export async function POST(request: NextRequest) {
-  const rawBody = await request.text();
-  let payload: any = null;
-
-  const supabaseAdmin = createServiceClient();
-
-  try {
-    payload = JSON.parse(rawBody);
-  } catch (parseErr) {
-    // Record malformed JSON attempt so it is never dropped silently
-    await supabaseAdmin.from("webhook_logs").insert({
-      source: "pathao",
-      topic: "invalid_json",
-      pathao_consignment_id: null,
-      payload: { rawBody: rawBody.slice(0, 1000) },
-      processed: false,
-      error: "Malformed JSON received from webhook caller",
-    });
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  // Extract secret from various possible casing and headers
-  const providedSecret = (
-    request.headers.get("x-pathao-merchant-webhook-integration-secret") ||
-    request.headers.get("X-Pathao-Merchant-Webhook-Integration-Secret") ||
-    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ||
-    ""
-  ).trim();
-
-  // Fetch stored secrets from app_settings or environment
-  const { data: settings } = await supabaseAdmin
-    .from("app_settings")
-    .select("pathao_webhook_secret, pathao_client_secret")
-    .single();
-  const storedWebhookSecret = (settings?.pathao_webhook_secret || process.env.PATHAO_WEBHOOK_SECRET || "").trim();
-  const storedClientSecret = (settings?.pathao_client_secret || process.env.PATHAO_CLIENT_SECRET || "").trim();
-
-  const validSecrets = [storedWebhookSecret, storedClientSecret].filter(Boolean);
-  const primarySecret = validSecrets[0] || "";
-
-  // 1. Webhook Integration Verification Event
-  if (payload.event === "webhook_integration") {
-    await supabaseAdmin.from("webhook_logs").insert({
-      source: "pathao",
-      topic: "webhook_integration",
-      pathao_consignment_id: null,
-      payload,
-      processed: true,
-      error: null,
-    });
-
-    return new NextResponse(JSON.stringify({ success: true, message: "Webhook verified successfully" }), {
-      status: 202,
-      headers: {
-        "Content-Type": "application/json",
-        "X-Pathao-Merchant-Webhook-Integration-Secret": primarySecret || providedSecret,
-      },
-    });
-  }
-
-  // 2. Secret Verification for normal events
-  const safeCompare = (a: string, b: string): boolean => {
-    if (!a || !b) return false;
-    const bufA = Buffer.from(a);
-    const bufB = Buffer.from(b);
-    if (bufA.length !== bufB.length) return false;
-    const crypto = require("crypto");
-    return crypto.timingSafeEqual(bufA, bufB);
-  };
-
-  const isAuthorized =
-    validSecrets.length > 0 &&
-    Boolean(providedSecret) &&
-    validSecrets.some((sec) => safeCompare(providedSecret, sec));
-
-  if (!isAuthorized) {
-    console.error("[Pathao Webhook] Unauthorized attempt: secret mismatch or unconfigured");
-    await supabaseAdmin.from("webhook_logs").insert({
-      source: "pathao",
-      topic: payload.event || payload.order_status || "unauthorized_webhook",
-      pathao_consignment_id: payload.consignment_id || null,
-      payload,
-      processed: false,
-      error: "Unauthorized secret mismatch",
-    });
-
-    return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-  }
-
-  // 3. Log incoming valid webhook immediately
-  const topic = payload.event || payload.order_status || "status_update";
-  const consignmentId = payload.consignment_id || null;
-
-  const { data: insertedLog } = await supabaseAdmin
-    .from("webhook_logs")
-    .insert({
-      source: "pathao",
-      topic,
-      pathao_consignment_id: consignmentId,
-      payload,
-      processed: false,
-      error: null,
-    })
-    .select("id")
-    .maybeSingle();
-
-  const logId = insertedLog?.id;
-
-  // 4. Return HTTP 202 IMMEDIATELY to Pathao (<50ms)
-  // Pathao strictly enforces a 2-second timeout window. Waiting for database queries,
-  // Shopify tracking updates, and SMS sending caused delivery timeouts in Pathao's network.
-  // We execute all heavy processing asynchronously in the background.
-  // The proper way to do background processing in Next.js is using after()
-  after(async () => {
-    try {
-      await processPathaoWebhook(payload, primarySecret, logId);
-    } catch (err: any) {
-      console.error("[Pathao Webhook] Background processing error:", err);
-      if (logId) {
-        await supabaseAdmin
-          .from("webhook_logs")
-          .update({ processed: false, error: err?.message || String(err) })
-          .eq("id", logId);
-      }
-    }
-
-    try {
-      const { processAutoDeliveredOrders } = await import("@/lib/auto-deliver");
-      await processAutoDeliveredOrders();
-    } catch (err) {
-      console.error("[Pathao Webhook] Auto Deliver processing error:", err);
-    }
-  });
-
-  return new NextResponse(JSON.stringify({ received: true, event: topic }), {
-    status: 202,
-    headers: {
-      "Content-Type": "application/json",
-      "X-Pathao-Merchant-Webhook-Integration-Secret": primarySecret,
-    },
-  });
-}
-
-async function processPathaoWebhook(payload: any, storedSecret: string, logId?: string) {
-  const supabase = createServiceClient();
-  const consignmentId = payload.consignment_id;
-  const merchantOrderId = payload.merchant_order_id;
-
-  if (!consignmentId) {
-    if (logId) {
-      await supabase
-        .from("webhook_logs")
-        .update({ processed: true, error: "No consignment_id in payload" })
-        .eq("id", logId);
-    }
-    return;
-  }
+async function resolvePathaoWebhookSecret(): Promise<string> {
+  const envSecret = process.env.PATHAO_WEBHOOK_SECRET?.trim();
+  if (envSecret) return envSecret;
 
   try {
-    const rawEvent = payload.event || payload.order_status || "updated";
-    const newEvent = String(rawEvent);
-
-    const isPartialDelivery = newEvent.toLowerCase().includes("partial");
-    const isReturnEvent = newEvent.toLowerCase().includes("return");
-
-    // 1. Try to find the order directly first (more reliable)
-    let order: any = null;
-    if (merchantOrderId) {
-      const cleanOrderId = String(merchantOrderId).trim();
-      const altOrderId = cleanOrderId.startsWith("#") ? cleanOrderId.slice(1) : `#${cleanOrderId}`;
-
-      const { data } = await supabase
-        .from("orders")
-        .select("*, customers(name, phone)")
-        .or(`shopify_order_name.eq.${cleanOrderId},shopify_order_name.eq.${altOrderId}`)
-        .maybeSingle();
-
-      if (data) order = data;
-    }
-
-    if (!order) {
-      const { data } = await supabase
-        .from("orders")
-        .select("*, customers(name, phone)")
-        .eq("pathao_consignment_id", consignmentId)
-        .maybeSingle();
-      if (data) order = data;
-    }
-
-    // 2. Update dispatch record if it exists
-    const { data: dispatch } = await supabase
-      .from("dispatches")
-      .select("*")
-      .eq("consignment_id", consignmentId)
+    const supabase = createServiceClient();
+    const { data: settings } = await supabase
+      .from("app_settings")
+      .select("pathao_webhook_secret")
+      .limit(1)
       .maybeSingle();
 
-    if (dispatch) {
-      const history = (dispatch.tracking_history as any[]) || [];
-      history.push({
-        status: newEvent,
-        timestamp: payload.updated_at || new Date().toISOString(),
-        note: payload.reason || null,
-      });
-
-      const isCancelled = newEvent.toLowerCase().includes("cancel");
-      const lowerEvent = newEvent.toLowerCase();
-      let normalizedDispatchStatus = newEvent;
-      
-      if (lowerEvent.includes("partial")) {
-        normalizedDispatchStatus = "Partial Delivered";
-      } else if (lowerEvent.includes("return") || lowerEvent.includes("returned")) {
-        normalizedDispatchStatus = lowerEvent.includes("paid") ? "Paid Return" : "Returned";
-      } else if (lowerEvent.includes("delivered") || lowerEvent.includes("payment_received") || lowerEvent.includes("payment invoice")) {
-        normalizedDispatchStatus = "Delivered";
-      } else if (
-        lowerEvent.includes("out_for_delivery") ||
-        lowerEvent.includes("out for delivery") ||
-        lowerEvent.includes("assigned for delivery") ||
-        lowerEvent.includes("assigned_for_delivery") ||
-        lowerEvent.includes("ready for delivery") ||
-        lowerEvent.includes("ready_for_delivery")
-      ) {
-        if (lowerEvent.includes("out")) normalizedDispatchStatus = "Out for Delivery";
-        else if (lowerEvent.includes("assigned")) normalizedDispatchStatus = "Assigned for Delivery";
-        else if (lowerEvent.includes("ready")) normalizedDispatchStatus = "Ready for Delivery";
-      } else if (lowerEvent.includes("cancel") || lowerEvent.includes("cancelled")) {
-        normalizedDispatchStatus = "Cancelled";
-      } else if (lowerEvent.includes("hold") || lowerEvent.includes("failed")) {
-        normalizedDispatchStatus = newEvent;
-      }
-
-      const dispatchUpdate: any = {
-        pathao_order_status: normalizedDispatchStatus,
-        tracking_history: history,
-        updated_at: new Date().toISOString(),
-      };
-      if (isCancelled) {
-        dispatchUpdate.is_cancelled = true;
-        dispatchUpdate.cancelled_at = payload.updated_at || new Date().toISOString();
-        dispatchUpdate.cancel_reason = payload.reason || "Cancelled by courier";
-      }
-
-      await supabase
-        .from("dispatches")
-        .update(dispatchUpdate)
-        .eq("consignment_id", consignmentId);
-
-      if (!order && dispatch.order_id) {
-        const { data: orderFromDispatch } = await supabase
-          .from("orders")
-          .select("*, customers(name, phone)")
-          .eq("id", dispatch.order_id)
-          .maybeSingle();
-        if (orderFromDispatch) order = orderFromDispatch;
-      }
+    if (settings?.pathao_webhook_secret?.trim()) {
+      return settings.pathao_webhook_secret.trim();
     }
-
-    if (!order) {
-      console.warn(`[Pathao Webhook] No order matched for consignment ${consignmentId} or merchant ID ${merchantOrderId}`);
-    } else {
-      // Map Pathao event to internal ERP status
-      const internalStatus = mapPathaoEventToInternal(newEvent);
-
-      // Build update payload for the order
-      const orderUpdate: any = {
-        pathao_delivery_status: newEvent,
-        internal_status: internalStatus,
-      };
-
-      // ─── PARTIAL DELIVERY HANDLING ─────────────────────────────────────────
-      if (isPartialDelivery) {
-        orderUpdate.pathao_delivery_status = "Partial Delivered";
-        orderUpdate.internal_status = "delivered";
-        orderUpdate.delivered_at = order.delivered_at || new Date().toISOString();
-
-        // Create return record in returns table if not already created
-        const { data: existingReturn } = await supabase
-          .from("returns")
-          .select("id")
-          .eq("order_id", order.id)
-          .maybeSingle();
-
-        if (!existingReturn) {
-          await supabase.from("returns").insert({
-            order_id: order.id,
-            dispatch_id: dispatch?.id || null,
-            consignment_id: consignmentId,
-            return_type: "partial",
-            return_source: "pathao_webhook",
-            order_total: Number(order.total_price) || 0,
-            return_delivery_fee: 0,
-            status: "pending_verification",
-            is_verified: false,
-            return_reason: "Pathao Partial Delivery",
-            returned_at: new Date().toISOString(),
-          });
-        }
-
-        // Auto-sync Partial Delivery to Shopify
-        try {
-          await markShopifyOrderAsPartialDelivered({
-            shopifyOrderId: order.shopify_order_id,
-            shopifyFulfillmentId: order.shopify_fulfillment_id,
-            consignmentId,
-          });
-        } catch (shopifyErr) {
-          console.error("[Pathao Webhook] Failed to sync partial delivery to Shopify:", shopifyErr);
-        }
-      }
-      // ─── FULL DELIVERY HANDLING ───────────────────────────────────────────
-      else if (internalStatus === "delivered") {
-        orderUpdate.delivered_at = order.delivered_at || new Date().toISOString();
-        orderUpdate.internal_status = "delivered";
-        orderUpdate.pathao_delivery_status = "Delivered";
-
-        // Audit event in order_events
-        try {
-          await supabase.from("order_events").insert({
-            order_id: order.id,
-            event_type: "ORDER_DELIVERED",
-            description: `Order delivered via Pathao Courier (Consignment: ${consignmentId})`,
-            metadata: {
-              source: "pathao_webhook",
-              consignment_id: consignmentId,
-              event: newEvent,
-              delivered_at: new Date().toISOString(),
-            },
-          });
-        } catch (eventErr) {
-          console.error("[Pathao Webhook] Failed to insert audit event:", eventErr);
-        }
-
-        // Mark as Delivered on Shopify
-        try {
-          const shopifyRes = await markShopifyOrderAsDelivered({
-            shopifyOrderId: order.shopify_order_id,
-            shopifyFulfillmentId: order.shopify_fulfillment_id,
-            consignmentId,
-          });
-
-          if (shopifyRes.fulfillmentId && !order.shopify_fulfillment_id) {
-            orderUpdate.shopify_fulfillment_id = shopifyRes.fulfillmentId;
-          }
-        } catch (shopifyErr) {
-          console.error("[Pathao Webhook] Failed to mark order delivered on Shopify:", shopifyErr);
-        }
-      }
-      // ─── RETURN HANDLING ───────────────────────────────────────────────────
-      else if (internalStatus === "returned") {
-        orderUpdate.pathao_delivery_status = newEvent.toLowerCase().includes("paid") ? "Paid Return" : "Returned";
-        orderUpdate.internal_status = "returned";
-        orderUpdate.returned_at = new Date().toISOString();
-        orderUpdate.return_reason = newEvent.toLowerCase().includes("paid") ? "Paid Return via Pathao" : "Returned via Pathao";
-      }
-      // ─── OTHER STATUSES (Ready / Assigned for Delivery / In Transit / On Hold) ─────
-      else {
-        if (
-          newEvent.toLowerCase().includes("assigned-for-delivery") ||
-          newEvent.toLowerCase().includes("assigned for delivery") ||
-          newEvent.toLowerCase().includes("ready for delivery") ||
-          newEvent.toLowerCase().includes("ready-for-delivery") ||
-          newEvent.toLowerCase().includes("ready_for_delivery")
-        ) {
-          orderUpdate.pathao_delivery_status = "Ready for Delivery";
-          orderUpdate.internal_status = "dispatched";
-          orderUpdate.delivered_at = null;
-        } else if (newEvent.toLowerCase().includes("hold") || newEvent.toLowerCase().includes("failed")) {
-          orderUpdate.pathao_delivery_status = newEvent;
-          orderUpdate.internal_status = "hold";
-        }
-      }
-
-      // Compute proper Pathao tracking URL with consignment ID and phone
-      const recipientPhone =
-        dispatch?.recipient_phone ||
-        order.customer_phone ||
-        (order.customers as any)?.phone ||
-        (order.shipping_address as any)?.phone ||
-        "";
-      const trackingUrl = formatPathaoTrackingUrl(consignmentId, recipientPhone);
-      orderUpdate.pathao_tracking_url = trackingUrl;
-
-      // Update order internal status in database
-      await supabase
-        .from("orders")
-        .update(orderUpdate)
-        .eq("id", order.id);
-
-      // Update Shopify fulfillment tracking if order has fulfillment
-      const activeFulfillmentId = order.shopify_fulfillment_id || orderUpdate.shopify_fulfillment_id;
-      if (activeFulfillmentId && !isPartialDelivery) {
-        try {
-          await updateShopifyFulfillmentTracking({
-            fulfillmentId: activeFulfillmentId,
-            trackingNumber: consignmentId,
-            trackingCompany: "Pathao",
-            trackingUrl,
-            notifyCustomer: false,
-          });
-        } catch (shopifyErr) {
-          console.error("[Pathao Webhook] Shopify tracking update failed:", shopifyErr);
-        }
-      }
-
-      // Handle automated SMS
-      try {
-        const evtLower = newEvent.toLowerCase();
-        const isOutForDelivery = evtLower.includes("out_for_delivery") || evtLower.includes("out for delivery") || evtLower.includes("assigned-for-delivery") || evtLower.includes("assigned for delivery");
-
-        if (
-          internalStatus === "dispatched" ||
-          internalStatus === "delivered" ||
-          internalStatus === "returned" ||
-          internalStatus === "on_hold" ||
-          isOutForDelivery
-        ) {
-          const { data: appSettings } = await supabase.from("app_settings").select("*").single();
-          if (appSettings?.sms_api_key && appSettings?.sms_master_enabled !== false) {
-            const phone = order?.customer_phone || order?.customers?.phone || recipientPhone;
-            if (phone) {
-              const { sendSMS } = await import("@/lib/sms");
-              let template = null;
-              let eventKey = internalStatus;
-
-              if (isOutForDelivery && appSettings.sms_auto_out_for_delivery_enabled) {
-                template = appSettings.sms_auto_out_for_delivery_template || "Dear {{customer_name}}, your order {{order_id}} is out for delivery today via Pathao! Please keep ৳{{total_price}} ready. Thank you!";
-                eventKey = "out_for_delivery";
-              } else if (internalStatus === "dispatched" && appSettings.sms_auto_dispatch_enabled) {
-                template = appSettings.sms_auto_dispatch_template;
-              } else if (internalStatus === "delivered" && appSettings.sms_auto_delivered_enabled) {
-                template = appSettings.sms_auto_delivered_template;
-              } else if (internalStatus === "returned" && appSettings.sms_auto_returned_enabled) {
-                template = appSettings.sms_auto_returned_template;
-              } else if (internalStatus === "on_hold" && appSettings.sms_auto_on_hold_enabled) {
-                template = appSettings.sms_auto_on_hold_template;
-              }
-
-              if (template) {
-                const customerName = order.customers?.name || "Customer";
-                const total = order.total_price !== undefined && order.total_price !== null ? order.total_price.toString() : "0";
-                let msg = template
-                  .replace(/\{\{order_id\}\}/g, order.shopify_order_name || order.id)
-                  .replace(/\{\{customer_name\}\}/g, customerName)
-                  .replace(/\{\{tracking_url\}\}/g, trackingUrl)
-                  .replace(/\{\{consignment_id\}\}/g, consignmentId || "")
-                  .replace(/\{\{total_price\}\}/g, total);
-
-                await sendSMS(
-                  phone,
-                  msg,
-                  false,
-                  `pathao_${eventKey}_${order.id}_${consignmentId}`,
-                  {
-                    orderId: order.shopify_order_id || order.id,
-                    orderName: order.shopify_order_name,
-                    customerName,
-                    eventType: eventKey,
-                  }
-                );
-              }
-            }
-          }
-        }
-      } catch (smsError) {
-        console.error("[SMS Automation Error]", smsError);
-      }
-    }
-
-    // Mark webhook as processed
-    if (logId) {
-      await supabase
-        .from("webhook_logs")
-        .update({ processed: true, error: null })
-        .eq("id", logId);
-    } else {
-      await supabase
-        .from("webhook_logs")
-        .update({ processed: true, error: null })
-        .eq("pathao_consignment_id", consignmentId)
-        .eq("source", "pathao");
-    }
-
-    // Invalidate dashboard cache
-    try {
-      const { deleteCachePattern } = await import("@/lib/redis");
-      await deleteCachePattern("dashboard:metrics:v1:*");
-    } catch (cacheErr) {
-      console.error("[Pathao Webhook] Failed to invalidate cache:", cacheErr);
-    }
-  } catch (err: any) {
-    console.error("[Pathao Webhook] Processing error:", err);
-    if (logId) {
-      await supabase
-        .from("webhook_logs")
-        .update({ processed: false, error: err.message })
-        .eq("id", logId);
-    }
+  } catch {
+    // ignore DB lookup error during fallback
   }
+
+  return "";
 }
 
-function mapPathaoEventToInternal(event: string): string {
-  const evt = (event || "").toLowerCase();
+function buildResponseHeaders(secret: string): Record<string, string> {
+  return {
+    "Content-Type": "application/json",
+    ...(secret
+      ? { "X-Pathao-Merchant-Webhook-Integration-Secret": secret }
+      : {}),
+  };
+}
 
-  // 1. Returns and Paid Returns MUST come first so paid-return is never marked delivered
-  if (evt.includes("return")) {
-    return "returned";
+/**
+ * GET /api/webhooks/pathao
+ * Health / integration handshake endpoint for Pathao Webhook verification.
+ */
+export async function GET() {
+  const secret = await resolvePathaoWebhookSecret();
+  return NextResponse.json(
+    {
+      status: "accepted",
+      message: "Pathao Webhook Endpoint Active",
+      webhook_url: "https://orders.universesraw.com/api/webhooks/pathao",
+    },
+    { status: 202, headers: buildResponseHeaders(secret) }
+  );
+}
+
+/**
+ * POST /api/webhooks/pathao
+ * Receives real-time Pathao parcel lifecycle and payment invoice events,
+ * validates signature/secret, stores raw event immutably, and returns 202 fast.
+ */
+export async function POST(request: NextRequest) {
+  const rawBody = await request.text();
+  const configuredSecret = await resolvePathaoWebhookSecret();
+  const responseHeaders = buildResponseHeaders(configuredSecret);
+
+  // 1. Parse JSON safely
+  let payload: PathaoWebhookPayload = {};
+  try {
+    payload = rawBody ? JSON.parse(rawBody) : {};
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid JSON payload" },
+      { status: 400, headers: responseHeaders }
+    );
   }
 
-  // 2. Partial Delivery
-  if (evt.includes("partial")) {
-    return "delivered";
+  const rawEventStr =
+    payload.event ||
+    payload.order_status_slug ||
+    payload.order_status ||
+    "unknown";
+  const norm = normalizePathaoEvent(rawEventStr);
+
+  // 2. Validate Webhook Secret / Signature
+  // Supports X-PATHAO-Signature (documented), X-Pathao-Merchant-Webhook-Integration-Secret, or Authorization
+  const incomingSignature =
+    request.headers.get("x-pathao-signature") ||
+    request.headers.get("X-PATHAO-Signature") ||
+    request.headers.get("x-pathao-merchant-webhook-integration-secret") ||
+    request.headers.get("authorization") ||
+    "";
+
+  // Handshake (`webhook_integration`) verification: if a signature header is sent, verify it;
+  // always return 202 with `X-Pathao-Merchant-Webhook-Integration-Secret` header.
+  if (norm.normalizedStatus === "WEBHOOK_INTEGRATION") {
+    if (
+      configuredSecret &&
+      incomingSignature &&
+      !verifyPathaoWebhook(rawBody, incomingSignature, configuredSecret)
+    ) {
+      return NextResponse.json(
+        { error: "Unauthorized webhook signature" },
+        { status: 401, headers: responseHeaders }
+      );
+    }
+
+    try {
+      const supabase = createServiceClient();
+      await supabase.from("webhook_logs").insert({
+        source: "pathao",
+        topic: "webhook_integration",
+        event_type: "WEBHOOK_INTEGRATION",
+        normalized_event: "WEBHOOK_INTEGRATION",
+        payload: payload as any,
+        processed: true,
+        processing_status: "processed",
+        shopify_sync_status: "not_required",
+      });
+    } catch {
+      // Non-fatal during handshake
+    }
+
+    return NextResponse.json(
+      { status: "accepted", message: "Webhook integration verified" },
+      { status: 202, headers: responseHeaders }
+    );
   }
 
-  // 3. True Delivery events
-  if (
-    evt === "order.delivered" ||
-    evt.includes("delivered") ||
-    evt.includes("payment_received") ||
-    evt.includes("payment invoice")
-  ) {
-    return "delivered";
+  // Enforce secret validation on all parcel/financial events when a secret is configured
+  if (configuredSecret) {
+    const isValid = verifyPathaoWebhook(
+      rawBody,
+      incomingSignature,
+      configuredSecret
+    );
+    if (!isValid) {
+      console.error("[Pathao Webhook] Invalid or missing X-PATHAO-Signature");
+      return NextResponse.json(
+        { error: "Unauthorized: Invalid X-PATHAO-Signature" },
+        { status: 401, headers: responseHeaders }
+      );
+    }
   }
 
-  // 4. Cancel
-  if (evt.includes("cancel")) {
-    return "cancelled";
+  // 3. Validate required fields for non-handshake events
+  const consignmentId = payload.consignment_id
+    ? String(payload.consignment_id).trim()
+    : null;
+  const merchantOrderId = payload.merchant_order_id
+    ? String(payload.merchant_order_id).trim()
+    : null;
+
+  if (!consignmentId && !merchantOrderId) {
+    return NextResponse.json(
+      { error: "Missing consignment_id and merchant_order_id" },
+      { status: 400, headers: responseHeaders }
+    );
   }
 
-  // 5. Hold / Failed
-  if (evt.includes("hold") || evt.includes("failed")) {
-    return "hold";
+  // 4. Compute deterministic idempotency key & persist raw event before returning 202
+  const idempotencyKey = computePathaoEventIdempotencyKey({
+    consignment_id: consignmentId,
+    merchant_order_id: merchantOrderId,
+    event: rawEventStr,
+    updated_at: payload.updated_at,
+    timestamp: payload.timestamp,
+    reason: payload.reason,
+    invoice_id:
+      payload.invoice_id ||
+      payload.payment_invoice_id ||
+      payload.invoice_reference,
+  });
+
+  const supabase = createServiceClient();
+
+  // Check if this exact webhook was already logged and processed
+  const { data: existingLog } = await supabase
+    .from("webhook_logs")
+    .select("id, processed, processing_status")
+    .eq("idempotency_key", idempotencyKey)
+    .maybeSingle();
+
+  if (existingLog && existingLog.processed) {
+    return NextResponse.json(
+      {
+        status: "accepted",
+        duplicate: true,
+        idempotency_key: idempotencyKey,
+        normalized_status: norm.normalizedStatus,
+      },
+      { status: 202, headers: responseHeaders }
+    );
   }
 
-  // 6. In transit / assigned for delivery / pickup
-  return "dispatched";
+  let webhookLogId: string | null = existingLog?.id || null;
+  if (!webhookLogId) {
+    const { data: insertedLog } = await supabase
+      .from("webhook_logs")
+      .insert({
+        source: "pathao",
+        topic: String(rawEventStr),
+        event_type: norm.normalizedStatus,
+        normalized_event: norm.normalizedStatus,
+        pathao_consignment_id: consignmentId,
+        merchant_order_id: merchantOrderId,
+        event_timestamp:
+          payload.updated_at || payload.timestamp || new Date().toISOString(),
+        idempotency_key: idempotencyKey,
+        payload: payload as any,
+        processed: false,
+        processing_status: "pending",
+        shopify_sync_status: "pending",
+      })
+      .select("id")
+      .maybeSingle();
+
+    webhookLogId = insertedLog?.id || null;
+  }
+
+  // 5. Execute processing (supports immediate sync mode for tests/retry or async background processing)
+  const syncMode =
+    request.headers.get("x-sync-process") === "true" ||
+    process.env.NODE_ENV === "test";
+
+  if (syncMode) {
+    const result = await processPathaoWebhookEvent({
+      payload,
+      webhookLogId,
+    });
+    return NextResponse.json(
+      {
+        status: "accepted",
+        processed: result.success,
+        duplicate: result.duplicate,
+        ignored_out_of_order: result.ignoredOutOfOrder,
+        normalized_status: result.normalizedStatus,
+        display_label: result.displayLabel,
+        reconciliation_required: result.reconciliationRequired,
+        shopify_synced: result.shopifySynced,
+      },
+      { status: 202, headers: responseHeaders }
+    );
+  }
+
+  // Enqueue via QStash or process via Next.js after() so HTTP 202 returns in <200ms
+  const qstashJobId = await enqueueJob(
+    "/api/jobs/process-pathao-webhook",
+    {
+      payload,
+      webhookLogId,
+    },
+    {
+      deduplicationId: idempotencyKey.replace(/[^a-zA-Z0-9_-]/g, "_"),
+    }
+  );
+
+  if (!qstashJobId) {
+    try {
+      after(async () => {
+        try {
+          await processPathaoWebhookEvent({ payload, webhookLogId });
+        } catch (err) {
+          console.error("[Pathao Webhook] Background processing failed:", err);
+        }
+      });
+    } catch {
+      // Fallback if after() is called outside request context
+      await processPathaoWebhookEvent({ payload, webhookLogId });
+    }
+  }
+
+  return NextResponse.json(
+    {
+      status: "accepted",
+      queued: true,
+      idempotency_key: idempotencyKey,
+      normalized_status: norm.normalizedStatus,
+    },
+    { status: 202, headers: responseHeaders }
+  );
 }

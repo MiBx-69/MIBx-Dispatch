@@ -1,19 +1,22 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { resolveDateRange, formatBstDate } from "@/lib/date-utils";
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const dateFilter = searchParams.get("dateFilter") || "all";
-    const startDate = searchParams.get("startDate");
-    const endDate = searchParams.get("endDate");
+    const startDate = searchParams.get("startDate") || undefined;
+    const endDate = searchParams.get("endDate") || undefined;
     const search = searchParams.get("search");
 
     const supabase = createServiceClient();
 
     let query = supabase
       .from("orders")
-      .select("id, shopify_order_name, customer_name, customer_phone, total_price, delivered_at, shopify_created_at, pathao_consignment_id, pathao_delivery_status, delivery_address")
+      .select(
+        "id, shopify_order_name, customer_name, customer_phone, total_price, original_total_price, delivered_at, shopify_created_at, pathao_consignment_id, pathao_delivery_status, shipping_address"
+      )
       .eq("is_archived", false)
       .eq("internal_status", "delivered")
       .order("delivered_at", { ascending: false });
@@ -24,39 +27,7 @@ export async function GET(request: Request) {
       );
     }
 
-    // Date range calculation
-    let startDateStr = "";
-    let endDateStr = "";
-    const now = new Date();
-
-    if (dateFilter === "today") {
-      const today = new Date(now);
-      startDateStr = new Date(today.setHours(0, 0, 0, 0)).toISOString();
-      endDateStr = new Date(today.setHours(23, 59, 59, 999)).toISOString();
-    } else if (dateFilter === "last_7_days") {
-      const start = new Date(now);
-      start.setDate(start.getDate() - 7);
-      startDateStr = new Date(start.setHours(0, 0, 0, 0)).toISOString();
-      endDateStr = new Date(now.setHours(23, 59, 59, 999)).toISOString();
-    } else if (dateFilter === "last_30_days") {
-      const start = new Date(now);
-      start.setDate(start.getDate() - 30);
-      startDateStr = new Date(start.setHours(0, 0, 0, 0)).toISOString();
-      endDateStr = new Date(now.setHours(23, 59, 59, 999)).toISOString();
-    } else if (dateFilter === "this_month") {
-      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-      startDateStr = new Date(firstDay.setHours(0, 0, 0, 0)).toISOString();
-      endDateStr = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
-    } else if (dateFilter === "last_month") {
-      const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-      startDateStr = new Date(firstDayLastMonth.setHours(0, 0, 0, 0)).toISOString();
-      endDateStr = lastDayLastMonth.toISOString();
-    } else if (dateFilter === "custom" && startDate && endDate) {
-      startDateStr = new Date(startDate).toISOString();
-      const end = new Date(endDate);
-      endDateStr = new Date(end.setHours(23, 59, 59, 999)).toISOString();
-    }
+    const { startDateStr, endDateStr } = resolveDateRange(dateFilter, startDate, endDate);
 
     if (startDateStr && endDateStr) {
       query = query.gte("delivered_at", startDateStr).lte("delivered_at", endDateStr);
@@ -67,45 +38,50 @@ export async function GET(request: Request) {
 
     const orders = rawOrders || [];
 
-    // Build CSV
     const headers = [
       "Order Number",
       "Customer Name",
       "Customer Phone",
-      "Delivered Date",
+      "Delivered Date (BST)",
+      "Order Date (BST)",
       "Total Amount (BDT)",
       "Consignment ID",
       "Delivery Status",
-      "Address"
+      "Address",
     ];
 
     const rows = orders.map((o: any) => {
-      const deliveredDate = o.delivered_at 
-        ? new Date(o.delivered_at).toLocaleDateString("en-BD") + " " + new Date(o.delivered_at).toLocaleTimeString("en-BD", { hour: "2-digit", minute: "2-digit" })
-        : "N/A";
-      const address = (typeof o.delivery_address === "object" && o.delivery_address ? o.delivery_address.address : o.delivery_address) || "";
+      const deliveredDate = o.delivered_at ? formatBstDate(o.delivered_at) : "N/A";
+      const orderDate = o.shopify_created_at ? formatBstDate(o.shopify_created_at) : "N/A";
+      const addrObj = o.shipping_address;
+      const address =
+        typeof addrObj === "object" && addrObj
+          ? [addrObj.address1, addrObj.address2, addrObj.city, addrObj.zip].filter(Boolean).join(", ")
+          : String(addrObj || "");
+      const price = Number(o.original_total_price ?? o.total_price ?? 0);
 
       return [
-        `"${o.shopify_order_name || ''}"`,
-        `"${(o.customer_name || '').replace(/"/g, '""')}"`,
-        `"${o.customer_phone || ''}"`,
+        `"${o.shopify_order_name || ""}"`,
+        `"${(o.customer_name || "").replace(/"/g, '""')}"`,
+        `"${o.customer_phone || ""}"`,
         `"${deliveredDate}"`,
-        `"${Number(o.total_price || 0).toFixed(2)}"`,
-        `"${o.pathao_consignment_id || ''}"`,
-        `"${o.pathao_delivery_status || 'Delivered'}"`,
-        `"${String(address).replace(/"/g, '""')}"`
+        `"${orderDate}"`,
+        `"${price.toFixed(2)}"`,
+        `"${o.pathao_consignment_id || ""}"`,
+        `"${o.pathao_delivery_status || "Delivered"}"`,
+        `"${String(address).replace(/"/g, '""')}"`,
       ].join(",");
     });
 
-    const csvContent = [headers.join(","), ...rows].join("\n");
-    const filename = `deliveries-report-${dateFilter}-${new Date().toISOString().slice(0, 10)}.csv`;
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\n");
+    const filename = `Universes_RAW_Deliveries_${dateFilter}_${formatBstDate(new Date())}.csv`;
 
     return new Response(csvContent, {
       status: 200,
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${filename}"`
-      }
+        "Content-Disposition": `attachment; filename="${filename}"`,
+      },
     });
   } catch (err: any) {
     console.error("GET /api/deliveries/export error:", err);

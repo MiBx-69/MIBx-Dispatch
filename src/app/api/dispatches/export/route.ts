@@ -1,6 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { resolveDateRange } from "@/lib/reporting-engine";
+import { resolveDateRange, formatBstDate } from "@/lib/reporting-engine";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -17,19 +17,22 @@ export async function GET(request: Request) {
     .order("dispatched_at", { ascending: false });
 
   const STATUS_MAP: Record<string, string[]> = {
-    "Pending": ["Pending", "order.assigned_for_pickup", "order.pickup_cancelled"],
+    Pending: ["Pending", "order.assigned_for_pickup", "order.pickup_cancelled"],
     "Picked Up": ["Picked Up", "order.pickup_collected"],
     "In Transit": ["In Transit", "order.in_transit", "order.at_delivery_hub"],
     "Out for Delivery": ["Out for Delivery", "order.out_for_delivery"],
-    "Delivered": ["Delivered", "order.delivered", "order.partial_delivery", "order.payment_received"],
-    "Return": ["Return", "order.return_in_transit"],
+    Delivered: ["Delivered", "Partial Delivered", "order.delivered", "order.partial_delivery", "order.payment_received"],
+    Return: ["Return", "Returned", "order.return_in_transit"],
+    "Paid Return": ["Paid Return", "paid_return"],
     "Return Completed": ["Return Completed", "order.returned"],
-    "Hold": ["Hold", "order.hold", "order.failed"],
-    "Cancelled": ["Cancelled", "order.cancelled"],
+    Hold: ["Hold", "order.hold", "order.failed"],
+    Cancelled: ["Cancelled", "order.cancelled"],
   };
 
   if (status === "Cancelled") {
-    query = query.or("is_cancelled.eq.true,pathao_order_status.in.(Cancelled,order.cancelled),orders.internal_status.eq.cancelled");
+    query = query.or(
+      "is_cancelled.eq.true,pathao_order_status.in.(Cancelled,order.cancelled),orders.internal_status.eq.cancelled"
+    );
   } else {
     query = query
       .eq("is_cancelled", false)
@@ -42,37 +45,43 @@ export async function GET(request: Request) {
     }
   }
 
-  // Date Filtering
-  const { startDateStr, endDateStr } = resolveDateRange(dateFilter || undefined, startDate || undefined, endDate || undefined);
+  const { startDateStr, endDateStr } = resolveDateRange(
+    dateFilter || undefined,
+    startDate || undefined,
+    endDate || undefined
+  );
 
   if (startDateStr && endDateStr) {
     query = query.gte("dispatched_at", startDateStr).lte("dispatched_at", endDateStr);
   }
 
   const { data: rawDispatches, error } = await query;
-  
+
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const dispatches = rawDispatches?.sort((a: any, b: any) => {
-    const numA = parseInt(a.orders.shopify_order_name.replace(/\D/g, ""));
-    const numB = parseInt(b.orders.shopify_order_name.replace(/\D/g, ""));
-    return numB - numA;
-  }) || [];
+  const dispatches =
+    rawDispatches?.sort((a: any, b: any) => {
+      const numA = parseInt((a.orders?.shopify_order_name || "0").replace(/\D/g, ""), 10) || 0;
+      const numB = parseInt((b.orders?.shopify_order_name || "0").replace(/\D/g, ""), 10) || 0;
+      return numB - numA;
+    }) || [];
 
-  // Generate CSV
   const headers = [
     "Order ID",
     "Consignment ID",
     "Customer Name",
     "Customer Phone",
-    "City",
-    "Zone",
-    "Amount to Collect",
-    "Delivery Fee",
-    "Status",
-    "Dispatched At"
+    "Address",
+    "City ID",
+    "Zone ID",
+    "Expected COD (BDT)",
+    "Delivery Fee (BDT)",
+    "Return Charge (BDT)",
+    "Settlement Status",
+    "Courier Status",
+    "Dispatched Date (BST)",
   ];
 
   const escapeCSV = (field: any) => {
@@ -82,24 +91,27 @@ export async function GET(request: Request) {
   };
 
   const rows = dispatches.map((d: any) => [
-    escapeCSV(d.orders.shopify_order_name),
-    escapeCSV(d.pathao_consignment_id),
-    escapeCSV(d.orders.customer_name),
-    escapeCSV(d.orders.customer_phone),
-    escapeCSV(d.orders.customer_city),
-    escapeCSV(d.orders.customer_zone),
-    escapeCSV(d.amount_to_collect),
-    escapeCSV(d.delivery_fee),
+    escapeCSV(d.orders?.shopify_order_name || d.shopify_order_name),
+    escapeCSV(d.consignment_id),
+    escapeCSV(d.recipient_name || d.orders?.customer_name),
+    escapeCSV(d.recipient_phone || d.orders?.customer_phone),
+    escapeCSV(d.recipient_address),
+    escapeCSV(d.recipient_city === 1 ? "Dhaka (1)" : d.recipient_city),
+    escapeCSV(d.recipient_zone),
+    escapeCSV(d.amount_to_collect ?? 0),
+    escapeCSV(d.delivery_fee ?? 0),
+    escapeCSV(d.return_charge ?? 0),
+    escapeCSV(d.settlement_status || "pending"),
     escapeCSV(d.pathao_order_status),
-    escapeCSV(d.dispatched_at ? new Date(d.dispatched_at).toLocaleString() : "")
+    escapeCSV(d.dispatched_at ? formatBstDate(d.dispatched_at) : ""),
   ]);
 
-  const csvContent = [headers.join(","), ...rows.map((r: string[]) => r.join(","))].join("\n");
+  const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r: string[]) => r.join(","))].join("\n");
 
   return new NextResponse(csvContent, {
     headers: {
-      "Content-Type": "text/csv",
-      "Content-Disposition": `attachment; filename="dispatches_export_${new Date().toISOString().split('T')[0]}.csv"`
-    }
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="Universes_RAW_Dispatches_${formatBstDate(new Date())}.csv"`,
+    },
   });
 }

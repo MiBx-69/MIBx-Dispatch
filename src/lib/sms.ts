@@ -425,3 +425,64 @@ export async function sendSMS(
     return { success: false, message: err.message || "Failed to send SMS" };
   }
 }
+
+/**
+ * High-level helper to trigger configured automated SMS for order/courier events.
+ */
+export async function triggerAutoSms(
+  eventType:
+    | "order"
+    | "dispatch"
+    | "out_for_delivery"
+    | "delivered"
+    | "returned"
+    | "on_hold"
+    | "cancelled",
+  phone: string | null | undefined,
+  variables: Record<string, string>,
+  options?: { shopifyOrderId?: number | null; idempotencyKey?: string }
+): Promise<{ success: boolean; message?: string }> {
+  if (!phone) return { success: false, message: "No phone provided" };
+  const supabase = createServiceClient();
+  const { data: settings } = await supabase
+    .from("app_settings")
+    .select(
+      `sms_api_key,
+       sms_auto_${eventType}_enabled,
+       sms_auto_${eventType}_template`
+    )
+    .single();
+
+  const enabledKey = `sms_auto_${eventType}_enabled` as keyof typeof settings;
+  const templateKey = `sms_auto_${eventType}_template` as keyof typeof settings;
+
+  if (!settings?.sms_api_key || !settings[enabledKey]) {
+    return { success: false, message: "Auto-SMS disabled or unconfigured" };
+  }
+
+  let template = (settings[templateKey] as string) || "";
+  if (!template) {
+    if (eventType === "out_for_delivery") {
+      template =
+        "প্রিয় {{customer_name}}, আপনার অর্ডার {{order_number}} ডেলিভারির জন্য রাইডারের কাছে হস্তান্তর করা হয়েছে। অনুগ্রহ করে ফোন চালু রাখুন।";
+    } else if (eventType === "delivered") {
+      template =
+        "প্রিয় {{customer_name}}, আপনার অর্ডার {{order_number}} সফলভাবে ডেলিভারি হয়েছে। আমাদের সাথে থাকার জন্য ধন্যবাদ!";
+    } else if (eventType === "returned") {
+      template =
+        "প্রিয় {{customer_name}}, আপনার অর্ডার {{order_number}} রিটার্ন প্রসেস করা হয়েছে। যেকোনো প্রয়োজনে আমাদের সাথে যোগাযোগ করুন।";
+    } else if (eventType === "on_hold") {
+      template =
+        "প্রিয় {{customer_name}}, আপনার অর্ডার {{order_number}} সাময়িকভাবে হোল্ডে রয়েছে। আমরা শীঘ্রই আপনার সাথে যোগাযোগ করব।";
+    }
+  }
+
+  Object.entries(variables).forEach(([k, v]) => {
+    template = template.replace(new RegExp(`\\{\\{${k}\\}\\}`, "g"), v);
+  });
+
+  return sendSMS(phone, template, false, options?.idempotencyKey, {
+    orderId: options?.shopifyOrderId,
+    eventType,
+  });
+}

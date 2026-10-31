@@ -32,34 +32,54 @@ async function getShopifyCredentials() {
   };
 }
 
-async function shopifyFetch<T = any>(
+export async function shopifyFetch<T = any>(
   query: string,
-  variables?: Record<string, any>
+  variables?: Record<string, any>,
+  maxRetries = 2
 ): Promise<{ data: T; errors?: any[] }> {
   const { domain, token } = await getShopifyCredentials();
   const endpoint = `https://${domain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
 
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Shopify-Access-Token": token,
-    },
-    body: JSON.stringify({ query, variables }),
-    next: { revalidate: 0 }, // no caching at fetch level — we use Redis
-  });
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": token,
+      },
+      body: JSON.stringify({ query, variables }),
+      next: { revalidate: 0 }, // no caching at fetch level — we use Redis
+    });
 
-  if (!response.ok) {
-    throw new Error(`Shopify API error: ${response.status} ${response.statusText}`);
+    if (response.status === 429 && attempt < maxRetries) {
+      const retryAfterSec = Number(response.headers.get("Retry-After") || 2);
+      await new Promise((r) => setTimeout(r, Math.min(retryAfterSec * 1000, 4000)));
+      continue;
+    }
+
+    if (!response.ok) {
+      throw new Error(`Shopify API error: ${response.status} ${response.statusText}`);
+    }
+
+    const json = await response.json();
+    if (json.errors) {
+      const isThrottled = json.errors.some(
+        (e: any) =>
+          e?.extensions?.code === "THROTTLED" ||
+          String(e?.message || "").toLowerCase().includes("throttled")
+      );
+      if (isThrottled && attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+        continue;
+      }
+      console.error("[Shopify] GraphQL errors:", json.errors);
+      throw new Error(json.errors[0]?.message || "Shopify GraphQL error");
+    }
+
+    return json;
   }
 
-  const json = await response.json();
-  if (json.errors) {
-    console.error("[Shopify] GraphQL errors:", json.errors);
-    throw new Error(json.errors[0]?.message || "Shopify GraphQL error");
-  }
-
-  return json;
+  throw new Error("Shopify API request exceeded retry attempts");
 }
 
 // ─── Order Queries ────────────────────────────────────────────────────────────
@@ -225,6 +245,36 @@ export async function releaseShopifyFulfillmentOrderHold(fulfillmentOrderId: str
   return fulfillmentOrder;
 }
 
+// ─── Query Fulfillment Orders ────────────────────────────────────────────────
+const GET_FULFILLMENT_ORDERS_QUERY = `
+  query GetFulfillmentOrders($orderId: ID!) {
+    order(id: $orderId) {
+      fulfillmentOrders(first: 10) {
+        edges {
+          node {
+            id
+            status
+            assignedLocation { name }
+          }
+        }
+      }
+    }
+  }
+`;
+
+export async function getShopifyFulfillmentOrders(
+  orderId: string
+): Promise<Array<{ id: string; status: string }>> {
+  const gid = orderId.startsWith("gid://shopify/Order/")
+    ? orderId
+    : `gid://shopify/Order/${orderId}`;
+  const res = await shopifyFetch(GET_FULFILLMENT_ORDERS_QUERY, {
+    orderId: gid,
+  });
+  const edges = res.data?.order?.fulfillmentOrders?.edges || [];
+  return edges.map((e: any) => e.node);
+}
+
 // ─── Update Fulfillment Tracking ──────────────────────────────────────────────
 const UPDATE_TRACKING_MUTATION = `
   mutation UpdateFulfillmentTracking(
@@ -305,9 +355,32 @@ const CREATE_FULFILLMENT_EVENT_MUTATION = `
   }
 `;
 
+/**
+ * Converts any timestamp (including Pathao's "YYYY-MM-DD HH:mm:ss", which is
+ * Asia/Dhaka local time) into a valid ISO-8601 DateTime for Shopify.
+ * Falls back to "now" if the value is missing or unparseable.
+ */
+export function toShopifyDateTime(value?: string | null): string {
+  if (!value) return new Date().toISOString();
+  const raw = String(value).trim();
+  const hasZone = /(Z|[+-]\d{2}:?\d{2})$/i.test(raw);
+  const isoLike = raw.replace(" ", "T");
+  const candidate = hasZone ? isoLike : `${isoLike}+06:00`;
+  const d = new Date(candidate);
+  if (isNaN(d.getTime())) return new Date().toISOString();
+  return d.toISOString();
+}
+
 export async function createShopifyFulfillmentEvent(params: {
   fulfillmentId: string;
-  status: "DELIVERED" | "OUT_FOR_DELIVERY" | "IN_TRANSIT" | "ATTEMPTED_DELIVERY" | "CARRIER_PICKED_UP";
+  status:
+    | "CONFIRMED"
+    | "DELIVERED"
+    | "OUT_FOR_DELIVERY"
+    | "IN_TRANSIT"
+    | "ATTEMPTED_DELIVERY"
+    | "CARRIER_PICKED_UP"
+    | "FAILURE";
   message?: string;
   happenedAt?: string;
 }) {
@@ -320,7 +393,7 @@ export async function createShopifyFulfillmentEvent(params: {
       fulfillmentId: gid,
       status: params.status,
       ...(params.message ? { message: params.message } : {}),
-      ...(params.happenedAt ? { happenedAt: params.happenedAt } : {}),
+      happenedAt: toShopifyDateTime(params.happenedAt),
     },
   });
 
@@ -332,8 +405,157 @@ export async function createShopifyFulfillmentEvent(params: {
 }
 
 /**
+ * Synchronizes a normalized Pathao parcel status event to Shopify fulfillment & order tags.
+ * Strict separation of concerns:
+ * - Never forces Shopify order financial status to Paid.
+ * - Never creates automatic customer refunds on Shopify.
+ * - Reuses existing fulfillment or creates one with Pathao tracking info if missing.
+ */
+export async function syncPathaoStatusToShopifyFulfillment(params: {
+  shopifyOrderId?: string | number | null;
+  shopifyFulfillmentId?: string | number | null;
+  consignmentId: string;
+  trackingUrl?: string | null;
+  normalizedStatus: string;
+  displayLabel: string;
+  shopifyFulfillmentEvent?:
+    | "CONFIRMED"
+    | "DELIVERED"
+    | "OUT_FOR_DELIVERY"
+    | "IN_TRANSIT"
+    | "ATTEMPTED_DELIVERY"
+    | "CARRIER_PICKED_UP"
+    | "FAILURE"
+    | null;
+  reason?: string | null;
+  eventTimestamp?: string | null;
+}): Promise<{
+  success: boolean;
+  fulfillmentId: string | null;
+  errors: string[];
+}> {
+  const errors: string[] = [];
+  let fulfillmentId = params.shopifyFulfillmentId
+    ? String(params.shopifyFulfillmentId)
+    : null;
+  const rawOrderId = params.shopifyOrderId
+    ? String(params.shopifyOrderId)
+    : null;
+  const orderGid = rawOrderId
+    ? rawOrderId.startsWith("gid://shopify/Order/")
+      ? rawOrderId
+      : `gid://shopify/Order/${rawOrderId}`
+    : null;
+
+  if (!orderGid && !fulfillmentId) {
+    return {
+      success: false,
+      fulfillmentId: null,
+      errors: ["Missing Shopify Order ID and Fulfillment ID"],
+    };
+  }
+
+  // 1. Ensure fulfillment exists or look up existing non-cancelled fulfillment
+  if (!fulfillmentId && orderGid) {
+    try {
+      const existing = await getShopifyOrderFulfillments(orderGid);
+      if (existing.length > 0) {
+        fulfillmentId = existing[0].id;
+      } else if (
+        params.normalizedStatus !== "PICKUP_CANCELLED" &&
+        params.normalizedStatus !== "UNKNOWN_EVENT"
+      ) {
+        // Create initial fulfillment with Pathao tracking info if unfulfilled
+        const fulfillmentOrders = await getShopifyFulfillmentOrders(orderGid);
+        const openFo = fulfillmentOrders.find(
+          (fo: any) => fo.status === "OPEN" || fo.status === "IN_PROGRESS"
+        );
+        if (openFo) {
+          const created = await createShopifyFulfillment({
+            fulfillmentOrderId: openFo.id,
+            trackingNumber: params.consignmentId,
+            trackingCompany: "Pathao",
+            trackingUrl:
+              params.trackingUrl ||
+              `https://merchant.pathao.com/tracking?consignment_id=${encodeURIComponent(params.consignmentId)}`,
+            notifyCustomer: false,
+          });
+          if (created?.id) {
+            fulfillmentId = created.id;
+          }
+        }
+      }
+    } catch (err: any) {
+      errors.push(`Fulfillment lookup/create: ${err.message}`);
+    }
+  }
+
+  // 2. Record fulfillment event on Shopify if mapped
+  if (fulfillmentId && params.shopifyFulfillmentEvent) {
+    try {
+      const msgParts = [
+        `Pathao: ${params.displayLabel} (${params.consignmentId})`,
+      ];
+      if (params.reason) msgParts.push(`Reason: ${params.reason}`);
+      await createShopifyFulfillmentEvent({
+        fulfillmentId,
+        status: params.shopifyFulfillmentEvent,
+        message: msgParts.join(" — "),
+        happenedAt: params.eventTimestamp || new Date().toISOString(),
+      });
+    } catch (err: any) {
+      errors.push(`Fulfillment event (${params.shopifyFulfillmentEvent}): ${err.message}`);
+    }
+  }
+
+  // 3. Synchronize order tags for terminal/milestone states without altering financial_status
+  if (orderGid) {
+    try {
+      if (params.normalizedStatus === "DELIVERED") {
+        const tagsRes = await shopifyFetch(
+          `query GetOrderTags($id: ID!) { order(id: $id) { id tags } }`,
+          { id: orderGid }
+        );
+        const currentTags: string[] = tagsRes.data?.order?.tags || [];
+        if (!currentTags.includes("Delivered")) {
+          const newTags = [
+            ...currentTags.filter(
+              (t) =>
+                t !== "In Transit" &&
+                t !== "Dispatched" &&
+                t !== "On Hold" &&
+                t !== "Delivery Failed"
+            ),
+            "Delivered",
+          ];
+          await updateShopifyOrder({ id: orderGid, tags: newTags });
+        }
+      } else if (params.normalizedStatus === "PARTIALLY_DELIVERED") {
+        await markShopifyOrderAsPartialDelivered({
+          shopifyOrderId: orderGid,
+          shopifyFulfillmentId: fulfillmentId,
+          consignmentId: params.consignmentId,
+          note: params.reason
+            ? `[MiBx Dispatch] Pathao Partial Delivery (${params.consignmentId}): ${params.reason}`
+            : undefined,
+        });
+      }
+    } catch (err: any) {
+      errors.push(`Order tag sync: ${err.message}`);
+    }
+  }
+
+  return {
+    success: errors.length === 0,
+    fulfillmentId,
+    errors,
+  };
+}
+
+/**
  * Marks an order as delivered on Shopify by creating a DELIVERED fulfillment event
- * and tagging the order with "Delivered"
+ * and tagging the order with "Delivered".
+ * NOTE: Does NOT force Shopify financial status to Paid (delivery != COD settlement).
  */
 export async function markShopifyOrderAsDelivered(params: {
   shopifyOrderId?: string | number | null;
@@ -391,7 +613,7 @@ export async function markShopifyOrderAsDelivered(params: {
     }
   }
 
-  // 3. Add "Delivered" tag to the Shopify order
+  // 3. Add "Delivered" tag to the Shopify order (without forcing financial status to Paid)
   if (orderGid) {
     try {
       const getTagsQuery = `
@@ -414,15 +636,6 @@ export async function markShopifyOrderAsDelivered(params: {
     } catch (err: any) {
       console.error("[Shopify] Failed to update tags on order:", err);
       errors.push(`Tags update: ${err.message}`);
-    }
-
-    // 4. Mark order as paid
-    try {
-      await markShopifyOrderAsPaid(orderGid);
-    } catch (err: any) {
-      console.error("[Shopify] Failed to mark order as paid:", err);
-      // We don't fail the delivery if marking as paid fails (e.g., already paid)
-      errors.push(`Mark as paid: ${err.message}`);
     }
   }
 

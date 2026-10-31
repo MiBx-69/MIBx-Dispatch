@@ -76,6 +76,48 @@ export function LogsClient({
   const [selectedLog, setSelectedLog] = useState<UnifiedLogEntry | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [retryingAll, setRetryingAll] = useState(false);
+
+  const handleRetryLog = async (logId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setRetryingId(logId);
+    try {
+      const res = await fetch("/api/webhooks/pathao/retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ webhookLogId: logId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Retry failed");
+      startTransition(() => {
+        router.refresh();
+      });
+    } catch (err) {
+      console.error("[Webhook Retry] Error:", err);
+    } finally {
+      setRetryingId(null);
+    }
+  };
+
+  const handleRetryAllFailed = async () => {
+    setRetryingAll(true);
+    try {
+      const res = await fetch("/api/webhooks/pathao/retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ retryAllFailed: true }),
+      });
+      await res.json();
+      startTransition(() => {
+        router.refresh();
+      });
+    } catch (err) {
+      console.error("[Webhook Retry All] Error:", err);
+    } finally {
+      setRetryingAll(false);
+    }
+  };
 
   // Auto-refresh interval (10s)
   useEffect(() => {
@@ -188,6 +230,17 @@ export function LogsClient({
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
+          {analytics.errorCount > 0 && (
+            <button
+              onClick={handleRetryAllFailed}
+              disabled={retryingAll}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 transition-colors disabled:opacity-50"
+            >
+              <RotateCcw className={`w-3.5 h-3.5 ${retryingAll ? "animate-spin" : ""}`} />
+              {retryingAll ? "Retrying Failed..." : "Retry Failed Webhooks"}
+            </button>
+          )}
+
           {/* Live Auto-Refresh Toggle */}
           <button
             onClick={() => setAutoRefresh(!autoRefresh)}
@@ -399,11 +452,11 @@ export function LogsClient({
               <tr>
                 <th className="py-3 px-4">Time (BST)</th>
                 <th className="py-3 px-4">Source</th>
-                <th className="py-3 px-4">Event / Topic</th>
-                <th className="py-3 px-4">Reference</th>
-                <th className="py-3 px-4">Summary</th>
-                <th className="py-3 px-4 text-center">Status</th>
-                <th className="py-3 px-4 text-right">Inspect</th>
+                <th className="py-3 px-4">Event / Normalized</th>
+                <th className="py-3 px-4">Consignment / Order ID</th>
+                <th className="py-3 px-4">Summary / Error</th>
+                <th className="py-3 px-4 text-center">Processing / Sync</th>
+                <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/60 font-medium">
@@ -425,6 +478,13 @@ export function LogsClient({
                     second: "2-digit",
                   });
 
+                  const canRetry =
+                    log.source === "pathao" &&
+                    (log.status === "error" ||
+                      log.status === "pending" ||
+                      log.processingStatus === "failed" ||
+                      log.shopifySyncStatus === "failed");
+
                   return (
                     <tr
                       key={log.id}
@@ -438,10 +498,18 @@ export function LogsClient({
                         {getSourceBadge(log.source)}
                       </td>
                       <td className="py-3 px-4 whitespace-nowrap font-mono text-zinc-200">
-                        {log.topic}
+                        <div>{log.topic}</div>
+                        {log.normalizedEvent && log.normalizedEvent !== log.topic && (
+                          <span className="text-[10px] text-zinc-500">{log.normalizedEvent}</span>
+                        )}
                       </td>
                       <td className="py-3 px-4 whitespace-nowrap font-mono font-semibold text-indigo-300">
-                        {log.reference || "—"}
+                        <div>{log.consignmentId || log.reference || "—"}</div>
+                        {log.merchantOrderId && (
+                          <span className="text-[10px] text-zinc-400 font-normal">
+                            Order: {log.merchantOrderId}
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 px-4 max-w-md truncate text-zinc-300" title={log.summary}>
                         {log.error ? (
@@ -451,18 +519,49 @@ export function LogsClient({
                         )}
                       </td>
                       <td className="py-3 px-4 text-center whitespace-nowrap">
-                        {getStatusBadge(log.status, log.error)}
+                        <div className="flex flex-col items-center gap-1">
+                          {getStatusBadge(log.status, log.error)}
+                          {log.shopifySyncStatus && log.shopifySyncStatus !== "not_required" && (
+                            <span
+                              className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                                log.shopifySyncStatus === "synced"
+                                  ? "text-emerald-400 bg-emerald-500/10"
+                                  : log.shopifySyncStatus === "failed"
+                                    ? "text-rose-400 bg-rose-500/10"
+                                    : "text-zinc-400 bg-zinc-800"
+                              }`}
+                            >
+                              Shopify: {log.shopifySyncStatus}
+                            </span>
+                          )}
+                          {(log.retryCount ?? 0) > 0 && (
+                            <span className="text-[10px] text-amber-400 font-mono">
+                              Retries: {log.retryCount}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-right whitespace-nowrap">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedLog(log);
-                          }}
-                          className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-[11px] transition-colors"
-                        >
-                          Inspect
-                        </button>
+                        <div className="inline-flex items-center gap-1.5">
+                          {canRetry && (
+                            <button
+                              onClick={(e) => handleRetryLog(log.id, e)}
+                              disabled={retryingId === log.id}
+                              className="px-2 py-1 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-[11px] font-semibold transition-colors disabled:opacity-50"
+                            >
+                              {retryingId === log.id ? "Retrying..." : "Retry"}
+                            </button>
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedLog(log);
+                            }}
+                            className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-[11px] transition-colors"
+                          >
+                            Inspect
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

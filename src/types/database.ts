@@ -251,89 +251,164 @@ export type Database = {
       }
       dispatches: {
         Row: {
+          actual_cod_collected: number | null
+          actual_received_amount: number | null
           amount_to_collect: number | null
           cancel_reason: string | null
           cancelled_at: string | null
           consignment_id: string
+          delivered_at: string | null
           delivery_fee: number | null
           delivery_type: number | null
           dispatched_at: string
           dispatched_by: string | null
+          expected_cod: number | null
           id: string
           is_cancelled: boolean | null
           item_description: string | null
           item_quantity: number | null
           item_type: number | null
           item_weight: number | null
+          last_event_timestamp: string | null
+          last_pathao_event: string | null
+          last_synced_at: string | null
           merchant_order_id: string | null
+          normalized_status: string | null
           order_id: string
+          other_deductions: number | null
+          paid_return_details: Json | null
+          partial_delivery_details: Json | null
+          partial_delivery_reconciliation_required: boolean | null
           pathao_order_status: string | null
           pathao_response: Json | null
+          payment_invoice_details: Json | null
+          payment_reference: string | null
           recipient_address: string | null
           recipient_city: number | null
           recipient_name: string | null
           recipient_phone: string | null
           recipient_zone: number | null
+          return_charge: number | null
+          return_initiated_at: string | null
+          returned_to_merchant_at: string | null
+          settlement_amount: number | null
+          settlement_batch_id: string | null
+          settlement_date: string | null
+          settlement_notes: string | null
+          settlement_status: string | null
+          shopify_fulfillment_id: string | null
           shopify_order_id: number
           shopify_order_name: string | null
+          shopify_sync_error: string | null
+          shopify_sync_status: string | null
           tracking_history: Json | null
           updated_at: string
         }
         Insert: {
+          actual_cod_collected?: number | null
+          actual_received_amount?: number | null
           amount_to_collect?: number | null
           cancel_reason?: string | null
           cancelled_at?: string | null
           consignment_id: string
+          delivered_at?: string | null
           delivery_fee?: number | null
           delivery_type?: number | null
           dispatched_at?: string
           dispatched_by?: string | null
+          expected_cod?: number | null
           id?: string
           is_cancelled?: boolean | null
           item_description?: string | null
           item_quantity?: number | null
           item_type?: number | null
           item_weight?: number | null
+          last_event_timestamp?: string | null
+          last_pathao_event?: string | null
+          last_synced_at?: string | null
           merchant_order_id?: string | null
+          normalized_status?: string | null
           order_id: string
+          other_deductions?: number | null
+          paid_return_details?: Json | null
+          partial_delivery_details?: Json | null
+          partial_delivery_reconciliation_required?: boolean | null
           pathao_order_status?: string | null
           pathao_response?: Json | null
+          payment_invoice_details?: Json | null
+          payment_reference?: string | null
           recipient_address?: string | null
           recipient_city?: number | null
           recipient_name?: string | null
           recipient_phone?: string | null
           recipient_zone?: number | null
+          return_charge?: number | null
+          return_initiated_at?: string | null
+          returned_to_merchant_at?: string | null
+          settlement_amount?: number | null
+          settlement_batch_id?: string | null
+          settlement_date?: string | null
+          settlement_notes?: string | null
+          settlement_status?: string | null
+          shopify_fulfillment_id?: string | null
           shopify_order_id: number
           shopify_order_name?: string | null
+          shopify_sync_error?: string | null
+          shopify_sync_status?: string | null
           tracking_history?: Json | null
           updated_at?: string
         }
         Update: {
+          actual_cod_collected?: number | null
+          actual_received_amount?: number | null
           amount_to_collect?: number | null
           cancel_reason?: string | null
           cancelled_at?: string | null
           consignment_id?: string
+          delivered_at?: string | null
           delivery_fee?: number | null
           delivery_type?: number | null
           dispatched_at?: string
           dispatched_by?: string | null
+          expected_cod?: number | null
           id?: string
           is_cancelled?: boolean | null
           item_description?: string | null
           item_quantity?: number | null
           item_type?: number | null
           item_weight?: number | null
+          last_event_timestamp?: string | null
+          last_pathao_event?: string | null
+          last_synced_at?: string | null
           merchant_order_id?: string | null
+          normalized_status?: string | null
           order_id?: string
+          other_deductions?: number | null
+          paid_return_details?: Json | null
+          partial_delivery_details?: Json | null
+          partial_delivery_reconciliation_required?: boolean | null
           pathao_order_status?: string | null
           pathao_response?: Json | null
+          payment_invoice_details?: Json | null
+          payment_reference?: string | null
           recipient_address?: string | null
           recipient_city?: number | null
           recipient_name?: string | null
           recipient_phone?: string | null
           recipient_zone?: number | null
+          return_charge?: number | null
+          return_initiated_at?: string | null
+          returned_to_merchant_at?: string | null
+          settlement_amount?: number | null
+          settlement_batch_id?: string | null
+          settlement_date?: string | null
+          settlement_notes?: string | null
+          settlement_status?: string | null
+          shopify_fulfillment_id?: string | null
           shopify_order_id?: number
           shopify_order_name?: string | null
+          shopify_sync_error?: string | null
+          shopify_sync_status?: string | null
           tracking_history?: Json | null
           updated_at?: string
         }
@@ -403,6 +478,14 @@ export type Database = {
           synced_at: string | null
           total_price: number | null
           total_tax: number | null
+          original_total_price: number | null
+          original_subtotal_price: number | null
+          shipping_charge: number | null
+          discount_amount: number | null
+          payment_method: string | null
+          cod_amount: number | null
+          verified_at: string | null
+          verified_by: string | null
           updated_at: string
         }
         Insert: {
@@ -446,6 +529,14 @@ export type Database = {
           synced_at?: string | null
           total_price?: number | null
           total_tax?: number | null
+          original_total_price?: number | null
+          original_subtotal_price?: number | null
+          shipping_charge?: number | null
+          discount_amount?: number | null
+          payment_method?: string | null
+          cod_amount?: number | null
+          verified_at?: string | null
+          verified_by?: string | null
           updated_at?: string
         }
         Update: {
@@ -489,6 +580,14 @@ export type Database = {
           synced_at?: string | null
           total_price?: number | null
           total_tax?: number | null
+          original_total_price?: number | null
+          original_subtotal_price?: number | null
+          shipping_charge?: number | null
+          discount_amount?: number | null
+          payment_method?: string | null
+          cod_amount?: number | null
+          verified_at?: string | null
+          verified_by?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -605,6 +704,7 @@ export type Database = {
       returns: {
         Row: {
           id: string
+          return_reference: string | null
           order_id: string
           dispatch_id: string | null
           consignment_id: string | null
@@ -615,9 +715,22 @@ export type Database = {
           order_total: number | null
           return_delivery_fee: number | null
           refund_amount: number | null
+          returned_product_value: number | null
+          original_order_quantity: number | null
+          returned_quantity: number | null
           is_paid_return: boolean
           is_verified: boolean
+          verification_status: string | null
+          staff_responsible: string | null
+          audit_history: Json | null
           processed_by: string | null
+          shopify_return_id: string | null
+          shopify_refund_id: string | null
+          shopify_sync_status: string | null
+          shopify_sync_error: string | null
+          shopify_financial_status: string | null
+          remaining_items: Json | null
+          idempotency_key: string | null
           status: string
           notes: string | null
           returned_at: string
@@ -627,6 +740,7 @@ export type Database = {
         }
         Insert: {
           id?: string
+          return_reference?: string | null
           order_id: string
           dispatch_id?: string | null
           consignment_id?: string | null
@@ -637,9 +751,22 @@ export type Database = {
           order_total?: number | null
           return_delivery_fee?: number | null
           refund_amount?: number | null
+          returned_product_value?: number | null
+          original_order_quantity?: number | null
+          returned_quantity?: number | null
           is_paid_return?: boolean
           is_verified?: boolean
+          verification_status?: string | null
+          staff_responsible?: string | null
+          audit_history?: Json | null
           processed_by?: string | null
+          shopify_return_id?: string | null
+          shopify_refund_id?: string | null
+          shopify_sync_status?: string | null
+          shopify_sync_error?: string | null
+          shopify_financial_status?: string | null
+          remaining_items?: Json | null
+          idempotency_key?: string | null
           status?: string
           notes?: string | null
           returned_at?: string
@@ -649,6 +776,7 @@ export type Database = {
         }
         Update: {
           id?: string
+          return_reference?: string | null
           order_id?: string
           dispatch_id?: string | null
           consignment_id?: string | null
@@ -659,9 +787,22 @@ export type Database = {
           order_total?: number | null
           return_delivery_fee?: number | null
           refund_amount?: number | null
+          returned_product_value?: number | null
+          original_order_quantity?: number | null
+          returned_quantity?: number | null
           is_paid_return?: boolean
           is_verified?: boolean
+          verification_status?: string | null
+          staff_responsible?: string | null
+          audit_history?: Json | null
           processed_by?: string | null
+          shopify_return_id?: string | null
+          shopify_refund_id?: string | null
+          shopify_sync_status?: string | null
+          shopify_sync_error?: string | null
+          shopify_financial_status?: string | null
+          remaining_items?: Json | null
+          idempotency_key?: string | null
           status?: string
           notes?: string | null
           returned_at?: string
@@ -696,36 +837,57 @@ export type Database = {
       transactions: {
         Row: {
           amount: number
+          audit_history: Json | null
           category: string | null
           created_at: string
           created_by: string | null
           date: string
           description: string
           id: string
+          idempotency_key: string | null
+          is_courier_charge: boolean | null
+          payment_method: string | null
+          receipt_url: string | null
+          reference_id: string | null
           type: string
           updated_at: string
+          updated_by: string | null
         }
         Insert: {
           amount?: number
+          audit_history?: Json | null
           category?: string | null
           created_at?: string
           created_by?: string | null
           date?: string
           description: string
           id?: string
+          idempotency_key?: string | null
+          is_courier_charge?: boolean | null
+          payment_method?: string | null
+          receipt_url?: string | null
+          reference_id?: string | null
           type: string
           updated_at?: string
+          updated_by?: string | null
         }
         Update: {
           amount?: number
+          audit_history?: Json | null
           category?: string | null
           created_at?: string
           created_by?: string | null
           date?: string
           description?: string
           id?: string
+          idempotency_key?: string | null
+          is_courier_charge?: boolean | null
+          payment_method?: string | null
+          receipt_url?: string | null
+          reference_id?: string | null
           type?: string
           updated_at?: string
+          updated_by?: string | null
         }
         Relationships: [
           {
@@ -740,39 +902,357 @@ export type Database = {
       webhook_logs: {
         Row: {
           error: string | null
+          event_timestamp: string | null
           event_type: string | null
           id: string
+          idempotency_key: string | null
+          last_retry_at: string | null
+          merchant_order_id: string | null
+          normalized_event: string | null
           pathao_consignment_id: string | null
           payload: Json | null
           processed: boolean | null
+          processing_status: string | null
           received_at: string
+          retry_count: number | null
           shopify_order_id: number | null
+          shopify_sync_status: string | null
           source: string
           topic: string | null
+          webhook_id: string | null
         }
         Insert: {
           error?: string | null
+          event_timestamp?: string | null
           event_type?: string | null
           id?: string
+          idempotency_key?: string | null
+          last_retry_at?: string | null
+          merchant_order_id?: string | null
+          normalized_event?: string | null
           pathao_consignment_id?: string | null
           payload?: Json | null
           processed?: boolean | null
+          processing_status?: string | null
           received_at?: string
+          retry_count?: number | null
           shopify_order_id?: number | null
+          shopify_sync_status?: string | null
           source: string
           topic?: string | null
+          webhook_id?: string | null
         }
         Update: {
           error?: string | null
+          event_timestamp?: string | null
           event_type?: string | null
           id?: string
+          idempotency_key?: string | null
+          last_retry_at?: string | null
+          merchant_order_id?: string | null
+          normalized_event?: string | null
           pathao_consignment_id?: string | null
           payload?: Json | null
           processed?: boolean | null
+          processing_status?: string | null
           received_at?: string
+          retry_count?: number | null
           shopify_order_id?: number | null
+          shopify_sync_status?: string | null
           source?: string
           topic?: string | null
+          webhook_id?: string | null
+        }
+        Relationships: []
+      }
+      pathao_status_history: {
+        Row: {
+          consignment_id: string
+          created_at: string
+          dispatch_id: string | null
+          event_timestamp: string
+          id: string
+          idempotency_key: string | null
+          merchant_order_id: string | null
+          normalized_status: string
+          order_id: string | null
+          raw_event: string
+          raw_payload: Json
+          reason: string | null
+        }
+        Insert: {
+          consignment_id: string
+          created_at?: string
+          dispatch_id?: string | null
+          event_timestamp?: string
+          id?: string
+          idempotency_key?: string | null
+          merchant_order_id?: string | null
+          normalized_status: string
+          order_id?: string | null
+          raw_event: string
+          raw_payload?: Json
+          reason?: string | null
+        }
+        Update: {
+          consignment_id?: string
+          created_at?: string
+          dispatch_id?: string | null
+          event_timestamp?: string
+          id?: string
+          idempotency_key?: string | null
+          merchant_order_id?: string | null
+          normalized_status?: string
+          order_id?: string | null
+          raw_event?: string
+          raw_payload?: Json
+          reason?: string | null
+        }
+        Relationships: []
+      }
+      pathao_payment_invoices: {
+        Row: {
+          actual_received_settlement: number
+          collected_cod: number
+          consignment_id: string
+          created_at: string
+          delivery_charge: number
+          dispatch_id: string | null
+          expected_cod: number
+          expected_settlement: number
+          id: string
+          idempotency_key: string | null
+          invoice_reference: string | null
+          merchant_order_id: string | null
+          order_id: string | null
+          other_deductions: number
+          payment_date: string | null
+          raw_payload: Json
+          return_charge: number
+          settlement_status: string
+          updated_at: string
+        }
+        Insert: {
+          actual_received_settlement?: number
+          collected_cod?: number
+          consignment_id: string
+          created_at?: string
+          delivery_charge?: number
+          dispatch_id?: string | null
+          expected_cod?: number
+          expected_settlement?: number
+          id?: string
+          idempotency_key?: string | null
+          invoice_reference?: string | null
+          merchant_order_id?: string | null
+          order_id?: string | null
+          other_deductions?: number
+          payment_date?: string | null
+          raw_payload?: Json
+          return_charge?: number
+          settlement_status?: string
+          updated_at?: string
+        }
+        Update: {
+          actual_received_settlement?: number
+          collected_cod?: number
+          consignment_id?: string
+          created_at?: string
+          delivery_charge?: number
+          dispatch_id?: string | null
+          expected_cod?: number
+          expected_settlement?: number
+          id?: string
+          idempotency_key?: string | null
+          invoice_reference?: string | null
+          merchant_order_id?: string | null
+          order_id?: string | null
+          other_deductions?: number
+          payment_date?: string | null
+          raw_payload?: Json
+          return_charge?: number
+          settlement_status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      courier_settlement_batches: {
+        Row: {
+          id: string
+          batch_reference: string
+          courier: string
+          settlement_date: string
+          total_expected_cod: number
+          total_collected_cod: number
+          total_delivery_charges: number
+          total_return_charges: number
+          total_other_deductions: number
+          net_settlement_amount: number
+          actual_received_amount: number
+          discrepancy_amount: number
+          payment_method: string | null
+          payment_reference: string | null
+          notes: string | null
+          parcel_count: number
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          batch_reference: string
+          courier?: string
+          settlement_date?: string
+          total_expected_cod?: number
+          total_collected_cod?: number
+          total_delivery_charges?: number
+          total_return_charges?: number
+          total_other_deductions?: number
+          net_settlement_amount?: number
+          actual_received_amount?: number
+          discrepancy_amount?: number
+          payment_method?: string | null
+          payment_reference?: string | null
+          notes?: string | null
+          parcel_count?: number
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          batch_reference?: string
+          courier?: string
+          settlement_date?: string
+          total_expected_cod?: number
+          total_collected_cod?: number
+          total_delivery_charges?: number
+          total_return_charges?: number
+          total_other_deductions?: number
+          net_settlement_amount?: number
+          actual_received_amount?: number
+          discrepancy_amount?: number
+          payment_method?: string | null
+          payment_reference?: string | null
+          notes?: string | null
+          parcel_count?: number
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      daily_closings: {
+        Row: {
+          id: string
+          closing_date: string
+          status: string
+          metrics_snapshot: Json
+          notes: string | null
+          prepared_by: string | null
+          prepared_by_name: string | null
+          approved_by: string | null
+          approved_by_name: string | null
+          approved_at: string | null
+          audit_history: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          closing_date: string
+          status?: string
+          metrics_snapshot?: Json
+          notes?: string | null
+          prepared_by?: string | null
+          prepared_by_name?: string | null
+          approved_by?: string | null
+          approved_by_name?: string | null
+          approved_at?: string | null
+          audit_history?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          closing_date?: string
+          status?: string
+          metrics_snapshot?: Json
+          notes?: string | null
+          prepared_by?: string | null
+          prepared_by_name?: string | null
+          approved_by?: string | null
+          approved_by_name?: string | null
+          approved_at?: string | null
+          audit_history?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      monthly_closings: {
+        Row: {
+          id: string
+          year: number
+          month: number
+          period_key: string
+          status: string
+          validation_summary: Json
+          statement_snapshot: Json
+          notes: string | null
+          approved_by: string | null
+          approved_by_name: string | null
+          approved_at: string | null
+          locked_at: string | null
+          reopened_by: string | null
+          reopened_by_name: string | null
+          reopened_at: string | null
+          reopen_reason: string | null
+          audit_history: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          year: number
+          month: number
+          period_key: string
+          status?: string
+          validation_summary?: Json
+          statement_snapshot?: Json
+          notes?: string | null
+          approved_by?: string | null
+          approved_by_name?: string | null
+          approved_at?: string | null
+          locked_at?: string | null
+          reopened_by?: string | null
+          reopened_by_name?: string | null
+          reopened_at?: string | null
+          reopen_reason?: string | null
+          audit_history?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          year?: number
+          month?: number
+          period_key?: string
+          status?: string
+          validation_summary?: Json
+          statement_snapshot?: Json
+          notes?: string | null
+          approved_by?: string | null
+          approved_by_name?: string | null
+          approved_at?: string | null
+          locked_at?: string | null
+          reopened_by?: string | null
+          reopened_by_name?: string | null
+          reopened_at?: string | null
+          reopen_reason?: string | null
+          audit_history?: Json
+          created_at?: string
+          updated_at?: string
         }
         Relationships: []
       }

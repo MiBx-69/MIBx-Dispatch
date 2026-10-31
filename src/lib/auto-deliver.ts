@@ -75,9 +75,19 @@ export async function processAutoDeliveredOrders() {
       .update({
         internal_status: "delivered",
         pathao_delivery_status: "auto_delivered", // Distinguish from actual webhook
+        delivered_at: now,
         updated_at: now
       })
       .in("id", orderIds);
+
+    await supabase
+      .from("dispatches")
+      .update({
+        pathao_order_status: "Delivered",
+        updated_at: now
+      })
+      .in("order_id", orderIds)
+      .eq("is_cancelled", false);
 
     // 5. Send automated SMS if enabled
     if (
@@ -88,7 +98,7 @@ export async function processAutoDeliveredOrders() {
     ) {
       const { sendSMS } = await import("@/lib/sms");
       
-      for (const order of ordersToUpdate) {
+      for (const order of filteredOrdersToUpdate) {
         const phone = order.customer_phone || (order.customers as any)?.phone;
         if (phone) {
           try {

@@ -3,14 +3,17 @@ import { FinancesClient } from "./finances-client";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Finances & Expenses" };
+export const metadata: Metadata = {
+  title: "Finances & Expenses",
+};
 export const dynamic = "force-dynamic";
 
 export default async function FinancesPage() {
   const supabase = await createClient();
-  
-  // Ensure user is an admin
-  const { data: { user } } = await supabase.auth.getUser();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase
@@ -23,18 +26,19 @@ export default async function FinancesPage() {
     return (
       <div className="flex flex-col items-center justify-center h-96">
         <h2 className="text-2xl font-bold text-white mb-2">Access Denied</h2>
-        <p className="text-zinc-400">You need administrator privileges to view this page. Current role: {profile?.role || "none"}</p>
+        <p className="text-zinc-400">
+          You need administrator privileges to view this page. Current role:{" "}
+          {profile?.role || "none"}
+        </p>
       </div>
     );
   }
 
-  // Fetch all transactions ordered by most recent
   const { data: transactions } = await supabase
     .from("transactions")
     .select("*")
     .order("date", { ascending: false });
 
-  // Calculate totals
   let totalIncome = 0;
   let totalExpense = 0;
 
@@ -46,10 +50,10 @@ export default async function FinancesPage() {
   }
 
   return (
-    <FinancesClient 
-      transactions={transactions || []} 
-      totalIncome={totalIncome} 
-      totalExpense={totalExpense} 
+    <FinancesClient
+      transactions={transactions || []}
+      totalIncome={totalIncome}
+      totalExpense={totalExpense}
     />
   );
 }

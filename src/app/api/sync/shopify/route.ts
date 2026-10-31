@@ -8,8 +8,18 @@ export async function POST(request: NextRequest) {
   const url = new URL(request.url);
   const fullSync = url.searchParams.get("fullSync") === "true";
 
-  // Only admins can trigger sync
-  const { data: { user } } = await (await import("@/lib/supabase/server")).createClient().then(c => c.auth.getUser()).catch(() => ({ data: { user: null } }));
+  // Only authenticated users (or cron secret) can trigger sync
+  const authHeader = request.headers.get("authorization");
+  const isCron = process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`;
+  if (!isCron) {
+    const { data: { user } } = await (await import("@/lib/supabase/server"))
+      .createClient()
+      .then((c) => c.auth.getUser())
+      .catch(() => ({ data: { user: null } }));
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+  }
 
   // Insert sync log
   const { data: syncLog } = await supabase
@@ -154,7 +164,7 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
   const lineItems = shopifyOrder.lineItems.edges
     .map((e: any) => ({
       title: e.node.title,
-      quantity: typeof e.node.currentQuantity === "number" ? e.node.currentQuantity : e.node.quantity,
+      quantity: e.node.quantity,
       original_quantity: e.node.quantity,
       price: parseFloat(e.node.originalUnitPriceSet?.shopMoney?.amount || "0"),
       sku: e.node.sku,
@@ -170,6 +180,11 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
   // orderName is usually like #1001, so we strip non-digits to get a number if possible
   const parsedOrderNumber = parseInt(shopifyOrder.name.replace(/\\D/g, ""), 10);
 
+  const origTotal = parseFloat(shopifyOrder.totalPriceSet?.shopMoney?.amount || shopifyOrder.currentTotalPriceSet?.shopMoney?.amount || "0");
+  const origSubtotal = parseFloat(shopifyOrder.subtotalPriceSet?.shopMoney?.amount || shopifyOrder.currentSubtotalPriceSet?.shopMoney?.amount || "0");
+  const finStatus = shopifyOrder.displayFinancialStatus?.toLowerCase();
+  const isPrepaid = finStatus === "paid";
+
   const orderPayload: any = {
     shopify_order_id: parseInt(shopifyOrder.id.split("/").pop()!),
     shopify_order_name: shopifyOrder.name,
@@ -180,11 +195,16 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
     customer_email: customer?.email || shopifyOrder.email,
     shipping_address: shippingAddr,
     line_items: lineItems,
-    total_price: parseFloat(shopifyOrder.currentTotalPriceSet?.shopMoney?.amount || shopifyOrder.totalPriceSet?.shopMoney?.amount || "0"),
-    subtotal_price: parseFloat(shopifyOrder.currentSubtotalPriceSet?.shopMoney?.amount || shopifyOrder.subtotalPriceSet?.shopMoney?.amount || "0"),
+    total_price: origTotal,
+    subtotal_price: origSubtotal,
+    original_total_price: origTotal,
+    original_subtotal_price: origSubtotal,
+    shipping_charge: Math.max(0, origTotal - origSubtotal),
+    payment_method: isPrepaid ? "prepaid" : "cod",
+    cod_amount: isPrepaid ? 0 : origTotal,
     total_tax: parseFloat(shopifyOrder.totalTaxSet?.shopMoney?.amount || "0"),
     currency: shopifyOrder.totalPriceSet?.shopMoney?.currencyCode || "BDT",
-    financial_status: shopifyOrder.displayFinancialStatus?.toLowerCase(),
+    financial_status: finStatus,
     fulfillment_status: shopifyOrder.displayFulfillmentStatus?.toLowerCase() || null,
     shopify_tags: shopifyOrder.tags || [],
     note: shopifyOrder.note,

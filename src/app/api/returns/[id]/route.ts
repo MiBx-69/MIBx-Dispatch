@@ -1,7 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { logOrderEvent } from "@/lib/audit";
+import { syncReturnAndRefundToShopify } from "@/lib/shopify-returns";
 
-// PATCH /api/returns/[id] — Update return status or details
+// PATCH /api/returns/[id] — Update return record or retry Shopify synchronization
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -9,14 +11,28 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { status, notes, return_delivery_fee, processed_at, is_verified, refund_amount } = body;
+    const {
+      action,
+      status,
+      notes,
+      return_reason,
+      return_type,
+      is_paid_return,
+      return_delivery_fee,
+      processed_at,
+      is_verified,
+      refund_amount,
+      returned_product_value,
+      returned_quantity,
+      staff_responsible,
+      edit_reason,
+    } = body;
 
     const supabase = createServiceClient();
 
-    // Fetch the existing return record first to verify it's a partial return being verified
     const { data: existingReturn, error: fetchErr } = await supabase
       .from("returns")
-      .select("id, order_id, return_type, is_verified, refund_amount, order_total")
+      .select("*")
       .eq("id", id)
       .single();
 
@@ -24,25 +40,168 @@ export async function PATCH(
       return NextResponse.json({ error: "Return not found" }, { status: 404 });
     }
 
+    const now = new Date().toISOString();
+
+    // Handle Retry Shopify Synchronization
+    if (action === "retry_sync") {
+      const { data: order } = await supabase
+        .from("orders")
+        .select("id, shopify_order_id, shopify_order_name, line_items")
+        .eq("id", existingReturn.order_id)
+        .single();
+
+      if (!order?.shopify_order_id) {
+        return NextResponse.json(
+          { error: "Associated order does not have a Shopify Order ID." },
+          { status: 400 }
+        );
+      }
+
+      const idempotencyKey =
+        (existingReturn as any).idempotency_key || `mibx-retry-${existingReturn.id}`;
+      const returnedItems = Array.isArray(existingReturn.returned_items)
+        ? existingReturn.returned_items
+        : [];
+      const returnTypeNormalized: "partial" | "full" =
+        existingReturn.return_type === "partial" ? "partial" : "full";
+
+      const syncRes = await syncReturnAndRefundToShopify({
+        shopifyOrderId: order.shopify_order_id,
+        returnType: returnTypeNormalized,
+        orderOverallReturnStatus: returnTypeNormalized,
+        returnedItems: returnedItems as any,
+        calculatedRefundAmount: Number(
+          existingReturn.refund_amount ?? existingReturn.returned_product_value ?? 0
+        ),
+        returnReason: existingReturn.return_reason || "Customer refused",
+        idempotencyKey,
+      });
+
+      const retryUpdate: any = {
+        shopify_sync_status: syncRes.synced ? "synced" : "failed",
+        shopify_sync_error: syncRes.error,
+        idempotency_key: idempotencyKey,
+        processed_at: now,
+      };
+      if (syncRes.shopifyReturnId) {
+        retryUpdate.shopify_return_id = syncRes.shopifyReturnId;
+      }
+      if (syncRes.shopifyRefundId) {
+        retryUpdate.shopify_refund_id = syncRes.shopifyRefundId;
+      }
+      if (syncRes.shopifyFinancialStatus) {
+        retryUpdate.shopify_financial_status = syncRes.shopifyFinancialStatus;
+      }
+      if (syncRes.shopifyRefundedAmount != null) {
+        retryUpdate.refund_amount = syncRes.shopifyRefundedAmount;
+      }
+
+      const prevAudit = Array.isArray((existingReturn as any).audit_history)
+        ? (existingReturn as any).audit_history
+        : [];
+      const changesSnapshot = { ...retryUpdate };
+      retryUpdate.audit_history = [
+        ...prevAudit,
+        {
+          timestamp: now,
+          action: syncRes.synced
+            ? "Shopify Sync Retry Succeeded"
+            : "Shopify Sync Retry Failed",
+          changes: changesSnapshot,
+        },
+      ];
+
+      const { data: updatedReturn, error: updErr } = await supabase
+        .from("returns")
+        .update(retryUpdate)
+        .eq("id", id)
+        .select("*")
+        .single();
+
+      if (updErr) throw updErr;
+
+      if (syncRes.synced && syncRes.shopifyFinancialStatus) {
+        await supabase
+          .from("orders")
+          .update({ financial_status: syncRes.shopifyFinancialStatus })
+          .eq("id", existingReturn.order_id);
+      }
+
+      await logOrderEvent(
+        existingReturn.order_id,
+        syncRes.synced ? "SHOPIFY_RETURN_SYNCED" : "SHOPIFY_RETURN_SYNC_FAILED",
+        syncRes.synced
+          ? `Shopify synchronization succeeded on retry (Refund ID: ${syncRes.shopifyRefundId || "N/A"})`
+          : `Shopify synchronization retry failed: ${syncRes.error}`,
+        { returnId: id, ...changesSnapshot }
+      ).catch(() => {});
+
+      return NextResponse.json({
+        success: syncRes.synced,
+        synced: syncRes.synced,
+        error: syncRes.error,
+        data: updatedReturn,
+      });
+    }
+
     const updatePayload: any = {};
+
     if (status) updatePayload.status = status;
     if (notes !== undefined) updatePayload.notes = notes;
-    if (return_delivery_fee !== undefined) updatePayload.return_delivery_fee = Number(return_delivery_fee);
+    if (return_reason !== undefined) updatePayload.return_reason = return_reason;
+    if (return_type !== undefined) {
+      updatePayload.return_type = return_type === "partial" ? "partial" : "full";
+    }
+    if (is_paid_return !== undefined) updatePayload.is_paid_return = Boolean(is_paid_return);
+    if (return_delivery_fee !== undefined) {
+      updatePayload.return_delivery_fee = Number(return_delivery_fee);
+    }
     if (processed_at) updatePayload.processed_at = processed_at;
-    
-    let isVerifyingPartial = false;
+    if (staff_responsible !== undefined) updatePayload.staff_responsible = staff_responsible;
+    if (returned_quantity !== undefined) {
+      updatePayload.returned_quantity = Number(returned_quantity);
+    }
+
     if (is_verified !== undefined) {
-      updatePayload.is_verified = is_verified;
-      if (is_verified && !existingReturn.is_verified && existingReturn.return_type === "partial") {
-        isVerifyingPartial = true;
+      updatePayload.is_verified = Boolean(is_verified);
+      updatePayload.verification_status = is_verified ? "verified" : "unverified";
+    }
+
+    if (refund_amount !== undefined) {
+      updatePayload.refund_amount = Number(refund_amount);
+      if (
+        returned_product_value === undefined &&
+        Number(existingReturn.returned_product_value || 0) === 0
+      ) {
+        updatePayload.returned_product_value = Number(refund_amount);
       }
     }
-    if (refund_amount !== undefined) updatePayload.refund_amount = Number(refund_amount);
-
-    // If status is being set to inspected/restocked/damaged, set processed_at
-    if (status && ["inspected", "restocked", "damaged"].includes(status) && !processed_at) {
-      updatePayload.processed_at = new Date().toISOString();
+    if (returned_product_value !== undefined) {
+      updatePayload.returned_product_value = Number(returned_product_value);
     }
+
+    // Append audit trail entry (capture shallow snapshot BEFORE adding audit_history to avoid circular JSON reference)
+    const changesSnapshot = { ...updatePayload };
+    const prevAudit = Array.isArray((existingReturn as any).audit_history)
+      ? (existingReturn as any).audit_history
+      : [];
+    updatePayload.audit_history = [
+      ...prevAudit,
+      {
+        timestamp: now,
+        action: edit_reason || "Updated Return",
+        previous: {
+          status: existingReturn.status,
+          return_type: existingReturn.return_type,
+          return_reason: existingReturn.return_reason,
+          refund_amount: existingReturn.refund_amount,
+          returned_product_value: (existingReturn as any).returned_product_value,
+          return_delivery_fee: existingReturn.return_delivery_fee,
+          is_paid_return: existingReturn.is_paid_return,
+        },
+        changes: changesSnapshot,
+      },
+    ];
 
     const { data, error } = await supabase
       .from("returns")
@@ -53,29 +212,20 @@ export async function PATCH(
 
     if (error) throw error;
 
-    // Also update the return_delivery_fee on the order if changed
-    const orderUpdates: any = {};
-    let shouldUpdateOrder = false;
-
     if (return_delivery_fee !== undefined && data?.order_id) {
-      orderUpdates.return_delivery_fee = Number(return_delivery_fee);
-      shouldUpdateOrder = true;
+      await supabase
+        .from("orders")
+        .update({ return_delivery_fee: Number(return_delivery_fee) })
+        .eq("id", data.order_id);
     }
 
-    // If we just verified a partial return, deduct the refund amount from the order's total_price
-    if (isVerifyingPartial && data?.order_id && updatePayload.refund_amount !== undefined) {
-       // Fetch the current order to calculate new total
-       const { data: orderData } = await supabase.from("orders").select("total_price").eq("id", data.order_id).single();
-       if (orderData) {
-         const currentTotal = Number(orderData.total_price) || 0;
-         const newTotal = Math.max(0, currentTotal - Number(updatePayload.refund_amount));
-         orderUpdates.total_price = newTotal;
-         shouldUpdateOrder = true;
-       }
-    }
-
-    if (shouldUpdateOrder && data?.order_id) {
-      await supabase.from("orders").update(orderUpdates).eq("id", data.order_id);
+    if (data?.order_id) {
+      await logOrderEvent(
+        data.order_id,
+        "RETURN_UPDATED",
+        `Return ${data.return_reference || id.slice(0, 8)} updated`,
+        { returnId: id, updates: changesSnapshot }
+      ).catch(() => {});
     }
 
     return NextResponse.json({ success: true, data });
@@ -94,7 +244,6 @@ export async function DELETE(
     const { id } = await params;
     const supabase = createServiceClient();
 
-    // Get the full return record to determine type and refund details
     const { data: returnRecord, error: fetchErr } = await supabase
       .from("returns")
       .select("order_id, return_type, is_verified, refund_amount")
@@ -105,25 +254,6 @@ export async function DELETE(
       return NextResponse.json({ error: "Return not found" }, { status: 404 });
     }
 
-    const isPartial = returnRecord.return_type === "partial";
-
-    // If this was a verified partial return, restore the deducted amount to the order's total_price
-    if (isPartial && returnRecord.is_verified && returnRecord.refund_amount) {
-      const { data: orderData } = await supabase
-        .from("orders")
-        .select("total_price")
-        .eq("id", returnRecord.order_id)
-        .single();
-
-      if (orderData) {
-        const restoredTotal = (Number(orderData.total_price) || 0) + Number(returnRecord.refund_amount);
-        await supabase.from("orders").update({
-          total_price: restoredTotal,
-        }).eq("id", returnRecord.order_id);
-      }
-    }
-
-    // Delete the return record
     const { error: deleteErr } = await supabase
       .from("returns")
       .delete()
@@ -131,8 +261,13 @@ export async function DELETE(
 
     if (deleteErr) throw deleteErr;
 
-    // Only reset order status for full returns (partials never changed the order status)
-    if (!isPartial) {
+    // Check if any other returns still exist for this order
+    const { data: remainingReturns } = await supabase
+      .from("returns")
+      .select("id, return_type")
+      .eq("order_id", returnRecord.order_id);
+
+    if (!remainingReturns || remainingReturns.length === 0) {
       const { data: dispatch } = await supabase
         .from("dispatches")
         .select("id")
@@ -142,21 +277,32 @@ export async function DELETE(
 
       const { data: order } = await supabase
         .from("orders")
-        .select("pathao_consignment_id")
+        .select("pathao_consignment_id, original_total_price, total_price")
         .eq("id", returnRecord.order_id)
         .single();
 
-      const oldStatus = (dispatch || order?.pathao_consignment_id) ? "dispatched" : "pending";
+      const oldStatus = dispatch || order?.pathao_consignment_id ? "delivered" : "pending";
+      const origTotal = Number(order?.original_total_price ?? order?.total_price ?? 0);
 
-      await supabase.from("orders").update({
-        internal_status: oldStatus,
-        returned_at: null,
-        return_reason: null,
-        return_delivery_fee: 0,
-      }).eq("id", returnRecord.order_id);
-
-      const { logOrderEvent } = await import("@/lib/audit");
-      await logOrderEvent(returnRecord.order_id, "RETURN_CANCELLED", `Return cancelled. Moved order back to ${oldStatus}.`);
+      await supabase
+        .from("orders")
+        .update({
+          internal_status: oldStatus,
+          total_price: origTotal,
+          returned_at: null,
+          return_reason: null,
+          return_delivery_fee: 0,
+          pathao_delivery_status: oldStatus === "delivered" ? "Delivered" : null,
+        })
+        .eq("id", returnRecord.order_id);
+    } else {
+      await supabase
+        .from("orders")
+        .update({
+          internal_status: "delivered",
+          pathao_delivery_status: "Partial Return",
+        })
+        .eq("id", returnRecord.order_id);
     }
 
     return NextResponse.json({ success: true });

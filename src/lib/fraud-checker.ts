@@ -2,6 +2,7 @@ import { searchFraud } from "@/lib/fraudspy";
 import { checkMrFraud, type MrFraudCheckerResponse } from "@/lib/mr-fraud-checker";
 import { updateShopifyCustomer, updateShopifyOrder } from "@/lib/shopify/client";
 import { analyzeCustomerRisk, type CustomerRiskAnalysis } from "@/lib/risk-analytics";
+import { cleanPathaoTrackingUrl } from "@/lib/pathao/client";
 
 export function formatCourierSummary(fraudData: any): string {
   const courierParts: string[] = [];
@@ -84,8 +85,9 @@ export function buildDispatchCombinedNote({
   fraudData?: any;
   riskAnalysis?: CustomerRiskAnalysis;
 }): string {
-  const dispatchHeader = trackingUrl
-    ? `Pathao Consignment: ${consignmentId}\nPathao Tracking: ${trackingUrl}`
+  const sanitizedTrackingUrl = cleanPathaoTrackingUrl(trackingUrl);
+  const dispatchHeader = sanitizedTrackingUrl
+    ? `Pathao Consignment: ${consignmentId}\nPathao Tracking: ${sanitizedTrackingUrl}`
     : `Pathao Consignment: ${consignmentId}`;
 
   if (!existingNote || !existingNote.trim()) {

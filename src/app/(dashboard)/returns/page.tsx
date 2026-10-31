@@ -1,26 +1,29 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { ReturnsClient } from "./returns-client";
 import type { Metadata } from "next";
-import { getReturnsPageMetrics } from "@/lib/reporting-engine";
 
-export const metadata: Metadata = { title: "Returns" };
+export const metadata: Metadata = { title: "Returns Management — MiBx Dispatch" };
 export const dynamic = "force-dynamic";
 
 export default async function ReturnsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: string; search?: string; page?: string; pageSize?: string }>;
+  searchParams: Promise<{
+    filter?: string;
+    search?: string;
+    startDate?: string;
+    endDate?: string;
+    page?: string;
+    pageSize?: string;
+  }>;
 }) {
   const params = await searchParams;
   const supabase = createServiceClient();
-  const page = parseInt(params.page || "1");
-  const isAll = params.pageSize === "all";
-  const pageSize = isAll ? 5000 : parseInt(params.pageSize || "25");
-  const offset = isAll ? 0 : (page - 1) * pageSize;
 
   let query = supabase
     .from("returns")
-    .select(`
+    .select(
+      `
       *,
       orders!inner (
         id,
@@ -29,53 +32,65 @@ export default async function ReturnsPage({
         customer_name,
         customer_phone,
         total_price,
+        original_total_price,
         subtotal_price,
+        original_subtotal_price,
+        shipping_charge,
+        discount_amount,
+        total_tax,
+        financial_status,
+        fulfillment_status,
         line_items,
         pathao_consignment_id,
         shopify_created_at,
         internal_status
       )
-    `, { count: "exact" })
-    .order("returned_at", { ascending: false })
-    .range(offset, offset + pageSize - 1);
+    `
+    )
+    .order("returned_at", { ascending: false });
 
-  if (params.filter && params.filter !== "all") {
-    if (params.filter === "pending_verification") {
-      query = query.or("status.eq.pending_verification,and(return_type.eq.partial,is_verified.eq.false)");
-    } else {
-      query = query.eq("status", params.filter);
-    }
+  if (params.startDate) {
+    query = query.gte("returned_at", `${params.startDate}T00:00:00.000Z`);
+  }
+  if (params.endDate) {
+    query = query.lte("returned_at", `${params.endDate}T23:59:59.999Z`);
   }
 
-  if (params.search) {
-    const s = params.search;
-    query = query.or(`consignment_id.ilike.%${s}%,return_reason.ilike.%${s}%,orders.shopify_order_name.ilike.%${s}%,orders.customer_name.ilike.%${s}%,orders.customer_phone.ilike.%${s}%`);
-  }
+  const { data: allReturnsData } = await query;
+  const rawReturns = allReturnsData || [];
 
-  const [
-    { data: returnsData, count },
-    metrics,
-  ] = await Promise.all([
-    query,
-    getReturnsPageMetrics(params.search),
-  ]);
+  // Search filter by Shopify Order Number or Customer Phone Number (or Customer Name)
+  const searchStr = (params.search || "").trim().toLowerCase();
+  const searchedReturns = searchStr
+    ? rawReturns.filter((r: any) => {
+        const orderName = String(r.orders?.shopify_order_name || "").toLowerCase();
+        const phone = String(r.orders?.customer_phone || "").toLowerCase();
+        const custName = String(r.orders?.customer_name || "").toLowerCase();
+        return (
+          orderName.includes(searchStr) ||
+          phone.includes(searchStr) ||
+          custName.includes(searchStr)
+        );
+      })
+    : rawReturns;
 
-  const returns = returnsData || [];
+  // Apply category/sync filter
+  const activeFilter = params.filter || "all";
+  const displayedReturns = searchedReturns.filter((r: any) => {
+    if (activeFilter === "partial") return r.return_type === "partial";
+    if (activeFilter === "full") return r.return_type === "full";
+    if (activeFilter === "sync_failed") return r.shopify_sync_status === "failed";
+    return true;
+  });
 
   return (
     <ReturnsClient
-      returns={returns}
-      count={count || 0}
-      totalReturns={metrics.returnedCount}
-      totalReturnValue={metrics.returnedValue}
-      totalReturnFees={metrics.returnFees}
-      pendingReturns={metrics.pendingReturnsCount}
-      processedReturns={metrics.processedReturnsCount}
-      needsAttentionCount={metrics.needsAttentionCount}
-      currentFilter={params.filter}
-      currentSearch={params.search}
-      page={page}
-      pageSize={pageSize}
+      returns={displayedReturns}
+      allFilteredForStats={searchedReturns}
+      currentFilter={activeFilter}
+      currentSearch={params.search || ""}
+      currentStartDate={params.startDate || ""}
+      currentEndDate={params.endDate || ""}
     />
   );
 }

@@ -58,11 +58,28 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  // Log the webhook
+  // Deduplicate repeated Shopify webhook deliveries by x-shopify-webhook-id
+  const webhookId = request.headers.get("x-shopify-webhook-id") || null;
   const effectiveOrderId = payload.id || (payload as any).order_id;
+
+  if (webhookId) {
+    const { data: existingWebhook } = await supabase
+      .from("webhook_logs")
+      .select("id, processed")
+      .eq("webhook_id", webhookId)
+      .eq("processed", true)
+      .maybeSingle();
+
+    if (existingWebhook) {
+      return NextResponse.json({ received: true, deduplicated: true }, { status: 200 });
+    }
+  }
+
+  // Log the webhook
   await supabase.from("webhook_logs").insert({
     source: "shopify",
     topic,
+    webhook_id: webhookId,
     shopify_order_id: effectiveOrderId,
     payload: payload as any,
     processed: false,
@@ -370,7 +387,7 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload, i
   // Check if it already exists to detect new orders
   const { data: existingOrder } = await supabase
     .from("orders")
-    .select("id, internal_status, pathao_consignment_id")
+    .select("id, internal_status, pathao_consignment_id, original_total_price, original_subtotal_price")
     .eq("shopify_order_id", payload.id)
     .maybeSingle();
 
@@ -401,8 +418,11 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload, i
 
   const shippingAddr = payload.shipping_address;
 
-  // Build line items
-  const lineItems = payload.line_items.map((item) => ({
+  // Build line items preserving full product/variant identifiers
+  const lineItems = payload.line_items.map((item: any) => ({
+    id: item.id,
+    product_id: item.product_id || null,
+    variant_id: item.variant_id || null,
     title: item.title,
     quantity: item.quantity,
     price: parseFloat(item.price),
@@ -442,6 +462,16 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload, i
       }
     }
 
+    const origTotal = existingOrder?.original_total_price != null && Number(existingOrder.original_total_price) > 0
+      ? Number(existingOrder.original_total_price)
+      : parseFloat(payload.total_price || (payload as any).current_total_price || "0");
+    const origSubtotal = existingOrder?.original_subtotal_price != null && Number(existingOrder.original_subtotal_price) > 0
+      ? Number(existingOrder.original_subtotal_price)
+      : parseFloat(payload.subtotal_price || (payload as any).current_subtotal_price || "0");
+    const shippingCharge = Math.max(0, origTotal - origSubtotal);
+    const discountAmount = parseFloat((payload as any).total_discounts || (payload as any).current_total_discounts || "0");
+    const isPaidStatus = (payload.financial_status || "").toLowerCase() === "paid";
+
     const orderPayload: any = {
       shopify_order_id: payload.id,
       shopify_order_name: payload.name,
@@ -453,9 +483,15 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload, i
       customer_email: customerEmail,
       shipping_address: shippingAddr || null,
       line_items: lineItems,
-      total_price: parseFloat((payload as any).current_total_price || payload.total_price || "0"),
-      subtotal_price: parseFloat((payload as any).current_subtotal_price || payload.subtotal_price || "0"),
-      total_tax: parseFloat((payload as any).current_total_tax || payload.total_tax || "0"),
+      total_price: origTotal,
+      subtotal_price: origSubtotal,
+      original_total_price: origTotal,
+      original_subtotal_price: origSubtotal,
+      shipping_charge: shippingCharge,
+      discount_amount: discountAmount,
+      payment_method: isPaidStatus ? "prepaid" : "cod",
+      cod_amount: isPaidStatus ? 0 : origTotal,
+      total_tax: parseFloat(payload.total_tax || (payload as any).current_total_tax || "0"),
       currency: payload.currency || "BDT",
       financial_status: payload.financial_status,
       fulfillment_status: trueFulfillmentStatus,
