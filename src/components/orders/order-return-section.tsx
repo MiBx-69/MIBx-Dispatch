@@ -70,7 +70,7 @@ export function OrderReturnSection({ order, onUpdated }: OrderReturnSectionProps
     } finally {
       setLoading(false);
     }
-  }, [order?.id, order?.original_total_price, order?.total_price]);
+  }, [order]);
 
   useEffect(() => {
     fetchOrderReturnState();
@@ -117,13 +117,12 @@ export function OrderReturnSection({ order, onUpdated }: OrderReturnSectionProps
             <h2 className="text-sm font-bold text-white flex items-center gap-2">
               <span>Return Section</span>
               <span
-                className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
-                  classification === "Full Return"
-                    ? "bg-rose-500/15 text-rose-400 border-rose-500/30"
-                    : classification === "Partial Return"
-                      ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
-                      : "bg-zinc-800 text-zinc-400 border-zinc-700"
-                }`}
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${classification === "Full Return"
+                  ? "bg-rose-500/15 text-rose-400 border-rose-500/30"
+                  : classification === "Partial Return"
+                    ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                    : "bg-zinc-800 text-zinc-400 border-zinc-700"
+                  }`}
               >
                 {classification}
               </span>
@@ -284,11 +283,10 @@ export function OrderReturnSection({ order, onUpdated }: OrderReturnSectionProps
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <span
-                      className={`px-2 py-0.5 rounded font-bold text-[10px] uppercase ${
-                        ret.return_type === "partial"
-                          ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
-                          : "bg-rose-500/15 text-rose-300 border border-rose-500/30"
-                      }`}
+                      className={`px-2 py-0.5 rounded font-bold text-[10px] uppercase ${ret.return_type === "partial"
+                        ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                        : "bg-rose-500/15 text-rose-300 border border-rose-500/30"
+                        }`}
                     >
                       {ret.return_type === "partial" ? "Partial Return" : "Full Return"}
                     </span>
@@ -299,9 +297,9 @@ export function OrderReturnSection({ order, onUpdated }: OrderReturnSectionProps
                       •{" "}
                       {ret.returned_at
                         ? new Date(ret.returned_at).toLocaleString("en-GB", {
-                            dateStyle: "medium",
-                            timeStyle: "short",
-                          })
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })
                         : ""}
                     </span>
                   </div>

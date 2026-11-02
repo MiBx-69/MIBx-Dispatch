@@ -181,7 +181,7 @@ export function BulkDispatchModal({ orderIds, storeId, onClose, onSuccess }: Bul
             <div className="p-4 space-y-4">
               <div className="p-3 bg-indigo-600/10 border border-indigo-500/20 rounded-lg">
                 <p className="text-xs text-indigo-300">
-                  Bulk dispatch will use the customer's shipping address and total price from Shopify automatically. Only general parcel details are needed.
+                  Bulk dispatch will use the customer&apos;s shipping address and total price from Shopify automatically. Only general parcel details are needed.
                 </p>
               </div>
 

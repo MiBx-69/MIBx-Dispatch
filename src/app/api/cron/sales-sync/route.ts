@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { runFullShopifySalesSync } from "@/lib/shopify-sales-sync";
 import { Receiver } from "@upstash/qstash";
+import { timingSafeEqual } from "crypto";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -42,8 +43,7 @@ async function handleCron(request: NextRequest) {
       const bufA = Buffer.from(a);
       const bufB = Buffer.from(b);
       if (bufA.length !== bufB.length) return false;
-      const crypto = require("crypto");
-      return crypto.timingSafeEqual(bufA, bufB);
+      return timingSafeEqual(bufA, bufB);
     };
 
     if (!configuredSecret || !providedSecret || !safeCompare(providedSecret, configuredSecret)) {

@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { DispatchesClient } from "./dispatches-client";
 import { Metadata } from "next";
 import { getUnifiedReportMetrics, resolveDateRange } from "@/lib/reporting-engine";
+import { getPathaoConnectionStatus } from "@/lib/pathao/client";
 
 export const metadata: Metadata = { title: "Dispatches" };
 export const dynamic = "force-dynamic";
@@ -69,6 +70,7 @@ export default async function DispatchesPage({
     { data: rawDispatches, count },
     metrics,
     { data: settings },
+    pathaoConnection,
     { data: lastWebhookLog },
     { count: failedWebhookCount },
     { data: lastSyncLog },
@@ -80,7 +82,8 @@ export default async function DispatchesPage({
       endDate: params.endDate,
       search: params.search,
     }),
-    supabase.from("app_settings").select("pathao_store_id, pathao_client_id, pathao_client_secret, pathao_webhook_secret").single(),
+    supabase.from("app_settings").select("pathao_store_id").single(),
+    getPathaoConnectionStatus(),
     supabase.from("webhook_logs").select("received_at").eq("source", "pathao").order("received_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("webhook_logs").select("id", { count: "exact", head: true }).eq("source", "pathao").or("processing_status.eq.failed,shopify_sync_status.eq.failed"),
     supabase.from("sync_logs").select("completed_at, started_at").eq("sync_type", "pathao_reconciliation").order("started_at", { ascending: false }).limit(1).maybeSingle(),
@@ -89,13 +92,8 @@ export default async function DispatchesPage({
   // Stable pagination: preserve SQL ordering by dispatched_at DESC
   const dispatches = rawDispatches;
 
-  const apiConfigured = Boolean(
-    (process.env.PATHAO_CLIENT_ID && process.env.PATHAO_CLIENT_SECRET) ||
-    (settings?.pathao_client_id && settings?.pathao_client_secret)
-  );
-  const webhookSecretConfigured = Boolean(
-    process.env.PATHAO_WEBHOOK_SECRET || settings?.pathao_webhook_secret
-  );
+  const apiConfigured = pathaoConnection.apiConfigured;
+  const webhookSecretConfigured = pathaoConnection.webhookSecretConfigured;
 
   const pathaoTelemetry = {
     connection: {

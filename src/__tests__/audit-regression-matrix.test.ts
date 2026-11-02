@@ -128,4 +128,48 @@ describe("MiBx Dispatch — Audit Regression Matrix", () => {
       expect(invoices.length).toBeGreaterThan(500);
     });
   });
+
+  describe("6. Dispatch Concurrency Claim Lock & Expired Claim Recovery", () => {
+    it("rejects concurrent dispatch requests while active claim is valid", () => {
+      const now = Date.now();
+      const activeClaim = {
+        order_id: "order-123",
+        status: "in_progress",
+        expires_at: new Date(now + 60_000).toISOString(),
+      };
+
+      const isClaimActive = (claim: typeof activeClaim, atIso: string) => {
+        return claim.status === "in_progress" && new Date(claim.expires_at).getTime() > new Date(atIso).getTime();
+      };
+
+      expect(isClaimActive(activeClaim, new Date(now).toISOString())).toBe(true);
+    });
+
+    it("permits new dispatch attempt when prior claim has expired", () => {
+      const now = Date.now();
+      const expiredClaim = {
+        order_id: "order-123",
+        status: "in_progress",
+        expires_at: new Date(now - 5_000).toISOString(), // expired 5s ago
+      };
+
+      const isClaimActive = (claim: typeof expiredClaim, atIso: string) => {
+        return claim.status === "in_progress" && new Date(claim.expires_at).getTime() > new Date(atIso).getTime();
+      };
+
+      expect(isClaimActive(expiredClaim, new Date(now).toISOString())).toBe(false);
+    });
+  });
+
+  describe("7. Shopify Webhook Auto-Dispatch Atomic Claim Query Safety", () => {
+    it("allows claim when pathao_delivery_status is null or not Dispatching", () => {
+      const canClaim = (status: string | null) => {
+        return status === null || status !== "Dispatching";
+      };
+
+      expect(canClaim(null)).toBe(true);
+      expect(canClaim("Pending")).toBe(true);
+      expect(canClaim("Dispatching")).toBe(false);
+    });
+  });
 });

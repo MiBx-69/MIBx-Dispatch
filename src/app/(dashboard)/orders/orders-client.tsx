@@ -553,6 +553,21 @@ export function OrdersClient({
                         text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500
                         focus:ring-1 focus:ring-indigo-500 transition-all"
             />
+            {search && !isPending && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  const params = new URLSearchParams();
+                  if (effectiveStatus && effectiveStatus !== "all") params.set("status", effectiveStatus);
+                  router.push(`/orders?${params.toString()}`);
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-zinc-500 hover:text-zinc-200 transition-colors"
+                title="Clear search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
             {isPending && (
               <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 animate-spin" />
             )}
@@ -657,7 +672,7 @@ export function OrdersClient({
 
       {/* Bulk Actions Floating Bar */}
       {selected.size > 0 && (
-          <div className="fixed bottom-4 left-4 right-4 sm:static sm:sticky sm:top-2 z-50 w-auto sm:w-full 
+          <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] left-3 right-3 sm:static sm:sticky sm:top-2 z-50 w-auto sm:w-full 
                           bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-2xl shadow-2xl p-3
                           flex flex-col lg:flex-row items-center justify-between gap-3 animate-in slide-in-from-bottom-4 sm:slide-in-from-top-2">
             <div className="flex items-center gap-3 w-full lg:w-auto shrink-0">

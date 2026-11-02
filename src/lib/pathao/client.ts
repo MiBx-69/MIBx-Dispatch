@@ -109,6 +109,25 @@ export async function getPathaoCredentials(): Promise<PathaoCredentials> {
   };
 }
 
+/**
+ * Safe connection status checker that returns boolean flags without exposing credentials.
+ */
+export async function getPathaoConnectionStatus(): Promise<{
+  apiConfigured: boolean;
+  webhookSecretConfigured: boolean;
+}> {
+  try {
+    const creds = await getPathaoCredentials();
+    const apiConfigured = Boolean(
+      creds.clientId && creds.clientSecret && creds.username && creds.password
+    );
+    const webhookSecretConfigured = Boolean(creds.webhookSecret);
+    return { apiConfigured, webhookSecretConfigured };
+  } catch {
+    return { apiConfigured: false, webhookSecretConfigured: false };
+  }
+}
+
 async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},

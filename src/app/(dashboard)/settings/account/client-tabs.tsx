@@ -84,7 +84,7 @@ export function AccountTabs({ userProfile, teamProfiles }: { userProfile: any, t
                 Passkeys (WebAuthn)
               </h3>
               <p className="text-xs text-zinc-500 mb-4 leading-relaxed">
-                Log in securely without a password using your device's biometrics (FaceID, TouchID, Windows Hello).
+                Log in securely without a password using your device&apos;s biometrics (FaceID, TouchID, Windows Hello).
               </p>
               <button 
                 type="button" 

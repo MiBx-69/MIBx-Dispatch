@@ -191,6 +191,23 @@ export function DispatchesClient({
             className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs sm:text-sm rounded-xl pl-8 pr-8 py-2 w-full outline-none focus:border-indigo-500 transition-colors"
           />
           <Search className="w-4 h-4 text-zinc-500 absolute left-2.5 top-2.5" />
+          {searchQuery && !isPending && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery("");
+                startTransition(() => {
+                  const params = new URLSearchParams();
+                  if (currentStatus) params.set("status", currentStatus);
+                  router.push(`/dispatches?${params.toString()}`);
+                });
+              }}
+              className="absolute right-2.5 top-2.5 p-0.5 text-zinc-500 hover:text-zinc-200 transition-colors"
+              title="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
           {isPending && (
             <Loader2 className="absolute right-2.5 top-2.5 w-4 h-4 text-zinc-400 animate-spin" />
           )}
@@ -528,7 +545,7 @@ export function DispatchesClient({
 
       {/* Fixed Bulk Action Bar */}
       {selected.size > 0 && (
-        <div className="fixed bottom-4 left-4 right-4 sm:left-1/2 sm:-translate-x-1/2 sm:right-auto sm:w-auto bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 p-3 rounded-2xl shadow-2xl flex flex-col sm:flex-row items-center gap-3 sm:gap-4 z-50 animate-in slide-in-from-bottom-4">
+        <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] left-3 right-3 sm:bottom-4 sm:left-1/2 sm:-translate-x-1/2 sm:right-auto sm:w-auto bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 p-3 rounded-2xl shadow-2xl flex flex-col sm:flex-row items-center gap-3 sm:gap-4 z-50 animate-in slide-in-from-bottom-4">
           <div className="flex items-center gap-2 px-2 w-full sm:w-auto justify-between sm:justify-start">
             <div className="flex items-center gap-2">
               <div className="bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded-md text-xs font-bold">
