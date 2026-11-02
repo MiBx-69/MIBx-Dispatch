@@ -307,7 +307,7 @@ async function processShopifyWebhook(
       case "fulfillments/create":
       case "fulfillments/update": {
         const p = payload as any;
-        const shopifyOrderId = p.order_id || p.id;
+        const shopifyOrderId = p.order_id || (p.order && p.order.id);
         // If tracking company is already Pathao (e.g. from our own dispatch sync), skip to prevent loops
         if ((p.tracking_company || "").toLowerCase() === "pathao") {
           console.log(`[Shopify Webhook] ${topic}: Fulfillment already tracked via Pathao for order ${shopifyOrderId}. Skipping.`);
@@ -359,7 +359,9 @@ async function autoDispatchOnShopifyFulfilled(
     .eq("shopify_order_id", shopifyOrderId)
     .maybeSingle();
 
-  if (!order) {
+  // If order is not found or has not been dispatched yet, refresh latest order details from Shopify
+  // to ensure financial_status, total_outstanding, and fulfillment status are up to date
+  if (!order || !order.pathao_consignment_id) {
     try {
       const { getShopifyOrder } = await import("@/lib/shopify/client");
       const fetchedOrder = await getShopifyOrder(shopifyOrderId);
@@ -370,23 +372,26 @@ async function autoDispatchOnShopifyFulfilled(
           .select("id, internal_status, pathao_consignment_id, pathao_delivery_status")
           .eq("shopify_order_id", shopifyOrderId)
           .maybeSingle();
-        order = reloaded;
+        if (reloaded) {
+          order = reloaded;
+        }
       }
     } catch (e) {
-      console.error("[Shopify Webhook] Could not fetch unsynced order for auto-dispatch:", e);
+      console.error("[Shopify Webhook] Could not fetch fresh order for auto-dispatch:", e);
     }
   }
 
   if (!order || order.pathao_consignment_id) return;
   if (["cancelled", "returned", "delivered", "hold"].includes(order.internal_status)) return;
 
-  // Atomic claim so concurrent webhooks (orders/updated + orders/fulfilled + fulfillments/create) can't double-dispatch
+  // Atomic claim so concurrent webhooks (orders/updated + orders/fulfilled + fulfillments/create) can't double-dispatch.
+  // Note: pathao_delivery_status is null for new orders, so we must match null or non-Dispatching.
   const { data: claimed } = await supabase
     .from("orders")
     .update({ pathao_delivery_status: "Dispatching" })
     .eq("id", order.id)
     .is("pathao_consignment_id", null)
-    .neq("pathao_delivery_status", "Dispatching")
+    .or("pathao_delivery_status.is.null,pathao_delivery_status.neq.Dispatching")
     .select("id");
   if (!claimed || claimed.length === 0) return;
 

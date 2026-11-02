@@ -386,34 +386,43 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
     { consignment_id, previous_consignment_id: order.pathao_consignment_id || null, trackingUrl, fraud_summary: pathaoResponseWithFraud.fraud_summary }
   );
 
-  // 4. Create Shopify fulfillment with tracking
+  // 4. Create Shopify fulfillment with tracking or attach tracking to existing fulfillment
   let shopifyFulfillmentId: string | null = null;
   try {
     const shopifyOrderGid = `gid://shopify/Order/${order.shopify_order_id}`;
     const fulfillmentOrders = await getShopifyFulfillmentOrders(shopifyOrderGid);
-    const fulfillmentOrderId = fulfillmentOrders?.[0]?.id;
+    const openFulfillmentOrder = fulfillmentOrders.find(
+      (fo: any) => fo.status === "OPEN" || fo.status === "IN_PROGRESS" || fo.status === "SCHEDULED"
+    );
 
-    if (fulfillmentOrderId) {
-      const fulfillment = await createShopifyFulfillment({
-        fulfillmentOrderId,
-        trackingCompany: "Pathao",
-        trackingNumber: consignment_id,
-        trackingUrl,
-        notifyCustomer: true,
-      });
-      shopifyFulfillmentId = fulfillment.id;
-    } else {
-      // Already fulfilled on Shopify (or re-dispatch): update tracking on the existing fulfillment
-      const existing = await getShopifyOrderFulfillments(order.shopify_order_id);
-      if (existing[0]) {
-        await updateShopifyFulfillmentTracking({
-          fulfillmentId: existing[0].id,
+    if (openFulfillmentOrder) {
+      try {
+        const fulfillment = await createShopifyFulfillment({
+          fulfillmentOrderId: openFulfillmentOrder.id,
           trackingCompany: "Pathao",
           trackingNumber: consignment_id,
           trackingUrl,
           notifyCustomer: true,
         });
-        shopifyFulfillmentId = existing[0].id;
+        shopifyFulfillmentId = fulfillment?.id || null;
+      } catch (createErr) {
+        console.warn("[Dispatch] createShopifyFulfillment failed, falling back to update tracking on existing fulfillment:", createErr);
+      }
+    }
+
+    if (!shopifyFulfillmentId) {
+      // Already fulfilled on Shopify (e.g. marked fulfilled in Shopify mobile app/admin): attach tracking to existing active fulfillment
+      const existing = await getShopifyOrderFulfillments(order.shopify_order_id);
+      if (existing && existing.length > 0) {
+        const activeFulfillment = existing.find((f) => f.status === "SUCCESS") || existing[0];
+        await updateShopifyFulfillmentTracking({
+          fulfillmentId: activeFulfillment.id,
+          trackingCompany: "Pathao",
+          trackingNumber: consignment_id,
+          trackingUrl,
+          notifyCustomer: true,
+        });
+        shopifyFulfillmentId = activeFulfillment.id;
       }
     }
 
@@ -435,7 +444,7 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
       }
     }
   } catch (shopifyErr: any) {
-    console.error("[Dispatch] Shopify fulfillment error (non-fatal):", shopifyErr);
+    console.error("[Dispatch] Shopify fulfillment tracking error (non-fatal):", shopifyErr);
     if (insertedDispatch?.id) {
       await supabase
         .from("dispatches")
