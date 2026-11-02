@@ -166,6 +166,33 @@ export async function getShopifyOrders(options: {
   return result.data.orders;
 }
 
+/**
+ * Fetches a single Shopify order by ID via REST API to obtain full webhook-compatible payload.
+ */
+export async function getShopifyOrder(orderId: string | number) {
+  const { domain, token } = await getShopifyCredentials();
+  const rawId = String(orderId).replace(/\D/g, "");
+  if (!rawId) return null;
+
+  const endpoint = `https://${domain}/admin/api/${SHOPIFY_API_VERSION}/orders/${rawId}.json`;
+  const res = await fetch(endpoint, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Shopify-Access-Token": token,
+    },
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    console.error(`[Shopify Client] Failed to fetch order ${orderId}: ${res.status} ${res.statusText}`);
+    return null;
+  }
+
+  const json = await res.json();
+  return json.order || null;
+}
+
 // ─── Create Fulfillment ───────────────────────────────────────────────────────
 const CREATE_FULFILLMENT_MUTATION = `
   mutation CreateFulfillment($fulfillment: FulfillmentInput!) {

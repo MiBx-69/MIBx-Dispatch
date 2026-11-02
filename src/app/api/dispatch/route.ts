@@ -7,6 +7,7 @@ import {
   formatPathaoTrackingUrl,
   normalizeBdPhoneForPathao,
 } from "@/lib/pathao/client";
+import { resolvePathaoCity, resolvePathaoZone } from "@/lib/pathao/location-resolver";
 import {
   createShopifyFulfillment,
   updateShopifyOrder,
@@ -171,19 +172,21 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
       throw err;
     }
 
-    // Strict City & Zone resolution (NO GUESSING! NO SILENT FALLBACK TO DHAKA OR ID 1!)
+    // Robust City & Zone resolution with full English & Bengali Bangladesh District & Upazila support
     let finalCity = recipient_city ? parseInt(String(recipient_city), 10) : undefined;
     let finalZone = recipient_zone ? parseInt(String(recipient_zone), 10) : undefined;
     let finalArea = recipient_area ? parseInt(String(recipient_area), 10) : undefined;
 
+    const shippingAddrObj = order.shipping_address as any;
     if (!finalCity) {
-      const addressString = `${finalAddress} ${cityProv}`.toLowerCase();
-      const cities = await getPathaoCities();
-      const matchedCity = cities.find((c: any) =>
-        addressString.includes(c.city_name.toLowerCase())
-      );
-      if (matchedCity) {
-        finalCity = matchedCity.city_id;
+      const resolvedDistrict = resolvePathaoCity({
+        city: shippingAddrObj?.city,
+        province: shippingAddrObj?.province,
+        address1: finalAddress,
+      }, true); // fallbackToDhaka = true for automated dispatches
+
+      if (resolvedDistrict) {
+        finalCity = resolvedDistrict.city_id;
       } else {
         const err: any = new Error(
           `Recipient city could not be verified with Pathao for ${order.shopify_order_name || order.id} from address "${finalAddress}". Please select a city explicitly.`
@@ -194,13 +197,13 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
     }
 
     if (!finalZone && finalCity) {
-      const addressString = `${finalAddress} ${cityProv}`.toLowerCase();
-      const zones = await getPathaoZones(finalCity);
-      const matchedZone = zones.find((z: any) =>
-        addressString.includes(z.zone_name.toLowerCase())
-      );
-      if (matchedZone) {
-        finalZone = matchedZone.zone_id;
+      const resolvedZone = await resolvePathaoZone(finalCity, {
+        address1: finalAddress,
+        city: shippingAddrObj?.city,
+      });
+
+      if (resolvedZone) {
+        finalZone = resolvedZone.zone_id;
       } else {
         const err: any = new Error(
           `Recipient zone could not be verified with Pathao for city ID ${finalCity}. Please select a zone explicitly.`
@@ -210,7 +213,23 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
       }
     }
 
-  const finalAmount = Math.round(parseFloat(String(amount_to_collect ?? (order.total_price || "0"))));
+    // Calculate COD amount to collect:
+    // If order is paid on Shopify (financial_status === "paid"), COD amount MUST be 0!
+    // If unpaid, use due amount (cod_amount or total_price).
+    let finalAmount = 0;
+    if (amount_to_collect !== undefined && amount_to_collect !== null) {
+      finalAmount = Math.max(0, Math.round(Number(amount_to_collect)));
+    } else {
+      const finStatus = (order.financial_status || "").toLowerCase();
+      const isPaid = finStatus === "paid" || finStatus === "refunded";
+      if (isPaid) {
+        finalAmount = 0;
+      } else if (order.cod_amount !== undefined && order.cod_amount !== null) {
+        finalAmount = Math.max(0, Math.round(Number(order.cod_amount)));
+      } else if (order.total_price !== null) {
+        finalAmount = Math.max(0, Math.round(Number(order.total_price)));
+      }
+    }
 
   // Combine global special instructions with order specific instructions
   let finalInstruction = special_instruction || "";
@@ -303,12 +322,7 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
         "",
       recipient_city: finalCity,
       recipient_zone: finalZone,
-      amount_to_collect:
-        amount_to_collect !== undefined && amount_to_collect !== null
-          ? Number(amount_to_collect)
-          : order.total_price !== null
-            ? Number(order.total_price)
-            : 0,
+      amount_to_collect: finalAmount,
       expected_cod: finalAmount,
       settlement_status: "pending",
       item_weight,

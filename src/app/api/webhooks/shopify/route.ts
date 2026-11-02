@@ -304,6 +304,21 @@ async function processShopifyWebhook(
         await autoDispatchOnShopifyFulfilled(supabase, payload);
         break;
 
+      case "fulfillments/create":
+      case "fulfillments/update": {
+        const p = payload as any;
+        const shopifyOrderId = p.order_id || p.id;
+        // If tracking company is already Pathao (e.g. from our own dispatch sync), skip to prevent loops
+        if ((p.tracking_company || "").toLowerCase() === "pathao") {
+          console.log(`[Shopify Webhook] ${topic}: Fulfillment already tracked via Pathao for order ${shopifyOrderId}. Skipping.`);
+          break;
+        }
+        if (shopifyOrderId) {
+          await autoDispatchOnShopifyFulfilled(supabase, { id: shopifyOrderId, order_id: shopifyOrderId } as any);
+        }
+        break;
+      }
+
       default:
         console.log(`[Shopify Webhook] Unhandled topic: ${topic}`);
     }
@@ -338,22 +353,40 @@ async function autoDispatchOnShopifyFulfilled(
   const shopifyOrderId = payload.id || (payload as any).order_id;
   if (!shopifyOrderId) return;
 
-  const { data: order } = await supabase
+  let { data: order } = await supabase
     .from("orders")
     .select("id, internal_status, pathao_consignment_id, pathao_delivery_status")
     .eq("shopify_order_id", shopifyOrderId)
     .maybeSingle();
 
+  if (!order) {
+    try {
+      const { getShopifyOrder } = await import("@/lib/shopify/client");
+      const fetchedOrder = await getShopifyOrder(shopifyOrderId);
+      if (fetchedOrder) {
+        await upsertOrder(supabase, fetchedOrder);
+        const { data: reloaded } = await supabase
+          .from("orders")
+          .select("id, internal_status, pathao_consignment_id, pathao_delivery_status")
+          .eq("shopify_order_id", shopifyOrderId)
+          .maybeSingle();
+        order = reloaded;
+      }
+    } catch (e) {
+      console.error("[Shopify Webhook] Could not fetch unsynced order for auto-dispatch:", e);
+    }
+  }
+
   if (!order || order.pathao_consignment_id) return;
   if (["cancelled", "returned", "delivered", "hold"].includes(order.internal_status)) return;
 
-  // Atomic claim so concurrent webhooks (orders/updated + orders/fulfilled) can't double-dispatch
+  // Atomic claim so concurrent webhooks (orders/updated + orders/fulfilled + fulfillments/create) can't double-dispatch
   const { data: claimed } = await supabase
     .from("orders")
     .update({ pathao_delivery_status: "Dispatching" })
     .eq("id", order.id)
     .is("pathao_consignment_id", null)
-    .is("pathao_delivery_status", null)
+    .neq("pathao_delivery_status", "Dispatching")
     .select("id");
   if (!claimed || claimed.length === 0) return;
 
@@ -471,6 +504,18 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload, i
     const shippingCharge = Math.max(0, origTotal - origSubtotal);
     const discountAmount = parseFloat((payload as any).total_discounts || (payload as any).current_total_discounts || "0");
     const isPaidStatus = (payload.financial_status || "").toLowerCase() === "paid";
+    const totalOutstanding = (payload as any).total_outstanding != null
+      ? parseFloat(String((payload as any).total_outstanding))
+      : null;
+
+    let computedCodAmount = 0;
+    if (isPaidStatus) {
+      computedCodAmount = 0;
+    } else if (totalOutstanding !== null && !isNaN(totalOutstanding)) {
+      computedCodAmount = Math.max(0, totalOutstanding);
+    } else {
+      computedCodAmount = origTotal;
+    }
 
     const orderPayload: any = {
       shopify_order_id: payload.id,
@@ -489,8 +534,8 @@ async function upsertOrder(supabase: any, payload: ShopifyOrderWebhookPayload, i
       original_subtotal_price: origSubtotal,
       shipping_charge: shippingCharge,
       discount_amount: discountAmount,
-      payment_method: isPaidStatus ? "prepaid" : "cod",
-      cod_amount: isPaidStatus ? 0 : origTotal,
+      payment_method: isPaidStatus ? "prepaid" : (computedCodAmount < origTotal && computedCodAmount > 0 ? "partial_cod" : "cod"),
+      cod_amount: computedCodAmount,
       total_tax: parseFloat(payload.total_tax || (payload as any).current_total_tax || "0"),
       currency: payload.currency || "BDT",
       financial_status: payload.financial_status,
