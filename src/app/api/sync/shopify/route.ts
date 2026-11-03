@@ -174,7 +174,11 @@ async function upsertShopifyOrder(supabase: any, shopifyOrder: any, isFullSync: 
       image: e.node.image?.url,
     }));
 
-  const fulfillments = shopifyOrder.fulfillments || [];
+  const rawFulfillments = shopifyOrder.fulfillments;
+  const fulfillments =
+    rawFulfillments?.nodes ||
+    rawFulfillments?.edges?.map((e: any) => e.node) ||
+    (Array.isArray(rawFulfillments) ? rawFulfillments : []);
   const lastFulfillment = fulfillments[fulfillments.length - 1];
   
   // orderName is usually like #1001, so we strip non-digits to get a number if possible

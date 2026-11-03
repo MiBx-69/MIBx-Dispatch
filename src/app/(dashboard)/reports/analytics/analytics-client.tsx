@@ -5,10 +5,9 @@ import Link from "next/link";
 import {
   TrendingUp, Truck, CheckCircle2, RotateCcw, AlertTriangle,
   Banknote, Download, ArrowLeft, Search, ShieldAlert,
-  MapPin, Clock, TrendingDown, Users
+  MapPin, Clock, TrendingDown
 } from "lucide-react";
 import { toast } from "sonner";
-import { StaffPerformanceView } from "@/components/reports/staff-performance-view";
 
 interface AnalyticsClientProps {
   dispatches: any[];
@@ -18,7 +17,6 @@ export function AnalyticsClient({ dispatches }: AnalyticsClientProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [regionFilter, setRegionFilter] = useState<"all" | "dhaka" | "outside_dhaka" | "high_risk">("all");
   const [sortBy, setSortBy] = useState<"total" | "rate" | "return">("total");
-  const [activeAnalyticsTab, setActiveAnalyticsTab] = useState<"delivery" | "staff">("delivery");
 
   // ── Overall Metrics ──────────────────────────────────────────────────────
   const metrics = useMemo(() => {
@@ -196,36 +194,7 @@ export function AnalyticsClient({ dispatches }: AnalyticsClientProps) {
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-zinc-800 bg-zinc-900/40 rounded-xl p-1 gap-1">
-        <button
-          onClick={() => setActiveAnalyticsTab("delivery")}
-          className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-            activeAnalyticsTab === "delivery"
-              ? "bg-zinc-800 text-white shadow-sm"
-              : "text-zinc-400 hover:text-zinc-200"
-          }`}
-        >
-          Delivery & Regional Analytics
-        </button>
-        <button
-          onClick={() => setActiveAnalyticsTab("staff")}
-          className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
-            activeAnalyticsTab === "staff"
-              ? "bg-indigo-600 text-white shadow-sm"
-              : "text-zinc-400 hover:text-zinc-200"
-          }`}
-        >
-          <Users size={13} />
-          <span>Staff Performance Leaderboard</span>
-        </button>
-      </div>
-
-      {activeAnalyticsTab === "staff" ? (
-        <StaffPerformanceView />
-      ) : (
-        <>
-          {/* ── KPI Strip ── */}
+      {/* ── KPI Strip ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           {
@@ -522,8 +491,6 @@ export function AnalyticsClient({ dispatches }: AnalyticsClientProps) {
             ))}
           </div>
         </div>
-      )}
-      </>
       )}
     </div>
   );

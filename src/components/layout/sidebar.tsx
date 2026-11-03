@@ -8,44 +8,24 @@ import {
   ShoppingCart,
   Truck,
   RotateCcw,
-  Users,
   Settings,
   PackageCheck,
+  BarChart,
   LogOut,
   Zap,
-  Wallet,
   ChevronLeft,
   ChevronRight,
-  BarChart,
-  Activity,
-  TrendingUp,
-  Boxes,
-  PackagePlus,
-  PackageMinus,
-  History,
-  Tags,
 } from "lucide-react";
 import type { Profile } from "@/types/database";
 
 const MAIN_NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/orders", label: "Orders", icon: ShoppingCart },
-  { href: "/dispatches", label: "Dispatches", icon: Truck },
-  { href: "/orders?status=delivered", label: "Deliveries", icon: PackageCheck },
+  { href: "/dispatches", label: "Dispatch", icon: Truck },
+  { href: "/orders?status=delivered", label: "Tracking", icon: PackageCheck },
   { href: "/returns", label: "Returns", icon: RotateCcw },
-  { href: "/customers", label: "Customers", icon: Users },
-  { href: "/finances", label: "Finances", icon: Wallet },
   { href: "/reports", label: "Reports", icon: BarChart },
-  { href: "/logs", label: "Log Analytics", icon: Activity },
   { href: "/settings", label: "Settings", icon: Settings },
-];
-
-const INVENTORY_NAV_ITEMS = [
-  { href: "/inventory", label: "Inventory Overview", icon: Boxes },
-  { href: "/inventory/stock-in", label: "Stock In", icon: PackagePlus },
-  { href: "/inventory/stock-out", label: "Stock Out", icon: PackageMinus },
-  { href: "/inventory/history", label: "Stock History", icon: History },
-  { href: "/inventory/categories", label: "Source Categories", icon: Tags },
 ];
 
 interface SidebarProps {
@@ -76,8 +56,8 @@ export function Sidebar({ profile }: SidebarProps) {
         </div>
         {isExpanded && (
           <div className="whitespace-nowrap overflow-hidden">
-            <p className="text-sm font-bold text-white leading-none tracking-tight">MiBx Dispatch v3</p>
-            <p className="text-[11px] text-zinc-400 mt-1 font-medium tracking-wide uppercase">ERP System</p>
+            <p className="text-sm font-bold text-white leading-none tracking-tight">MiBx Dispatch</p>
+            <p className="text-[11px] text-zinc-400 mt-1 font-medium tracking-wide uppercase">Fulfillment & Courier</p>
           </div>
         )}
       </div>
@@ -118,47 +98,6 @@ export function Sidebar({ profile }: SidebarProps) {
                   Live
                 </span>
               )}
-            </Link>
-          );
-        })}
-
-        {/* Inventory Management Group */}
-        <div className="pt-3 pb-1">
-          {isExpanded ? (
-            <div className="px-3 flex items-center justify-between">
-              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                Inventory Management
-              </span>
-            </div>
-          ) : (
-            <div className="my-1.5 border-t border-zinc-800/80" />
-          )}
-        </div>
-
-        {INVENTORY_NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-          const isActive = href === "/inventory" 
-            ? pathname === "/inventory"
-            : pathname.startsWith(href);
-
-          return (
-            <Link
-              key={href}
-              href={href}
-              title={!isExpanded ? label : undefined}
-              className={`flex items-center ${isExpanded ? "gap-3 px-3 justify-start" : "justify-center px-0"} py-2 rounded-lg text-sm font-medium
-                         transition-all duration-200 active:scale-[0.98] group whitespace-nowrap ${
-                           isActive
-                             ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/20 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)]"
-                             : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 border border-transparent hover:border-zinc-700/30"
-                         }`}
-            >
-              <Icon
-                className={`w-4.5 h-4.5 shrink-0 transition-transform duration-200 group-hover:scale-110 ${
-                  isActive ? "text-indigo-400" : "text-zinc-500 group-hover:text-zinc-300"
-                }`}
-                size={18}
-              />
-              {isExpanded && label}
             </Link>
           );
         })}

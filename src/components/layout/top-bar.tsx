@@ -1,12 +1,10 @@
 "use client";
 
 import { usePathname, useSearchParams } from "next/navigation";
-import { Zap, Truck, ScanBarcode } from "lucide-react";
+import { Zap, Truck } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { Profile } from "@/types/database";
-import { PackScanModal } from "@/components/orders/pack-scan-modal";
-import { OperationsNotificationPopover } from "@/components/layout/operations-notification-popover";
 
 const PAGE_TITLES: Record<string, string> = {
   "/": "Dashboard",
@@ -19,11 +17,8 @@ const PAGE_TITLES: Record<string, string> = {
   "/settings/account": "Account",
   "/settings/webhooks": "Webhooks",
   "/returns": "Returns",
-  "/inventory": "Inventory Overview",
-  "/inventory/stock-in": "Stock In Entry",
-  "/inventory/stock-out": "Stock Out Entry",
-  "/inventory/history": "Stock Ledger & History",
-  "/inventory/categories": "Source Categories",
+  "/reports": "Reports",
+  "/deliveries": "Deliveries",
 };
 
 interface TopBarProps {
@@ -35,7 +30,6 @@ export function TopBar({ profile }: TopBarProps) {
   const searchParams = useSearchParams();
   const [syncing, setSyncing] = useState(false);
   const [syncingCourier, setSyncingCourier] = useState(false);
-  const [packModalOpen, setPackModalOpen] = useState(false);
 
   let title = PAGE_TITLES[pathname] || "MiBx Dispatch v3";
   if (pathname === "/orders" && searchParams.get("status") === "delivered") {
@@ -90,44 +84,30 @@ export function TopBar({ profile }: TopBarProps) {
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-1.5 sm:gap-2">
-        {/* Scan & Pack Button */}
-        <button
-          onClick={() => setPackModalOpen(true)}
-          className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold
-                     text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/25 transition-all duration-200 active:scale-95"
-          title="Warehouse Barcode Scan & Pack Verification"
-        >
-          <ScanBarcode size={14} className="text-emerald-400 shrink-0" />
-          <span className="hidden sm:inline">Scan & Pack</span>
-        </button>
-
+      <div className="flex items-center gap-2">
         {/* Sync Pending Courier Button */}
         <button
           onClick={handleCourierSync}
           disabled={syncingCourier}
-          className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
                      text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/15 border border-amber-500/25 transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
           title="Quick sync pending & in-transit parcels with Pathao"
         >
           <Truck size={13} className={syncingCourier ? "animate-bounce text-amber-400" : "text-amber-400"} />
-          <span className="hidden md:inline">{syncingCourier ? "Syncing..." : "Sync Pending"}</span>
+          <span className="hidden sm:inline">{syncingCourier ? "Syncing..." : "Sync Pending"}</span>
         </button>
 
         {/* Sync Shopify button */}
         <button
           onClick={handleSync}
           disabled={syncing}
-          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
                      text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 border border-transparent hover:border-zinc-700/50 transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
           title="Sync Shopify orders"
         >
           <Zap size={13} className={syncing ? "animate-pulse text-indigo-400" : ""} />
-          <span>{syncing ? "Syncing..." : "Sync"}</span>
+          <span className="hidden md:inline">{syncing ? "Syncing..." : "Sync"}</span>
         </button>
-
-        {/* Operations Alerts Bell */}
-        <OperationsNotificationPopover />
 
         {/* User avatar */}
         <div className="flex items-center justify-center w-8 h-8 rounded-full bg-indigo-600/20
@@ -135,12 +115,6 @@ export function TopBar({ profile }: TopBarProps) {
           {profile?.full_name?.[0]?.toUpperCase() || "U"}
         </div>
       </div>
-
-      {/* Warehouse Scan & Pack Verification Modal */}
-      <PackScanModal
-        open={packModalOpen}
-        onClose={() => setPackModalOpen(false)}
-      />
     </header>
   );
 }

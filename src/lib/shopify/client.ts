@@ -143,10 +143,12 @@ export const GET_ORDERS_QUERY = `
             }
           }
           fulfillments(first: 5) {
-            id
-            status
-            trackingInfo { number url company }
-            createdAt
+            nodes {
+              id
+              status
+              trackingInfo { number url company }
+              createdAt
+            }
           }
           cancelledAt
           cancelReason
@@ -389,15 +391,29 @@ export async function updateShopifyFulfillmentTracking(params: {
 /** Returns existing (non-cancelled) fulfillments of a Shopify order, newest first. */
 export async function getShopifyOrderFulfillments(
   shopifyOrderId: string | number
-): Promise<Array<{ id: string; status: string; trackingInfo?: Array<{ number?: string; url?: string; company?: string }> }>> {
+): Promise<Array<{ id: string; status: string; createdAt?: string; trackingInfo?: Array<{ number?: string; url?: string; company?: string }> }>> {
   const rawId = String(shopifyOrderId).replace(/\D/g, "");
   const gid = rawId ? `gid://shopify/Order/${rawId}` : String(shopifyOrderId);
   const res = await shopifyFetch(
-    `query GetOrderFulfillments($id: ID!) { order(id: $id) { fulfillments { id status createdAt trackingInfo { number url company } } } }`,
+    `query GetOrderFulfillments($id: ID!) {
+      order(id: $id) {
+        fulfillments(first: 10) {
+          nodes {
+            id
+            status
+            createdAt
+            trackingInfo { number url company }
+          }
+        }
+      }
+    }`,
     { id: gid }
   );
+  const rawFulfillments = res.data?.order?.fulfillments;
   const list: Array<{ id: string; status: string; createdAt?: string; trackingInfo?: Array<{ number?: string; url?: string; company?: string }> }> =
-    res.data?.order?.fulfillments || [];
+    rawFulfillments?.nodes ||
+    rawFulfillments?.edges?.map((e: any) => e.node) ||
+    (Array.isArray(rawFulfillments) ? rawFulfillments : []);
   return list
     .filter((f) => f.status !== "CANCELLED" && f.status !== "ERROR" && f.status !== "FAILURE")
     .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
@@ -716,15 +732,21 @@ export async function markShopifyOrderAsDelivered(params: {
         query GetOrderFulfillments($id: ID!) {
           order(id: $id) {
             id
-            fulfillments {
-              id
-              status
+            fulfillments(first: 10) {
+              nodes {
+                id
+                status
+              }
             }
           }
         }
       `;
       const res = await shopifyFetch(orderQuery, { id: orderGid });
-      const fulfillments = res.data?.order?.fulfillments || [];
+      const rawFulfillments = res.data?.order?.fulfillments;
+      const fulfillments =
+        rawFulfillments?.nodes ||
+        rawFulfillments?.edges?.map((e: any) => e.node) ||
+        (Array.isArray(rawFulfillments) ? rawFulfillments : []);
       if (fulfillments.length > 0) {
         fulfillmentId = fulfillments[0].id;
       }

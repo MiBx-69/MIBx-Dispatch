@@ -22,7 +22,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { getOrderDisplayStatus } from "@/lib/order-status";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
-import { PathaoReconciliationWidget } from "@/components/dashboard/pathao-reconciliation-widget";
+
 import type { Order } from "@/types/database";
 import type { LucideIcon } from "lucide-react";
 import { getCachedDashboardData } from "@/lib/dashboard-service";
@@ -384,34 +384,28 @@ export default async function DashboardPage({
         ))}
       </div>
 
-      {/* ── Row 2: Revenue Chart + Pathao Widget ────────────────────────── */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
-        <div className="xl:col-span-8 rounded-2xl border border-zinc-800/60 bg-zinc-900/80 p-5">
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h2 className="text-sm font-semibold text-zinc-100">Daily Sales Trend (Asia/Dhaka)</h2>
-              <p className="text-xs text-zinc-500 mt-0.5">
-                Original order value vs product subtotal over selected period
-              </p>
-            </div>
-            <div className="flex items-center gap-4 text-[11px]">
-              <span className="flex items-center gap-1.5 text-zinc-400">
-                <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
-                w/ Delivery
-              </span>
-              <span className="flex items-center gap-1.5 text-zinc-400">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                w/o Delivery
-              </span>
-            </div>
+      {/* ── Row 2: Revenue Chart ────────────────────────── */}
+      <div className="rounded-2xl border border-zinc-800/60 bg-zinc-900/80 p-5">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-100">Daily Sales Trend (Asia/Dhaka)</h2>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              Original order value vs product subtotal over selected period
+            </p>
           </div>
-          <div className="h-60">
-            <RevenueChart data={revenueData} />
+          <div className="flex items-center gap-4 text-[11px]">
+            <span className="flex items-center gap-1.5 text-zinc-400">
+              <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
+              w/ Delivery
+            </span>
+            <span className="flex items-center gap-1.5 text-zinc-400">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+              w/o Delivery
+            </span>
           </div>
         </div>
-
-        <div className="xl:col-span-4">
-          <PathaoReconciliationWidget metrics={unifiedMetrics} />
+        <div className="h-60">
+          <RevenueChart data={revenueData} />
         </div>
       </div>
 

@@ -55,14 +55,16 @@ const GET_SHOPIFY_ORDER_FOR_RETURN_QUERY = `
         }
       }
       fulfillments(first: 10) {
-        id
-        status
-        fulfillmentLineItems(first: 50) {
-          edges {
-            node {
-              id
-              quantity
-              lineItem { id }
+        nodes {
+          id
+          status
+          fulfillmentLineItems(first: 50) {
+            edges {
+              node {
+                id
+                quantity
+                lineItem { id }
+              }
             }
           }
         }
@@ -246,7 +248,12 @@ export async function syncReturnAndRefundToShopify(params: {
       string,
       { fulfillmentLineItemId: string; quantity: number }
     >();
-    for (const f of shopifyOrder.fulfillments || []) {
+    const rawOrderFulfillments = shopifyOrder.fulfillments;
+    const fulfillmentsList: any[] =
+      rawOrderFulfillments?.nodes ||
+      rawOrderFulfillments?.edges?.map((e: any) => e.node) ||
+      (Array.isArray(rawOrderFulfillments) ? rawOrderFulfillments : []);
+    for (const f of fulfillmentsList) {
       if (f.status === "CANCELLED" || f.status === "FAILURE") continue;
       for (const edge of f.fulfillmentLineItems?.edges || []) {
         const node = edge.node;

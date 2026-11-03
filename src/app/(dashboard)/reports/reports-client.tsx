@@ -34,7 +34,6 @@ import {
   DollarSign,
 } from "lucide-react";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
-import { PathaoReconciliationWidget } from "@/components/dashboard/pathao-reconciliation-widget";
 import { MonthReportBar } from "@/components/dashboard/month-report-bar";
 import type { UnifiedReportMetrics } from "@/lib/reporting-engine";
 import {
@@ -986,28 +985,20 @@ export function ReportsClient({
             </div>
           )}
 
-          {/* Revenue Chart & Pathao Courier Dispatches */}
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
-            <div className="xl:col-span-7 rounded-2xl border border-zinc-800/60 bg-zinc-900/60 p-5 flex flex-col justify-between">
+          {/* Revenue Chart */}
+          <div className="rounded-2xl border border-zinc-800/60 bg-zinc-900/60 p-5">
+            <div className="flex items-center justify-between mb-5">
               <div>
-                <div className="flex items-center justify-between mb-5">
-                  <div>
-                    <h2 className="text-sm font-semibold text-zinc-100">
-                      Revenue Trend
-                    </h2>
-                    <p className="text-[11px] text-zinc-500 mt-0.5">
-                      Daily original order value over selected period (Asia/Dhaka)
-                    </p>
-                  </div>
-                </div>
-                <div className="h-72">
-                  <RevenueChart data={revenueData} />
-                </div>
+                <h2 className="text-sm font-semibold text-zinc-100">
+                  Revenue Trend
+                </h2>
+                <p className="text-[11px] text-zinc-500 mt-0.5">
+                  Daily original order value over selected period (Asia/Dhaka)
+                </p>
               </div>
             </div>
-
-            <div className="xl:col-span-5">
-              <PathaoReconciliationWidget metrics={unifiedMetrics} />
+            <div className="h-72">
+              <RevenueChart data={revenueData} />
             </div>
           </div>
 

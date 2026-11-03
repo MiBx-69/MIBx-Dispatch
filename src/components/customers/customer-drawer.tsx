@@ -11,11 +11,6 @@ import {
   Copy,
   Check,
   ShieldCheck,
-  BellRing,
-  Plus,
-  Clock,
-  CheckCircle2,
-  Circle,
   Loader2,
   Flag,
 } from "lucide-react";
@@ -37,19 +32,6 @@ export function CustomerDrawer({ customer, onClose }: CustomerDrawerProps) {
   const [smsOpen, setSmsOpen] = useState(false);
   const [fraudModalOrder, setFraudModalOrder] = useState<any | null>(null);
 
-  // CRM Tab State
-  const [activeTab, setActiveTab] = useState<"orders" | "followups">("orders");
-  const [followUps, setFollowUps] = useState<any[]>([]);
-  const [loadingFollowUps, setLoadingFollowUps] = useState(false);
-  const [showAddFollowUp, setShowAddFollowUp] = useState(false);
-
-  // New Follow-Up Form State
-  const [newTitle, setNewTitle] = useState("");
-  const [newNote, setNewNote] = useState("");
-  const [newReminderDate, setNewReminderDate] = useState("");
-  const [newPriority, setNewPriority] = useState<"low" | "normal" | "high" | "urgent">("normal");
-  const [savingFollowUp, setSavingFollowUp] = useState(false);
-
   useEffect(() => {
     let mounted = true;
     const fetchOrders = async () => {
@@ -66,23 +48,7 @@ export function CustomerDrawer({ customer, onClose }: CustomerDrawerProps) {
       }
     };
 
-    const fetchFollowUps = async () => {
-      try {
-        setLoadingFollowUps(true);
-        const res = await fetch(`/api/customers/${customer.id}/follow-ups`);
-        const data = await res.json();
-        if (mounted && data.followUps) {
-          setFollowUps(data.followUps);
-        }
-      } catch {
-        // Non-blocking
-      } finally {
-        if (mounted) setLoadingFollowUps(false);
-      }
-    };
-
     fetchOrders();
-    fetchFollowUps();
 
     return () => {
       mounted = false;
@@ -111,71 +77,6 @@ export function CustomerDrawer({ customer, onClose }: CustomerDrawerProps) {
     }
   };
 
-  const handleAddFollowUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTitle.trim()) {
-      toast.error("Please provide a title for the reminder");
-      return;
-    }
-
-    setSavingFollowUp(true);
-    try {
-      const res = await fetch(`/api/customers/${customer.id}/follow-ups`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: newTitle.trim(),
-          note: newNote.trim() || undefined,
-          reminder_date: newReminderDate ? new Date(newReminderDate).toISOString() : undefined,
-          priority: newPriority,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create follow-up");
-
-      toast.success("Follow-up reminder saved!");
-      setFollowUps((prev) => [data.followUp, ...prev]);
-      setNewTitle("");
-      setNewNote("");
-      setNewReminderDate("");
-      setNewPriority("normal");
-      setShowAddFollowUp(false);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to save reminder");
-    } finally {
-      setSavingFollowUp(false);
-    }
-  };
-
-  const handleToggleFollowUpStatus = async (item: any) => {
-    const nextStatus = item.status === "completed" ? "pending" : "completed";
-    try {
-      setFollowUps((prev) =>
-        prev.map((f) => (f.id === item.id ? { ...f, status: nextStatus } : f))
-      );
-
-      const res = await fetch(`/api/customers/${customer.id}/follow-ups`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          follow_up_id: item.id,
-          status: nextStatus,
-        }),
-      });
-
-      if (!res.ok) throw new Error("Could not update status");
-      toast.success(nextStatus === "completed" ? "Marked as completed" : "Reopened follow-up");
-    } catch (err: any) {
-      toast.error(err.message || "Error updating follow-up");
-      // Revert on error
-      setFollowUps((prev) =>
-        prev.map((f) => (f.id === item.id ? { ...f, status: item.status } : f))
-      );
-    }
-  };
-
-  const pendingFollowUpsCount = followUps.filter((f) => f.status === "pending").length;
 
   return (
     <>
@@ -283,42 +184,15 @@ export function CustomerDrawer({ customer, onClose }: CustomerDrawerProps) {
           )}
         </div>
 
-        {/* Tab Navigation: Orders vs CRM Follow-ups */}
-        <div className="flex border-b border-zinc-800 bg-zinc-900/60 px-4 pt-2">
-          <button
-            onClick={() => setActiveTab("orders")}
-            className={`flex items-center gap-1.5 pb-2.5 px-3 text-xs font-semibold border-b-2 transition-colors ${
-              activeTab === "orders"
-                ? "border-indigo-500 text-indigo-400"
-                : "border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <ShoppingBag size={13} />
-            <span>Orders ({orders.length})</span>
-          </button>
-          <button
-            onClick={() => setActiveTab("followups")}
-            className={`flex items-center gap-1.5 pb-2.5 px-3 text-xs font-semibold border-b-2 transition-colors relative ${
-              activeTab === "followups"
-                ? "border-indigo-500 text-indigo-400"
-                : "border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <BellRing size={13} />
-            <span>Follow-Ups & CRM</span>
-            {pendingFollowUpsCount > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-full text-[10px]">
-                {pendingFollowUpsCount}
-              </span>
-            )}
-          </button>
+        {/* Order History Header */}
+        <div className="flex items-center gap-1.5 border-b border-zinc-800 bg-zinc-900/60 px-4 py-2.5 text-xs font-semibold text-zinc-300">
+          <ShoppingBag size={13} className="text-indigo-400" />
+          <span>Order History ({orders.length})</span>
         </div>
 
-        {/* Tab Content */}
+        {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {activeTab === "orders" ? (
-            <>
-              {/* FraudSpy Customer Risk & Delivery Report */}
+          {/* FraudSpy Customer Risk & Delivery Report */}
               {analysis && (
                 <div className="p-3.5 border border-zinc-800 rounded-xl bg-zinc-950/40 space-y-2.5">
                   <div className="flex items-center justify-between">
@@ -448,225 +322,6 @@ export function CustomerDrawer({ customer, onClose }: CustomerDrawerProps) {
                   ))
                 )}
               </div>
-            </>
-          ) : (
-            /* CRM Follow-Ups & Reminders Tab */
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-zinc-400 font-medium">Customer Reminders & Log</span>
-                <button
-                  type="button"
-                  onClick={() => setShowAddFollowUp(!showAddFollowUp)}
-                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium flex items-center gap-1 transition-colors"
-                >
-                  <Plus size={13} />
-                  <span>{showAddFollowUp ? "Cancel" : "Add Reminder"}</span>
-                </button>
-              </div>
-
-              {/* Add Follow-Up Form */}
-              {showAddFollowUp && (
-                <form
-                  onSubmit={handleAddFollowUp}
-                  className="bg-zinc-950 border border-zinc-800 rounded-xl p-3.5 space-y-3 animate-in fade-in"
-                >
-                  <div>
-                    <label className="text-[11px] text-zinc-400 font-medium block mb-1">
-                      Reminder Title
-                    </label>
-                    <input
-                      type="text"
-                      value={newTitle}
-                      onChange={(e) => setNewTitle(e.target.value)}
-                      placeholder="e.g. Call to confirm address change"
-                      className="w-full px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500"
-                    />
-                    {/* Quick Suggestion Chips */}
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {[
-                        "Address confirmation",
-                        "Call back later",
-                        "Exchange enquiry",
-                        "Payment verification",
-                      ].map((chip) => (
-                        <button
-                          key={chip}
-                          type="button"
-                          onClick={() => setNewTitle(chip)}
-                          className="px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded text-[10px] text-zinc-400 hover:text-zinc-200 transition-colors"
-                        >
-                          {chip}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[11px] text-zinc-400 font-medium block mb-1">
-                        Reminder Date & Time
-                      </label>
-                      <input
-                        type="datetime-local"
-                        value={newReminderDate}
-                        onChange={(e) => setNewReminderDate(e.target.value)}
-                        className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-100 focus:outline-none focus:border-indigo-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[11px] text-zinc-400 font-medium block mb-1">
-                        Priority
-                      </label>
-                      <select
-                        value={newPriority}
-                        onChange={(e: any) => setNewPriority(e.target.value)}
-                        className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-100 focus:outline-none focus:border-indigo-500"
-                      >
-                        <option value="low">Low</option>
-                        <option value="normal">Normal</option>
-                        <option value="high">High</option>
-                        <option value="urgent">Urgent</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] text-zinc-400 font-medium block mb-1">
-                      Notes / Context (Optional)
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={newNote}
-                      onChange={(e) => setNewNote(e.target.value)}
-                      placeholder="Add customer preferences, instructions..."
-                      className="w-full px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500 resize-none"
-                    />
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setShowAddFollowUp(false)}
-                      className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 rounded-lg text-xs text-zinc-400"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={savingFollowUp || !newTitle.trim()}
-                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5"
-                    >
-                      {savingFollowUp && <Loader2 size={12} className="animate-spin" />}
-                      <span>Save Follow-up</span>
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {/* Follow-ups List */}
-              {loadingFollowUps ? (
-                <div className="text-center py-8 text-zinc-500 text-xs">Loading follow-ups...</div>
-              ) : followUps.length === 0 ? (
-                <div className="text-center py-10 bg-zinc-950/40 border border-zinc-800/60 rounded-xl space-y-2 text-zinc-500">
-                  <BellRing className="w-8 h-8 mx-auto text-zinc-600" />
-                  <p className="text-xs">No active follow-ups or reminders for this customer.</p>
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {followUps.map((item) => {
-                    const isCompleted = item.status === "completed";
-                    const isOverdue =
-                      !isCompleted &&
-                      item.reminder_date &&
-                      new Date(item.reminder_date).getTime() < Date.now();
-
-                    return (
-                      <div
-                        key={item.id}
-                        className={`p-3 rounded-xl border transition-all ${
-                          isCompleted
-                            ? "bg-zinc-950/30 border-zinc-900 opacity-60"
-                            : isOverdue
-                            ? "bg-red-950/20 border-red-500/30"
-                            : "bg-zinc-950 border-zinc-800"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-start gap-2.5 min-w-0">
-                            <button
-                              type="button"
-                              onClick={() => handleToggleFollowUpStatus(item)}
-                              className="mt-0.5 text-zinc-400 hover:text-zinc-200 transition-colors shrink-0"
-                            >
-                              {isCompleted ? (
-                                <CheckCircle2 className="w-4 h-4 text-emerald-400 fill-emerald-500/20" />
-                              ) : (
-                                <Circle className="w-4 h-4 text-zinc-600 hover:text-zinc-400" />
-                              )}
-                            </button>
-                            <div className="min-w-0">
-                              <p
-                                className={`text-xs font-semibold ${
-                                  isCompleted
-                                    ? "line-through text-zinc-500"
-                                    : "text-zinc-200"
-                                }`}
-                              >
-                                {item.title}
-                              </p>
-                              {item.note && (
-                                <p className="text-[11px] text-zinc-400 mt-0.5 whitespace-pre-wrap">
-                                  {item.note}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {item.priority === "urgent" || item.priority === "high" ? (
-                              <span
-                                className={`text-[9px] uppercase px-1.5 py-0.5 rounded font-bold border ${
-                                  item.priority === "urgent"
-                                    ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
-                                    : "bg-amber-500/20 text-amber-300 border-amber-500/30"
-                                }`}
-                              >
-                                {item.priority}
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between text-[10px] text-zinc-500 mt-2 pt-2 border-t border-zinc-800/40">
-                          <div className="flex items-center gap-1.5">
-                            <Clock size={11} className={isOverdue ? "text-red-400" : ""} />
-                            {item.reminder_date ? (
-                              <span
-                                className={
-                                  isOverdue ? "text-red-400 font-semibold" : "text-zinc-400"
-                                }
-                              >
-                                {isOverdue ? "Overdue: " : "Reminder: "}
-                                {new Date(item.reminder_date).toLocaleString("en-BD", {
-                                  month: "short",
-                                  day: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </span>
-                            ) : (
-                              <span>No scheduled date</span>
-                            )}
-                          </div>
-                          <span>By {item.created_by || "Staff"}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
 

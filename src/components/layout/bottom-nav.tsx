@@ -27,12 +27,8 @@ const PRIMARY_NAV = [
 ];
 
 const MORE_NAV = [
-  { href: "/orders?status=delivered", label: "Deliveries", icon: PackageCheck, desc: "Delivered parcels & tracking" },
-  { href: "/inventory", label: "Stock Inventory", icon: Boxes, desc: "Stock-in, stock-out & logs" },
-  { href: "/reports", label: "Reports & Closings", icon: BarChart, desc: "Daily & monthly sales closings" },
-  { href: "/finances", label: "Finances & Ledger", icon: Wallet, desc: "Expense and receipt tracking" },
-  { href: "/customers", label: "Customers", icon: Users, desc: "Customer order history & risk" },
-  { href: "/logs", label: "Audit & Webhooks", icon: FileText, desc: "Webhook logs and retry center" },
+  { href: "/orders?status=delivered", label: "Tracking", icon: PackageCheck, desc: "Delivered parcels & tracking" },
+  { href: "/reports", label: "Reports", icon: BarChart, desc: "Daily delivery & business reports" },
   { href: "/settings", label: "Settings", icon: Settings, desc: "Shopify, Pathao & SMS configs" },
 ];
 
