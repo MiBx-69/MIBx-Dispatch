@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { formatPathaoTrackingUrl, normalizeBdPhoneForPathao } from "@/lib/pathao/client";
 
 describe("Dispatch Flow & Logic Tests", () => {
   describe("Amount to Collect & Shipping Charge Resolution", () => {
@@ -33,6 +34,49 @@ describe("Dispatch Flow & Logic Tests", () => {
         : Number(orderTotalPrice);
 
       expect(finalAmount).toBe(0);
+    });
+
+    it("enforces COD = 0 when financial_status is paid even if amount_to_collect is non-zero", () => {
+      const order = {
+        financial_status: "paid",
+        cod_amount: 1500,
+        total_price: 1500,
+      };
+      const amount_to_collect = 1500; // user or form might have defaulted to order total
+
+      const finStatus = (order.financial_status || "").toLowerCase();
+      const isPaid = finStatus === "paid" || finStatus === "refunded";
+      let finalAmount = 0;
+      if (isPaid) {
+        finalAmount = 0;
+      } else if (amount_to_collect !== undefined && amount_to_collect !== null) {
+        finalAmount = Math.max(0, Math.round(Number(amount_to_collect)));
+      } else if (order.cod_amount !== undefined && order.cod_amount !== null) {
+        finalAmount = Math.max(0, Math.round(Number(order.cod_amount)));
+      } else if (order.total_price !== null) {
+        finalAmount = Math.max(0, Math.round(Number(order.total_price)));
+      }
+
+      expect(finalAmount).toBe(0);
+    });
+
+    it("uses cod_amount due when financial_status is pending or partially_paid", () => {
+      const order = {
+        financial_status: "pending",
+        cod_amount: 1200,
+        total_price: 1500,
+      };
+
+      const finStatus = (order.financial_status || "").toLowerCase();
+      const isPaid = finStatus === "paid" || finStatus === "refunded";
+      let finalAmount = 0;
+      if (isPaid) {
+        finalAmount = 0;
+      } else if (order.cod_amount !== undefined && order.cod_amount !== null) {
+        finalAmount = Math.max(0, Math.round(Number(order.cod_amount)));
+      }
+
+      expect(finalAmount).toBe(1200);
     });
   });
 
@@ -124,6 +168,41 @@ describe("Dispatch Flow & Logic Tests", () => {
         true // force
       );
       expect(result.allowed).toBe(true);
+    });
+  });
+
+  describe("Shopify Fulfillment & Tracking Synchronization Logic", () => {
+    it("attaches Pathao carrier name, tracking number, and tracking URL with 11-digit BD phone", () => {
+      const consignmentId = "DU031126ALRPXK";
+      const phone = "8801712200891";
+
+      const normalizedPhone = normalizeBdPhoneForPathao(phone);
+      expect(normalizedPhone).toBe("01712200891");
+
+      const trackingUrl = formatPathaoTrackingUrl(consignmentId, phone);
+      expect(trackingUrl).toBe("https://merchant.pathao.com/tracking?consignment_id=DU031126ALRPXK&phone=01712200891");
+
+      const trackingInput = {
+        number: consignmentId,
+        company: "Pathao",
+        url: trackingUrl,
+      };
+
+      expect(trackingInput.company).toBe("Pathao");
+      expect(trackingInput.number).toBe("DU031126ALRPXK");
+      expect(trackingInput.url).toContain("01712200891");
+    });
+
+    it("prioritizes updating tracking on existing fulfillment when order is already fulfilled in Shopify", async () => {
+      const existingFulfillments = [
+        { id: "gid://shopify/Fulfillment/7333573329005", status: "SUCCESS" }
+      ];
+      const activeFulfillment = existingFulfillments.find(
+        (f) => f.status === "SUCCESS" || f.status === "OPEN"
+      ) || existingFulfillments[0];
+
+      expect(activeFulfillment).toBeDefined();
+      expect(activeFulfillment?.id).toBe("gid://shopify/Fulfillment/7333573329005");
     });
   });
 });

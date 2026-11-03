@@ -292,14 +292,48 @@ const GET_FULFILLMENT_ORDERS_QUERY = `
 export async function getShopifyFulfillmentOrders(
   orderId: string
 ): Promise<Array<{ id: string; status: string }>> {
-  const gid = orderId.startsWith("gid://shopify/Order/")
-    ? orderId
-    : `gid://shopify/Order/${orderId}`;
+  const rawId = String(orderId).replace(/\D/g, "");
+  const gid = rawId ? `gid://shopify/Order/${rawId}` : orderId;
   const res = await shopifyFetch(GET_FULFILLMENT_ORDERS_QUERY, {
     orderId: gid,
   });
   const edges = res.data?.order?.fulfillmentOrders?.edges || [];
   return edges.map((e: any) => e.node);
+}
+
+/**
+ * Finds an open fulfillment order for a given Shopify order.
+ * If any fulfillment orders are ON_HOLD, releases the hold so they can be fulfilled.
+ */
+export async function getOpenShopifyFulfillmentOrder(
+  orderId: string | number
+): Promise<{ id: string; status: string } | null> {
+  const rawId = String(orderId).replace(/\D/g, "");
+  if (!rawId) return null;
+  const gid = `gid://shopify/Order/${rawId}`;
+
+  const fulfillmentOrders = await getShopifyFulfillmentOrders(gid);
+
+  // 1. Look for OPEN, IN_PROGRESS or SCHEDULED fulfillment order
+  const open = fulfillmentOrders.find(
+    (fo) => fo.status === "OPEN" || fo.status === "IN_PROGRESS" || fo.status === "SCHEDULED"
+  );
+  if (open) return open;
+
+  // 2. If any are ON_HOLD, release the hold
+  const held = fulfillmentOrders.find((fo) => fo.status === "ON_HOLD");
+  if (held) {
+    try {
+      const released = await releaseShopifyFulfillmentOrderHold(held.id);
+      if (released) {
+        return { id: held.id, status: released.status || "OPEN" };
+      }
+    } catch (err: any) {
+      console.warn(`[Shopify Client] Could not release hold on fulfillment order ${held.id}:`, err?.message || err);
+    }
+  }
+
+  return null;
 }
 
 // ─── Update Fulfillment Tracking ──────────────────────────────────────────────
@@ -331,8 +365,12 @@ export async function updateShopifyFulfillmentTracking(params: {
   trackingUrl?: string;
   notifyCustomer?: boolean;
 }) {
+  const gid = params.fulfillmentId.startsWith("gid://shopify/Fulfillment/")
+    ? params.fulfillmentId
+    : `gid://shopify/Fulfillment/${params.fulfillmentId.replace(/\D/g, "")}`;
+
   const result = await shopifyFetch(UPDATE_TRACKING_MUTATION, {
-    fulfillmentId: params.fulfillmentId,
+    fulfillmentId: gid,
     trackingInfoInput: {
       number: params.trackingNumber,
       company: params.trackingCompany,
@@ -351,18 +389,91 @@ export async function updateShopifyFulfillmentTracking(params: {
 /** Returns existing (non-cancelled) fulfillments of a Shopify order, newest first. */
 export async function getShopifyOrderFulfillments(
   shopifyOrderId: string | number
-): Promise<Array<{ id: string; status: string }>> {
-  const raw = String(shopifyOrderId);
-  const gid = raw.startsWith("gid://shopify/Order/") ? raw : `gid://shopify/Order/${raw}`;
+): Promise<Array<{ id: string; status: string; trackingInfo?: Array<{ number?: string; url?: string; company?: string }> }>> {
+  const rawId = String(shopifyOrderId).replace(/\D/g, "");
+  const gid = rawId ? `gid://shopify/Order/${rawId}` : String(shopifyOrderId);
   const res = await shopifyFetch(
-    `query GetOrderFulfillments($id: ID!) { order(id: $id) { fulfillments { id status createdAt } } }`,
+    `query GetOrderFulfillments($id: ID!) { order(id: $id) { fulfillments { id status createdAt trackingInfo { number url company } } } }`,
     { id: gid }
   );
-  const list: Array<{ id: string; status: string; createdAt?: string }> =
+  const list: Array<{ id: string; status: string; createdAt?: string; trackingInfo?: Array<{ number?: string; url?: string; company?: string }> }> =
     res.data?.order?.fulfillments || [];
   return list
     .filter((f) => f.status !== "CANCELLED" && f.status !== "ERROR" && f.status !== "FAILURE")
     .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+}
+
+/**
+ * Ensures a Shopify order is fulfilled and has Pathao carrier and tracking info attached.
+ * Works symmetrically whether order is unfulfilled or was already fulfilled in Shopify:
+ * - If already fulfilled, attaches Pathao tracking number and URL to the active fulfillment.
+ * - If unfulfilled, releases any hold and creates fulfillment with Pathao tracking number and URL.
+ */
+export async function fulfillAndTrackShopifyOrder(params: {
+  shopifyOrderId: string | number;
+  consignmentId: string;
+  trackingUrl: string;
+  trackingCompany?: string;
+  notifyCustomer?: boolean;
+}): Promise<{ fulfillmentId: string; wasCreated: boolean }> {
+  const rawId = String(params.shopifyOrderId).replace(/\D/g, "");
+  if (!rawId) {
+    throw new Error(`Invalid Shopify Order ID: ${params.shopifyOrderId}`);
+  }
+  const orderGid = `gid://shopify/Order/${rawId}`;
+  const company = params.trackingCompany || "Pathao";
+  const notifyCustomer = params.notifyCustomer ?? true;
+
+  // 1. Check if the order ALREADY has an active fulfillment (e.g. marked fulfilled via Shopify app)
+  const existingFulfillments = await getShopifyOrderFulfillments(orderGid);
+  const activeFulfillment =
+    existingFulfillments.find(
+      (f) => f.status === "SUCCESS" || f.status === "OPEN"
+    ) || existingFulfillments[0];
+
+  if (activeFulfillment) {
+    await updateShopifyFulfillmentTracking({
+      fulfillmentId: activeFulfillment.id,
+      trackingCompany: company,
+      trackingNumber: params.consignmentId,
+      trackingUrl: params.trackingUrl,
+      notifyCustomer: false, // Don't duplicate notification if already fulfilled
+    });
+    return { fulfillmentId: activeFulfillment.id, wasCreated: false };
+  }
+
+  // 2. Order is unfulfilled: find open fulfillment order (or release hold if on hold)
+  const openFo = await getOpenShopifyFulfillmentOrder(orderGid);
+  if (openFo) {
+    const created = await createShopifyFulfillment({
+      fulfillmentOrderId: openFo.id,
+      trackingCompany: company,
+      trackingNumber: params.consignmentId,
+      trackingUrl: params.trackingUrl,
+      notifyCustomer,
+    });
+    if (created?.id) {
+      return { fulfillmentId: created.id, wasCreated: true };
+    }
+  }
+
+  // 3. Fallback: Re-check if a fulfillment was created concurrently
+  const recheck = await getShopifyOrderFulfillments(orderGid);
+  if (recheck.length > 0) {
+    const f = recheck[0];
+    await updateShopifyFulfillmentTracking({
+      fulfillmentId: f.id,
+      trackingCompany: company,
+      trackingNumber: params.consignmentId,
+      trackingUrl: params.trackingUrl,
+      notifyCustomer: false,
+    });
+    return { fulfillmentId: f.id, wasCreated: false };
+  }
+
+  throw new Error(
+    `No open fulfillment order found for Shopify order ${params.shopifyOrderId}. The order may already be closed, cancelled, or has no fulfillable items.`
+  );
 }
 
 // ─── Create Fulfillment Event (Mark as Delivered / In Transit) ────────────────

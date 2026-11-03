@@ -48,7 +48,9 @@ export function DispatchModal({ order, storeId, onClose, onSuccess }: DispatchMo
     item_type: "2",          // 2=Parcel
     item_quantity: String(lineItems.reduce((s: number, i: any) => s + (i.quantity || 1), 0) || 1),
     item_weight: "0.5",
-    amount_to_collect: String(order.total_price || 0),
+    amount_to_collect: (order.financial_status || "").toLowerCase() === "paid"
+      ? "0"
+      : String(order.cod_amount !== undefined && order.cod_amount !== null ? order.cod_amount : (order.total_price || 0)),
     item_description: lineItems.map((i: any) => i.title).join(", ").slice(0, 100),
     special_instruction: order.note || "",
   });

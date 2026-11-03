@@ -9,6 +9,7 @@ import {
 } from "@/lib/pathao/client";
 import { resolvePathaoCity, resolvePathaoZone } from "@/lib/pathao/location-resolver";
 import {
+  fulfillAndTrackShopifyOrder,
   createShopifyFulfillment,
   updateShopifyOrder,
   updateShopifyFulfillmentTracking,
@@ -214,21 +215,19 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
     }
 
     // Calculate COD amount to collect:
-    // If order is paid on Shopify (financial_status === "paid"), COD amount MUST be 0!
-    // If unpaid, use due amount (cod_amount or total_price).
+    // If order is paid on Shopify (financial_status === "paid"), COD amount MUST strictly be 0!
+    // If unpaid, use due amount (amount_to_collect override, cod_amount, or total_price).
+    const finStatus = (order.financial_status || "").toLowerCase();
+    const isPaid = finStatus === "paid" || finStatus === "refunded";
     let finalAmount = 0;
-    if (amount_to_collect !== undefined && amount_to_collect !== null) {
+    if (isPaid) {
+      finalAmount = 0;
+    } else if (amount_to_collect !== undefined && amount_to_collect !== null) {
       finalAmount = Math.max(0, Math.round(Number(amount_to_collect)));
-    } else {
-      const finStatus = (order.financial_status || "").toLowerCase();
-      const isPaid = finStatus === "paid" || finStatus === "refunded";
-      if (isPaid) {
-        finalAmount = 0;
-      } else if (order.cod_amount !== undefined && order.cod_amount !== null) {
-        finalAmount = Math.max(0, Math.round(Number(order.cod_amount)));
-      } else if (order.total_price !== null) {
-        finalAmount = Math.max(0, Math.round(Number(order.total_price)));
-      }
+    } else if (order.cod_amount !== undefined && order.cod_amount !== null) {
+      finalAmount = Math.max(0, Math.round(Number(order.cod_amount)));
+    } else if (order.total_price !== null) {
+      finalAmount = Math.max(0, Math.round(Number(order.total_price)));
     }
 
   // Combine global special instructions with order specific instructions
@@ -325,6 +324,7 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
       amount_to_collect: finalAmount,
       expected_cod: finalAmount,
       settlement_status: "pending",
+      shopify_sync_status: "pending",
       item_weight,
       item_quantity,
       delivery_type,
@@ -389,47 +389,22 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
   // 4. Create Shopify fulfillment with tracking or attach tracking to existing fulfillment
   let shopifyFulfillmentId: string | null = null;
   try {
-    const shopifyOrderGid = `gid://shopify/Order/${order.shopify_order_id}`;
-    const fulfillmentOrders = await getShopifyFulfillmentOrders(shopifyOrderGid);
-    const openFulfillmentOrder = fulfillmentOrders.find(
-      (fo: any) => fo.status === "OPEN" || fo.status === "IN_PROGRESS" || fo.status === "SCHEDULED"
-    );
-
-    if (openFulfillmentOrder) {
-      try {
-        const fulfillment = await createShopifyFulfillment({
-          fulfillmentOrderId: openFulfillmentOrder.id,
-          trackingCompany: "Pathao",
-          trackingNumber: consignment_id,
-          trackingUrl,
-          notifyCustomer: true,
-        });
-        shopifyFulfillmentId = fulfillment?.id || null;
-      } catch (createErr) {
-        console.warn("[Dispatch] createShopifyFulfillment failed, falling back to update tracking on existing fulfillment:", createErr);
-      }
-    }
-
-    if (!shopifyFulfillmentId) {
-      // Already fulfilled on Shopify (e.g. marked fulfilled in Shopify mobile app/admin): attach tracking to existing active fulfillment
-      const existing = await getShopifyOrderFulfillments(order.shopify_order_id);
-      if (existing && existing.length > 0) {
-        const activeFulfillment = existing.find((f) => f.status === "SUCCESS") || existing[0];
-        await updateShopifyFulfillmentTracking({
-          fulfillmentId: activeFulfillment.id,
-          trackingCompany: "Pathao",
-          trackingNumber: consignment_id,
-          trackingUrl,
-          notifyCustomer: true,
-        });
-        shopifyFulfillmentId = activeFulfillment.id;
-      }
-    }
+    const fulfillmentResult = await fulfillAndTrackShopifyOrder({
+      shopifyOrderId: order.shopify_order_id,
+      consignmentId: consignment_id,
+      trackingUrl,
+      trackingCompany: "Pathao",
+      notifyCustomer: true,
+    });
+    shopifyFulfillmentId = fulfillmentResult?.fulfillmentId || null;
 
     if (shopifyFulfillmentId) {
       await supabase
         .from("orders")
-        .update({ shopify_fulfillment_id: shopifyFulfillmentId })
+        .update({
+          shopify_fulfillment_id: shopifyFulfillmentId,
+          fulfillment_status: "fulfilled",
+        })
         .eq("id", order.id);
 
       if (insertedDispatch?.id) {
@@ -438,6 +413,7 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
           .update({
             shopify_fulfillment_id: shopifyFulfillmentId,
             shopify_sync_status: "synced",
+            shopify_sync_error: null,
             last_synced_at: new Date().toISOString(),
           })
           .eq("id", insertedDispatch.id);
@@ -591,60 +567,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Get fulfillment orders for a Shopify order
-async function getShopifyFulfillmentOrders(orderId: string) {
-  const token = process.env.SHOPIFY_ACCESS_TOKEN;
-  const domain = process.env.SHOPIFY_SHOP_DOMAIN;
-  const version = process.env.SHOPIFY_API_VERSION || "2026-07";
-
-  const res = await fetch(
-    `https://${domain}/admin/api/${version}/graphql.json`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Shopify-Access-Token": token!,
-      },
-      body: JSON.stringify({
-        query: `
-          query GetFulfillmentOrders($orderId: ID!) {
-            order(id: $orderId) {
-              fulfillmentOrders(first: 5) {
-                edges {
-                  node {
-                    id
-                    status
-                    assignedLocation { name }
-                  }
-                }
-              }
-            }
-          }
-        `,
-        variables: { orderId },
-      }),
-    }
-  );
-
-  const data = await res.json();
-  const nodes = data.data?.order?.fulfillmentOrders?.edges?.map((e: any) => e.node) || [];
-  const openOrHeld = nodes.filter((n: any) => n.status === "OPEN" || n.status === "ON_HOLD");
-
-  for (const fo of openOrHeld) {
-    if (fo.status === "ON_HOLD") {
-      try {
-        const { releaseShopifyFulfillmentOrderHold } = await import("@/lib/shopify/client");
-        await releaseShopifyFulfillmentOrderHold(fo.id);
-        fo.status = "OPEN";
-      } catch (releaseErr) {
-        console.error(`[Dispatch] Failed to release hold on FO ${fo.id}:`, releaseErr);
-      }
-    }
-  }
-
-  return openOrHeld.filter((n: any) => n.status === "OPEN");
-}
-
 // Bulk dispatch
 export async function PUT(request: NextRequest) {
   const authClient = await createClient();
@@ -668,30 +590,28 @@ export async function PUT(request: NextRequest) {
   }
 
   const results: any[] = [];
-  const chunkSize = 5;
 
-  for (let i = 0; i < order_ids.length; i += chunkSize) {
-    const chunk = order_ids.slice(i, i + chunkSize);
+  // Execute bulk dispatch sequentially with 200ms spacing to prevent Pathao & Shopify rate limit bursts
+  for (let i = 0; i < order_ids.length; i++) {
+    const orderId = order_ids[i];
+    try {
+      const res = await executeDispatchOrder(
+        { order_id: orderId, ...dispatch_params },
+        profile?.id
+      );
+      results.push({ order_id: orderId, ...res });
+    } catch (err: any) {
+      results.push({
+        order_id: orderId,
+        error: err.message,
+        statusCode: err.statusCode || 500,
+        consignment_id: err.consignment_id,
+      });
+    }
 
-    const chunkPromises = chunk.map(async (orderId) => {
-      try {
-        const res = await executeDispatchOrder(
-          { order_id: orderId, ...dispatch_params },
-          profile?.id
-        );
-        return { order_id: orderId, ...res };
-      } catch (err: any) {
-        return {
-          order_id: orderId,
-          error: err.message,
-          statusCode: err.statusCode || 500,
-          consignment_id: err.consignment_id,
-        };
-      }
-    });
-
-    const chunkResults = await Promise.all(chunkPromises);
-    results.push(...chunkResults);
+    if (i < order_ids.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
   }
 
   return NextResponse.json({ results });

@@ -313,7 +313,45 @@ async function processShopifyWebhook(
           console.log(`[Shopify Webhook] ${topic}: Fulfillment already tracked via Pathao for order ${shopifyOrderId}. Skipping.`);
           break;
         }
+
+        const fulfillmentGid = p.admin_graphql_api_id || (p.id ? `gid://shopify/Fulfillment/${p.id}` : null);
+
         if (shopifyOrderId) {
+          const { data: ord } = await supabase
+            .from("orders")
+            .select("id, pathao_consignment_id, pathao_tracking_url, customer_phone, shipping_address")
+            .eq("shopify_order_id", shopifyOrderId)
+            .maybeSingle();
+
+          if (ord?.pathao_consignment_id && fulfillmentGid) {
+            // Consignment exists! Attach Pathao carrier, tracking number and tracking URL directly to this Shopify fulfillment
+            const { updateShopifyFulfillmentTracking } = await import("@/lib/shopify/client");
+            const { formatPathaoTrackingUrl } = await import("@/lib/pathao/client");
+            const phone = ord.customer_phone || (ord.shipping_address as any)?.phone || "";
+            const trackingUrl = ord.pathao_tracking_url || formatPathaoTrackingUrl(ord.pathao_consignment_id, phone);
+            try {
+              await updateShopifyFulfillmentTracking({
+                fulfillmentId: fulfillmentGid,
+                trackingCompany: "Pathao",
+                trackingNumber: ord.pathao_consignment_id,
+                trackingUrl,
+                notifyCustomer: false,
+              });
+              await supabase
+                .from("orders")
+                .update({
+                  shopify_fulfillment_id: fulfillmentGid,
+                  fulfillment_status: "fulfilled",
+                })
+                .eq("id", ord.id);
+              console.log(`[Shopify Webhook] ${topic}: Attached Pathao tracking ${ord.pathao_consignment_id} to fulfillment ${fulfillmentGid}`);
+            } catch (attachErr: any) {
+              console.error(`[Shopify Webhook] Failed to attach tracking to fulfillment ${fulfillmentGid}:`, attachErr);
+            }
+            break;
+          }
+
+          // Not dispatched yet -> auto-dispatch via Pathao
           await autoDispatchOnShopifyFulfilled(supabase, { id: shopifyOrderId, order_id: shopifyOrderId } as any);
         }
         break;
