@@ -42,3 +42,4 @@ CREATE POLICY "Allow authenticated delete on customer_follow_ups"
   ON public.customer_follow_ups FOR DELETE
   TO authenticated
   USING (true);
+

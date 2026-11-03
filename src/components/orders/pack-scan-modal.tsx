@@ -474,3 +474,4 @@ export function PackScanModal({ open, onClose, onOpenDispatch }: PackScanModalPr
     </div>
   );
 }
+
