@@ -15,10 +15,12 @@ import {
   Edit3,
   X,
   ExternalLink,
+  Building2,
 } from "lucide-react";
 import { Transaction } from "@/types/database";
 import { addTransaction, updateTransaction, deleteTransaction } from "./actions";
 import { toast } from "sonner";
+import { CourierReconciliationView } from "@/components/finances/courier-reconciliation-view";
 
 export const EXPENSE_CATEGORIES = [
   "Marketing",
@@ -77,6 +79,7 @@ export function FinancesClient({
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState<"all" | "income" | "expense">("all");
+  const [activeFinanceTab, setActiveFinanceTab] = useState<"general" | "courier">("general");
 
   const balance = totalIncome - totalExpense;
 
@@ -190,29 +193,60 @@ export function FinancesClient({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-            Finances & Expenses
+            Finances & Settlements
           </h2>
           <p className="text-xs sm:text-sm text-zinc-400 mt-0.5">
-            Track daily expenses and received funds
+            Track daily expenses, capital receipts and courier payout reconciliations
           </p>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => openAddModal("income")}
-            className="flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors border border-emerald-500/20"
-          >
-            <ArrowDownRight size={15} /> Add Received
-          </button>
-          <button
-            onClick={() => openAddModal("expense")}
-            className="flex items-center gap-1.5 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors border border-rose-500/20"
-          >
-            <ArrowUpRight size={15} /> Add Expense
-          </button>
-        </div>
+        {activeFinanceTab === "general" && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => openAddModal("income")}
+              className="flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors border border-emerald-500/20"
+            >
+              <ArrowDownRight size={15} /> Add Received
+            </button>
+            <button
+              onClick={() => openAddModal("expense")}
+              className="flex items-center gap-1.5 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors border border-rose-500/20"
+            >
+              <ArrowUpRight size={15} /> Add Expense
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Metrics Cards */}
+      {/* Tabs */}
+      <div className="flex border-b border-zinc-800 bg-zinc-900/40 rounded-xl p-1 gap-1">
+        <button
+          onClick={() => setActiveFinanceTab("general")}
+          className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+            activeFinanceTab === "general"
+              ? "bg-zinc-800 text-white shadow-sm"
+              : "text-zinc-400 hover:text-zinc-200"
+          }`}
+        >
+          General Ledger & Expenses
+        </button>
+        <button
+          onClick={() => setActiveFinanceTab("courier")}
+          className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+            activeFinanceTab === "courier"
+              ? "bg-indigo-600 text-white shadow-sm"
+              : "text-zinc-400 hover:text-zinc-200"
+          }`}
+        >
+          <Building2 size={13} />
+          <span>Courier Payment Reconciliation</span>
+        </button>
+      </div>
+
+      {activeFinanceTab === "courier" ? (
+        <CourierReconciliationView />
+      ) : (
+        <>
+          {/* Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
@@ -400,6 +434,8 @@ export function FinancesClient({
           )}
         </div>
       </div>
+      </>
+      )}
 
       {/* Add / Edit Transaction Modal */}
       {isModalOpen && (
