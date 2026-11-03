@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   Search, Filter, ChevronLeft, ChevronRight, ChevronDown,
-  Truck, Package, X, CheckCircle, PauseCircle, AlertCircle, Archive, ArchiveRestore, Copy, Check, MessageSquare, ShieldCheck, List, Loader2, RotateCcw, UploadCloud, ExternalLink, ScanBarcode
+  Truck, Package, X, CheckCircle, PauseCircle, AlertCircle, Archive, ArchiveRestore, Copy, Check, MessageSquare, ShieldCheck, List, Loader2, RotateCcw, UploadCloud, ExternalLink
 } from "lucide-react";
 import { StatusBadge, ShopifyFinancialBadge, ShopifyFulfillmentBadge } from "@/components/ui/status-badge";
 import { getOrderDisplayStatus } from "@/lib/order-status";
@@ -19,7 +19,6 @@ import { ReportFraudModal } from "@/components/modals/report-fraud-modal";
 import { FraudDetailsModal } from "@/components/modals/fraud-details-modal";
 import { OrderTimelineModal } from "@/components/orders/order-timeline-modal";
 import { BulkImportDeliveriesModal } from "@/components/orders/bulk-import-deliveries-modal";
-import { PackScanModal } from "@/components/orders/pack-scan-modal";
 import { DeliveredReportingHeader, DeliveredStats } from "@/components/orders/delivered-reporting-header";
 import type { Order, OrderStatus } from "@/types/database";
 import { analyzeCustomerRisk } from "@/lib/risk-analytics";
@@ -485,7 +484,6 @@ export function OrdersClient({
   const [returnModalOpen, setReturnModalOpen] = useState(false);
   const [deliverModalOpen, setDeliverModalOpen] = useState(false);
   const [bulkImportDeliveriesOpen, setBulkImportDeliveriesOpen] = useState(false);
-  const [packScanModalOpen, setPackScanModalOpen] = useState(false);
   const [isCourierSyncing, setIsCourierSyncing] = useState(false);
   const [courierMenuOpen, setCourierMenuOpen] = useState(false);
 
@@ -602,15 +600,6 @@ export function OrdersClient({
             >
               <RotateCcw className={`w-3.5 h-3.5 shrink-0 ${isCourierSyncing ? "animate-spin" : ""}`} />
               <span>{isCourierSyncing ? "Syncing..." : "Sync Pending"}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setPackScanModalOpen(true)}
-              className="flex-1 sm:flex-initial px-3.5 py-2 sm:py-2.5 bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs sm:text-sm font-medium hover:bg-emerald-600/30 transition-colors whitespace-nowrap flex items-center justify-center gap-1.5"
-              title="Warehouse Barcode Scan & Packing Verification"
-            >
-              <ScanBarcode className="w-4 h-4 shrink-0" />
-              <span>Scan & Pack</span>
             </button>
             <button
               type="button"
@@ -1257,12 +1246,6 @@ export function OrdersClient({
         />
       )}
 
-      {/* Warehouse Barcode Scan & Pack Verification Modal */}
-      <PackScanModal
-        open={packScanModalOpen}
-        onClose={() => setPackScanModalOpen(false)}
-        onOpenDispatch={(ord) => setDispatchOrder(ord)}
-      />
     </div>
   );
 }
