@@ -45,7 +45,9 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.4",
     "tailwindcss": "^4",
+    "turbo": "^2.11.10",
     "typescript": "^5",
     "vitest": "^4.1.11"
-  }
+  },
+  "packageManager": "npm@12.2.0"
 }
