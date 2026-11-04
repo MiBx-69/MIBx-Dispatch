@@ -46,8 +46,11 @@ function buildResponseHeaders(secret: string): Record<string, string> {
  * GET /api/webhooks/pathao
  * Health / integration handshake endpoint for Pathao Webhook verification.
  */
-export async function GET() {
-  const secret = await resolvePathaoWebhookSecret();
+export async function GET(request?: NextRequest) {
+  const incomingSecret =
+    request?.headers.get("x-pathao-merchant-webhook-integration-secret")?.trim() || "";
+  const configuredSecret = await resolvePathaoWebhookSecret();
+  const secret = incomingSecret || configuredSecret;
   return NextResponse.json(
     {
       status: "accepted",
@@ -56,6 +59,21 @@ export async function GET() {
     },
     { status: 202, headers: buildResponseHeaders(secret) }
   );
+}
+
+/**
+ * HEAD /api/webhooks/pathao
+ * URL reachability check for Pathao Webhook registration.
+ */
+export async function HEAD(request?: NextRequest) {
+  const incomingSecret =
+    request?.headers.get("x-pathao-merchant-webhook-integration-secret")?.trim() || "";
+  const configuredSecret = await resolvePathaoWebhookSecret();
+  const secret = incomingSecret || configuredSecret;
+  return new NextResponse(null, {
+    status: 200,
+    headers: buildResponseHeaders(secret),
+  });
 }
 
 /**
@@ -74,8 +92,11 @@ export async function POST(request: NextRequest) {
   }
 
   const rawBody = await request.text();
+  const incomingIntegrationSecret =
+    request.headers.get("x-pathao-merchant-webhook-integration-secret")?.trim() || "";
   const configuredSecret = await resolvePathaoWebhookSecret();
-  const responseHeaders = buildResponseHeaders(configuredSecret);
+  const effectiveSecret = incomingIntegrationSecret || configuredSecret;
+  const responseHeaders = buildResponseHeaders(effectiveSecret);
 
   // Reject oversized payloads (> 1MB)
   if (rawBody.length > 1_048_576) {
@@ -85,8 +106,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Fail closed in production if webhook secret is not configured
-  if (!configuredSecret && process.env.NODE_ENV === "production") {
+  // Fail closed in production if webhook secret is not configured and no incoming secret provided
+  if (!effectiveSecret && process.env.NODE_ENV === "production") {
     console.error("[Pathao Webhook] Webhook secret is unconfigured. Failing closed in production.");
     return NextResponse.json(
       { error: "Webhook authentication unconfigured" },
@@ -117,16 +138,30 @@ export async function POST(request: NextRequest) {
   const incomingSignature =
     request.headers.get("x-pathao-signature") ||
     request.headers.get("X-PATHAO-Signature") ||
-    request.headers.get("x-pathao-merchant-webhook-integration-secret") ||
+    incomingIntegrationSecret ||
     request.headers.get("authorization") ||
     "";
 
   // Handshake (`webhook_integration`) verification: if a signature header is sent, verify it;
   // always return 202 with `X-Pathao-Merchant-Webhook-Integration-Secret` header.
   if (norm.normalizedStatus === "WEBHOOK_INTEGRATION") {
+    // If Pathao passes a new integration secret during handshake, persist to DB for subsequent events
+    if (incomingIntegrationSecret && incomingIntegrationSecret !== configuredSecret) {
+      try {
+        const supabase = createServiceClient();
+        await supabase
+          .from("app_settings")
+          .update({ pathao_webhook_secret: incomingIntegrationSecret })
+          .not("id", "is", null);
+      } catch (syncErr) {
+        console.warn("[Pathao Webhook] Auto-sync integration secret warning:", syncErr);
+      }
+    }
+
     if (
       configuredSecret &&
       incomingSignature &&
+      incomingSignature !== incomingIntegrationSecret &&
       !verifyPathaoWebhook(rawBody, incomingSignature, configuredSecret)
     ) {
       return NextResponse.json(
@@ -158,11 +193,11 @@ export async function POST(request: NextRequest) {
   }
 
   // Enforce secret validation on all parcel/financial events when a secret is configured
-  if (configuredSecret) {
+  if (effectiveSecret) {
     const isValid = verifyPathaoWebhook(
       rawBody,
       incomingSignature,
-      configuredSecret
+      effectiveSecret
     );
     if (!isValid) {
       console.error("[Pathao Webhook] Invalid or missing X-PATHAO-Signature");

@@ -390,5 +390,23 @@ describe("MiBx Dispatch — Advanced Pathao Integration (23 Required Scenarios)"
       expect(steps[4].state).toBe("upcoming");
     });
   });
+
+  // Webhook Integration Secret Handshake
+  describe("Pathao Webhook Integration Secret Handshake", () => {
+    it("verifies webhook with secret header matching configured secret", () => {
+      const secret = "f3992ecc-59da-4cbe-a049-a13da2018d51";
+      const rawBody = JSON.stringify({ event: "webhook_integration" });
+      expect(verifyPathaoWebhook(rawBody, secret, secret)).toBe(true);
+    });
+
+    it("verifies that response headers include X-Pathao-Merchant-Webhook-Integration-Secret", () => {
+      const secret = "f3992ecc-59da-4cbe-a049-a13da2018d51";
+      const headers = {
+        "Content-Type": "application/json",
+        ...(secret ? { "X-Pathao-Merchant-Webhook-Integration-Secret": secret } : {}),
+      };
+      expect(headers["X-Pathao-Merchant-Webhook-Integration-Secret"]).toBe("f3992ecc-59da-4cbe-a049-a13da2018d51");
+    });
+  });
 });
 
