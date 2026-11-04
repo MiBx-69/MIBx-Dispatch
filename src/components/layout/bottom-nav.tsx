@@ -27,6 +27,7 @@ const PRIMARY_NAV = [
 ];
 
 const MORE_NAV = [
+  { href: "/inventory", label: "Stock Ledger", icon: Boxes, desc: "Stock In, Stock Out & Ledger Book" },
   { href: "/orders?status=delivered", label: "Tracking", icon: PackageCheck, desc: "Delivered parcels & tracking" },
   { href: "/reports", label: "Reports", icon: BarChart, desc: "Daily delivery & business reports" },
   { href: "/settings", label: "Settings", icon: Settings, desc: "Shopify, Pathao & SMS configs" },

@@ -1,12 +1,13 @@
 import { Metadata } from "next";
 import { createServiceClient, createClient } from "@/lib/supabase/server";
 import { fetchLedgerPage } from "@/lib/inventory-ledger";
+import { getInventoryOverviewStats } from "@/lib/inventory-service";
 import { StockHistoryClient } from "@/components/inventory/stock-history-client";
 import type { InventorySourceCategory } from "@/types/inventory";
 
 export const metadata: Metadata = {
-  title: "Stock Ledger & History — MiBx Dispatch",
-  description: "Complete chronological history and audit trail of all inventory transactions",
+  title: "Stock Ledger Book — MiBx Dispatch",
+  description: "Centralized stock ledger book with incoming stock, outgoing stock, and simple calculation details",
 };
 
 export const dynamic = "force-dynamic";
@@ -68,11 +69,13 @@ export default async function StockHistoryPage({
 
   const [
     ledger,
+    stats,
     { data: categories },
     { data: staffMembers },
     { data: productsList },
   ] = await Promise.all([
     ledgerPromise,
+    getInventoryOverviewStats(),
     supabase.from("inventory_source_categories").select("id, name").order("name", { ascending: true }),
     supabase.from("profiles").select("id, full_name").order("full_name", { ascending: true }),
     supabase.from("inventory_products").select("id, product_name").eq("status", "active").order("product_name", { ascending: true }),
@@ -92,6 +95,7 @@ export default async function StockHistoryPage({
     <StockHistoryClient
       transactions={ledger.transactions}
       totalCount={ledger.count}
+      stats={stats}
       categories={(categories || []) as unknown as InventorySourceCategory[]}
       staffMembers={staffMembers || []}
       productsList={productsList || []}
@@ -111,4 +115,3 @@ export default async function StockHistoryPage({
     />
   );
 }
-

@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Boxes,
+  BookOpen,
+  Calculator,
   ArrowDownLeft,
   ArrowUpRight,
   TrendingUp,
@@ -118,6 +120,45 @@ export function InventoryOverviewClient({
 
   return (
     <div className="space-y-6">
+      {/* Top Module Sub-Navigation Bar */}
+      <div className="flex flex-wrap items-center gap-1.5 p-1 bg-zinc-900 border border-zinc-800 rounded-2xl w-fit shadow-xs">
+        <Link
+          href="/inventory"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 shadow-xs"
+        >
+          <Boxes size={14} className="text-indigo-400" />
+          Stock Overview
+        </Link>
+        <Link
+          href="/inventory/history"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+        >
+          <BookOpen size={14} />
+          Stock Ledger Book
+        </Link>
+        <Link
+          href="/inventory/stock-in"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 transition-colors"
+        >
+          <PackagePlus size={14} />
+          + Stock In Entry
+        </Link>
+        <Link
+          href="/inventory/stock-out"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors"
+        >
+          <PackageMinus size={14} />
+          - Stock Out Entry
+        </Link>
+        <Link
+          href="/inventory/categories"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+        >
+          <Tags size={14} />
+          Categories
+        </Link>
+      </div>
+
       {/* Top Banner / Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -252,6 +293,30 @@ export function InventoryOverviewClient({
         </div>
       </div>
 
+
+      {/* Stock Calculation Equation Box */}
+      <div className="p-4 bg-gradient-to-r from-zinc-900 via-zinc-900 to-indigo-950/30 border border-zinc-800 rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+            <Calculator size={16} />
+          </div>
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-200">
+              Double-Entry Stock Calculation Equation
+            </h3>
+            <p className="text-xs font-mono text-zinc-400 mt-0.5">
+              Available Stock ({stats.currentAvailableStock}) = Incoming Stock (+{stats.totalStockReceived}) − Outgoing Stock (-{stats.totalStockOut})
+            </p>
+          </div>
+        </div>
+
+        <Link
+          href="/inventory/history"
+          className="inline-flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 font-semibold"
+        >
+          <BookOpen size={13} /> Open Detailed Stock Ledger Book &rarr;
+        </Link>
+      </div>
       {/* Additional Sections: Low Stock, Top In/Out, Recent Feed */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         

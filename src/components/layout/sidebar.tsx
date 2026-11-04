@@ -10,6 +10,7 @@ import {
   RotateCcw,
   Settings,
   PackageCheck,
+  Boxes,
   BarChart,
   LogOut,
   Zap,
@@ -24,6 +25,7 @@ const MAIN_NAV_ITEMS = [
   { href: "/dispatches", label: "Dispatch", icon: Truck },
   { href: "/orders?status=delivered", label: "Tracking", icon: PackageCheck },
   { href: "/returns", label: "Returns", icon: RotateCcw },
+  { href: "/inventory", label: "Stock Ledger", icon: Boxes },
   { href: "/reports", label: "Reports", icon: BarChart },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
