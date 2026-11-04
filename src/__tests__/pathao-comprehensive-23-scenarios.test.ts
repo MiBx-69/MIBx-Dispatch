@@ -407,6 +407,49 @@ describe("MiBx Dispatch — Advanced Pathao Integration (23 Required Scenarios)"
       };
       expect(headers["X-Pathao-Merchant-Webhook-Integration-Secret"]).toBe("f3992ecc-59da-4cbe-a049-a13da2018d51");
     });
+
+    it("handles Pathao developer portal mock verification payload in POST route", async () => {
+      const { POST, GET, HEAD } = await import("@/app/api/webhooks/pathao/route");
+      const samplePayload = {
+        consignment_id: "DL121224VS8TTJ",
+        merchant_order_id: "TS-123",
+        updated_at: "2024-12-27 23:49:43",
+        timestamp: "2024-12-27T17:49:43+00:00",
+        store_id: 130820,
+        event: "order.created",
+        delivery_fee: 83.46,
+      };
+
+      const req = new Request("https://orders.universesraw.com/api/webhooks/pathao", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(samplePayload),
+      });
+
+      const res = await POST(req as any);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("x-pathao-merchant-webhook-integration-secret")).toBe(
+        "f3992ecc-59da-4cbe-a049-a13da2018d51"
+      );
+
+      const json = await res.json();
+      expect(json.status).toBe("success");
+      expect(json.consignment_id).toBe("DL121224VS8TTJ");
+
+      // Test GET
+      const getRes = await GET();
+      expect(getRes.status).toBe(200);
+      expect(getRes.headers.get("x-pathao-merchant-webhook-integration-secret")).toBe(
+        "f3992ecc-59da-4cbe-a049-a13da2018d51"
+      );
+
+      // Test HEAD
+      const headRes = await HEAD();
+      expect(headRes.status).toBe(200);
+      expect(headRes.headers.get("x-pathao-merchant-webhook-integration-secret")).toBe(
+        "f3992ecc-59da-4cbe-a049-a13da2018d51"
+      );
+    });
   });
 });
 
