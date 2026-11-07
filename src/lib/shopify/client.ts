@@ -142,13 +142,11 @@ export const GET_ORDERS_QUERY = `
               }
             }
           }
-          fulfillments(first: 5) {
-            nodes {
-              id
-              status
-              trackingInfo { number url company }
-              createdAt
-            }
+          fulfillments {
+            id
+            status
+            trackingInfo { number url company }
+            createdAt
           }
           cancelledAt
           cancelReason
@@ -397,13 +395,11 @@ export async function getShopifyOrderFulfillments(
   const res = await shopifyFetch(
     `query GetOrderFulfillments($id: ID!) {
       order(id: $id) {
-        fulfillments(first: 10) {
-          nodes {
-            id
-            status
-            createdAt
-            trackingInfo { number url company }
-          }
+        fulfillments {
+          id
+          status
+          createdAt
+          trackingInfo { number url company }
         }
       }
     }`,
@@ -411,9 +407,11 @@ export async function getShopifyOrderFulfillments(
   );
   const rawFulfillments = res.data?.order?.fulfillments;
   const list: Array<{ id: string; status: string; createdAt?: string; trackingInfo?: Array<{ number?: string; url?: string; company?: string }> }> =
-    rawFulfillments?.nodes ||
-    rawFulfillments?.edges?.map((e: any) => e.node) ||
-    (Array.isArray(rawFulfillments) ? rawFulfillments : []);
+    Array.isArray(rawFulfillments)
+      ? rawFulfillments
+      : rawFulfillments?.nodes ||
+        rawFulfillments?.edges?.map((e: any) => e.node) ||
+        [];
   return list
     .filter((f) => f.status !== "CANCELLED" && f.status !== "ERROR" && f.status !== "FAILURE")
     .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
@@ -422,7 +420,7 @@ export async function getShopifyOrderFulfillments(
 /**
  * Ensures a Shopify order is fulfilled and has Pathao carrier and tracking info attached.
  * Works symmetrically whether order is unfulfilled or was already fulfilled in Shopify:
- * - If already fulfilled, attaches Pathao tracking number and URL to the active fulfillment.
+ * - If already fulfilled, attaches Pathao tracking number and URL to the active fulfillment and notifies customer.
  * - If unfulfilled, releases any hold and creates fulfillment with Pathao tracking number and URL.
  */
 export async function fulfillAndTrackShopifyOrder(params: {
@@ -453,7 +451,7 @@ export async function fulfillAndTrackShopifyOrder(params: {
       trackingCompany: company,
       trackingNumber: params.consignmentId,
       trackingUrl: params.trackingUrl,
-      notifyCustomer: false, // Don't duplicate notification if already fulfilled
+      notifyCustomer,
     });
     return { fulfillmentId: activeFulfillment.id, wasCreated: false };
   }
@@ -482,7 +480,7 @@ export async function fulfillAndTrackShopifyOrder(params: {
       trackingCompany: company,
       trackingNumber: params.consignmentId,
       trackingUrl: params.trackingUrl,
-      notifyCustomer: false,
+      notifyCustomer,
     });
     return { fulfillmentId: f.id, wasCreated: false };
   }
@@ -615,6 +613,25 @@ export async function syncPathaoStatusToShopifyFulfillment(params: {
       const existing = await getShopifyOrderFulfillments(orderGid);
       if (existing.length > 0) {
         fulfillmentId = existing[0].id;
+        // If the active fulfillment does not have this consignment ID attached, attach it now!
+        const hasTracking = (existing[0].trackingInfo || []).some(
+          (t) => t.number === params.consignmentId
+        );
+        if (!hasTracking && params.consignmentId) {
+          try {
+            await updateShopifyFulfillmentTracking({
+              fulfillmentId,
+              trackingCompany: "Pathao",
+              trackingNumber: params.consignmentId,
+              trackingUrl:
+                params.trackingUrl ||
+                `https://merchant.pathao.com/tracking?consignment_id=${encodeURIComponent(params.consignmentId)}`,
+              notifyCustomer: true,
+            });
+          } catch (trackErr: any) {
+            console.warn(`[Shopify Client] Could not attach tracking to existing fulfillment ${fulfillmentId}:`, trackErr?.message || trackErr);
+          }
+        }
       } else if (
         params.normalizedStatus !== "PICKUP_CANCELLED" &&
         params.normalizedStatus !== "UNKNOWN_EVENT"
@@ -632,7 +649,7 @@ export async function syncPathaoStatusToShopifyFulfillment(params: {
             trackingUrl:
               params.trackingUrl ||
               `https://merchant.pathao.com/tracking?consignment_id=${encodeURIComponent(params.consignmentId)}`,
-            notifyCustomer: false,
+            notifyCustomer: true,
           });
           if (created?.id) {
             fulfillmentId = created.id;
@@ -732,21 +749,20 @@ export async function markShopifyOrderAsDelivered(params: {
         query GetOrderFulfillments($id: ID!) {
           order(id: $id) {
             id
-            fulfillments(first: 10) {
-              nodes {
-                id
-                status
-              }
+            fulfillments {
+              id
+              status
             }
           }
         }
       `;
       const res = await shopifyFetch(orderQuery, { id: orderGid });
       const rawFulfillments = res.data?.order?.fulfillments;
-      const fulfillments =
-        rawFulfillments?.nodes ||
-        rawFulfillments?.edges?.map((e: any) => e.node) ||
-        (Array.isArray(rawFulfillments) ? rawFulfillments : []);
+      const fulfillments = Array.isArray(rawFulfillments)
+        ? rawFulfillments
+        : rawFulfillments?.nodes ||
+          rawFulfillments?.edges?.map((e: any) => e.node) ||
+          [];
       if (fulfillments.length > 0) {
         fulfillmentId = fulfillments[0].id;
       }

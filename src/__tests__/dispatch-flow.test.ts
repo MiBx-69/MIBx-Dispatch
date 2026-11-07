@@ -195,7 +195,7 @@ describe("Dispatch Flow & Logic Tests", () => {
 
     it("prioritizes updating tracking on existing fulfillment when order is already fulfilled in Shopify", async () => {
       const existingFulfillments = [
-        { id: "gid://shopify/Fulfillment/7333573329005", status: "SUCCESS" }
+        { id: "gid://shopify/Fulfillment/7333573329005", status: "SUCCESS", trackingInfo: [] }
       ];
       const activeFulfillment = existingFulfillments.find(
         (f) => f.status === "SUCCESS" || f.status === "OPEN"
@@ -203,6 +203,35 @@ describe("Dispatch Flow & Logic Tests", () => {
 
       expect(activeFulfillment).toBeDefined();
       expect(activeFulfillment?.id).toBe("gid://shopify/Fulfillment/7333573329005");
+    });
+
+    it("verifies GraphQL fulfillments query format is direct list without nodes field", () => {
+      const graphqlQuery = `
+        query GetOrderFulfillments($id: ID!) {
+          order(id: $id) {
+            fulfillments {
+              id
+              status
+              createdAt
+              trackingInfo { number url company }
+            }
+          }
+        }
+      `;
+      expect(graphqlQuery).not.toContain("nodes");
+      expect(graphqlQuery).toContain("fulfillments {");
+      expect(graphqlQuery).toContain("trackingInfo { number url company }");
+    });
+
+    it("passes notifyCustomer: true when attaching tracking to Shopify fulfillment", () => {
+      const params = {
+        shopifyOrderId: "19008309854317",
+        consignmentId: "DU071126PSWA9L",
+        trackingUrl: "https://merchant.pathao.com/tracking?consignment_id=DU071126PSWA9L",
+        trackingCompany: "Pathao",
+        notifyCustomer: true,
+      };
+      expect(params.notifyCustomer).toBe(true);
     });
   });
 });

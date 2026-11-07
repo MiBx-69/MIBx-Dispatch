@@ -335,7 +335,7 @@ async function processShopifyWebhook(
                 trackingCompany: "Pathao",
                 trackingNumber: ord.pathao_consignment_id,
                 trackingUrl,
-                notifyCustomer: false,
+                notifyCustomer: true,
               });
               await supabase
                 .from("orders")
@@ -344,6 +344,15 @@ async function processShopifyWebhook(
                   fulfillment_status: "fulfilled",
                 })
                 .eq("id", ord.id);
+              await supabase
+                .from("dispatches")
+                .update({
+                  shopify_fulfillment_id: fulfillmentGid,
+                  shopify_sync_status: "synced",
+                  shopify_sync_error: null,
+                  last_synced_at: new Date().toISOString(),
+                })
+                .eq("order_id", ord.id);
               console.log(`[Shopify Webhook] ${topic}: Attached Pathao tracking ${ord.pathao_consignment_id} to fulfillment ${fulfillmentGid}`);
             } catch (attachErr: any) {
               console.error(`[Shopify Webhook] Failed to attach tracking to fulfillment ${fulfillmentGid}:`, attachErr);

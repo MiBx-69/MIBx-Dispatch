@@ -54,17 +54,15 @@ const GET_SHOPIFY_ORDER_FOR_RETURN_QUERY = `
           }
         }
       }
-      fulfillments(first: 10) {
-        nodes {
-          id
-          status
-          fulfillmentLineItems(first: 50) {
-            edges {
-              node {
-                id
-                quantity
-                lineItem { id }
-              }
+      fulfillments {
+        id
+        status
+        fulfillmentLineItems(first: 50) {
+          edges {
+            node {
+              id
+              quantity
+              lineItem { id }
             }
           }
         }

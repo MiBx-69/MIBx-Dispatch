@@ -75,8 +75,17 @@ export async function POST(
           trackingNumber: consignmentId,
           trackingCompany: "Pathao",
           trackingUrl,
-          notifyCustomer: false,
+          notifyCustomer: true,
         });
+        await supabase
+          .from("dispatches")
+          .update({
+            shopify_fulfillment_id: fulfillmentId,
+            shopify_sync_status: "synced",
+            shopify_sync_error: null,
+            last_synced_at: new Date().toISOString(),
+          })
+          .eq("order_id", order.id);
         updatedShopifyFulfillment = true;
       }
 
