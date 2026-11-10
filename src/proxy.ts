@@ -83,6 +83,12 @@ export async function proxy(request: NextRequest) {
     return redirectRes;
   }
 
+  if (pathname.startsWith("/print") || pathname.startsWith("/api/orders/stickers")) {
+    supabaseResponse.headers.set("Access-Control-Allow-Origin", "*");
+    supabaseResponse.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD");
+    supabaseResponse.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept");
+  }
+
   return supabaseResponse;
 }
 

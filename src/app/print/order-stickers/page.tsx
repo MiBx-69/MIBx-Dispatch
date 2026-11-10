@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { OrderStickersPrintClient } from "./order-stickers-print-client";
 import { verifyShopifySessionToken } from "@/lib/shopify-session-token";
+import { fetchOrderStickersData } from "@/lib/order-sticker-service";
+import type { OrderStickerData } from "@/types/order-sticker";
 import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
@@ -72,11 +74,23 @@ export default async function PrintOrderStickersPage({ searchParams }: PrintOrde
     redirect("/login");
   }
 
+  // Pre-fetch sticker data on the server for instant SSR rendering (no loading delay!)
+  let initialStickers: OrderStickerData[] = [];
+  try {
+    const stickerResult = await fetchOrderStickersData(ids);
+    if (stickerResult.success && stickerResult.stickers) {
+      initialStickers = stickerResult.stickers;
+    }
+  } catch (fetchErr) {
+    console.warn("[PrintOrderStickersPage] Server prefetch warning:", fetchErr);
+  }
+
   return (
     <OrderStickersPrintClient
       orderIds={ids}
       isEmbedded={isEmbedded}
       authToken={tokenToVerify || undefined}
+      initialStickers={initialStickers}
     />
   );
 }

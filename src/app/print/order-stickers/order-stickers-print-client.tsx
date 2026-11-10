@@ -11,19 +11,35 @@ interface OrderStickersPrintClientProps {
   orderIds: string[];
   isEmbedded?: boolean;
   authToken?: string;
+  initialStickers?: OrderStickerData[];
 }
 
 export function OrderStickersPrintClient({
   orderIds,
   isEmbedded = false,
   authToken,
+  initialStickers,
 }: OrderStickersPrintClientProps) {
-  const [stickers, setStickers] = useState<OrderStickerData[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [stickers, setStickers] = useState<OrderStickerData[]>(initialStickers || []);
+  const [loading, setLoading] = useState(!initialStickers || initialStickers.length === 0);
   const [error, setError] = useState<string | null>(null);
   const [config, setConfig] = useState<OrderStickerConfig>(() => loadOrderStickerConfig());
 
   useEffect(() => {
+    // If server already provided pre-rendered stickers, skip network fetch!
+    if (initialStickers && initialStickers.length > 0) {
+      setStickers(initialStickers);
+      setLoading(false);
+      if (!isEmbedded) {
+        setTimeout(() => {
+          if (typeof window !== "undefined") {
+            window.print();
+          }
+        }, 800);
+      }
+      return;
+    }
+
     async function loadData() {
       try {
         setLoading(true);
@@ -45,8 +61,6 @@ export function OrderStickersPrintClient({
         if (!res.ok) throw new Error(data.error || "Failed to load order stickers data");
         setStickers(data.stickers || []);
 
-        // Only auto-trigger window.print() if opened directly in a standalone browser tab
-        // (Do NOT trigger nested print popups when embedded inside Shopify Admin's Print Action modal)
         if (!isEmbedded) {
           setTimeout(() => {
             if (typeof window !== "undefined") {
@@ -61,7 +75,7 @@ export function OrderStickersPrintClient({
       }
     }
     loadData();
-  }, [orderIds, config.customDiscountReasons, isEmbedded, authToken]);
+  }, [orderIds, config.customDiscountReasons, isEmbedded, authToken, initialStickers]);
 
   const validStickers = useMemo(() => stickers.filter((s) => s.isValid), [stickers]);
 
