@@ -185,7 +185,7 @@ describe("Customer Due Slip Printing Feature (Gprinter GP-3120TU)", () => {
       const html = generateDueSlipsHtml(sampleSlips, GPRINTER_PRESET);
 
       // Order 1 is unpaid (Due: ৳ 2,500)
-      expect(html).toContain("DUE AMT:");
+      expect(html).toContain("DUE:");
       expect(html).toContain("৳ 2,500");
 
       // Order 2 is paid (Status: PAID ৳0)

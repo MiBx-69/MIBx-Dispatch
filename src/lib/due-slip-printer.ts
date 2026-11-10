@@ -3,6 +3,7 @@ import type { DueSlipData, PrinterPaperConfig } from "@/types/due-slip";
 /**
  * Generates self-contained standalone HTML and CSS for direct thermal printing.
  * Zero external font or CSS dependencies to guarantee instant, 100% offline rendering.
+ * Layout is clean, minimalist, and centered to avoid printer margin border cutoff.
  */
 export function generateDueSlipsHtml(
   slips: DueSlipData[],
@@ -20,35 +21,29 @@ export function generateDueSlipsHtml(
 
   const fontSizes = isCompact
     ? {
-        containerPadding: "2px 4px",
+        containerPadding: "2px 5px",
         store: "10px",
-        orderDate: "8.5px",
-        customer: "8.5px",
-        phone: "9.5px",
-        dueBox: "11px",
-        dueLabel: "8px",
-        lineHeight: "1.15",
+        orderMeta: "8.5px",
+        customer: "9px",
+        phone: "10px",
+        dueAmount: "11.5px",
       }
     : isLarge
     ? {
         containerPadding: "12px 16px",
         store: "20px",
-        orderDate: "14px",
-        customer: "14px",
-        phone: "16px",
-        dueBox: "20px",
-        dueLabel: "12px",
-        lineHeight: "1.3",
+        orderMeta: "14px",
+        customer: "16px",
+        phone: "18px",
+        dueAmount: "22px",
       }
     : {
         containerPadding: "6px 8px",
         store: "13px",
-        orderDate: "10.5px",
-        customer: "10.5px",
-        phone: "12px",
-        dueBox: "14px",
-        dueLabel: "9px",
-        lineHeight: "1.2",
+        orderMeta: "10.5px",
+        customer: "11px",
+        phone: "12.5px",
+        dueAmount: "15px",
       };
 
   const slipsHtml = slips
@@ -60,41 +55,29 @@ export function generateDueSlipsHtml(
       return `
       <div class="due-slip-page ${index === slips.length - 1 ? 'is-last' : ''}">
         <div class="slip-inner">
-          <!-- Store Header -->
+          <!-- Store Header (Centered) -->
           <div class="slip-header">
             <div class="store-name">${escapeHtml(currentStore)}</div>
           </div>
 
-          <!-- Order & Date -->
-          <div class="slip-row order-date-row">
+          <!-- Order & Date (Centered) -->
+          <div class="order-meta">
             <span class="order-number">${escapeHtml(slip.orderNumber)}</span>
-            ${config.showDate ? `<span class="order-date">${escapeHtml(slip.orderDate)}</span>` : ""}
+            ${config.showDate && slip.orderDate ? ` • <span class="order-date">${escapeHtml(slip.orderDate)}</span>` : ""}
           </div>
 
-          <!-- Customer Info -->
+          <!-- Customer Info: Name & Phone (Centered away from borders) -->
           <div class="customer-info">
-            <div class="info-line truncate">
-              <span class="field-label">To:</span>
-              <span class="field-value font-bold">${escapeHtml(slip.customerName || "Guest")}</span>
-            </div>
-            <div class="info-line truncate">
-              <span class="field-label">Ph:</span>
-              <span class="field-value font-bold phone-value">${escapeHtml(slip.customerPhone || "N/A")}</span>
-            </div>
+            <div class="customer-name">${escapeHtml(slip.customerName || "Guest")}</div>
+            <div class="customer-phone">${escapeHtml(slip.customerPhone || "N/A")}</div>
           </div>
 
-          <!-- Due Amount Footer -->
+          <!-- Due Amount Footer (Centered, clean text without heavy black box) -->
           <div class="slip-footer">
             ${
               isPaid
-                ? `<div class="due-box paid-box">
-                    <span class="due-label">STATUS:</span>
-                    <span class="due-val">PAID (${currencySymbol}0)</span>
-                  </div>`
-                : `<div class="due-box due-unpaid-box">
-                    <span class="due-label">DUE AMT:</span>
-                    <span class="due-val">${currencySymbol} ${formattedDue}</span>
-                  </div>`
+                ? `<div class="due-text paid">STATUS: PAID (${currencySymbol}0)</div>`
+                : `<div class="due-text unpaid">DUE: ${currencySymbol} ${formattedDue}</div>`
             }
           </div>
         </div>
@@ -126,6 +109,7 @@ export function generateDueSlipsHtml(
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       width: 100%;
       height: 100%;
+      text-align: center;
     }
     .due-slip-page {
       width: ${widthVal};
@@ -142,6 +126,8 @@ export function generateDueSlipsHtml(
       padding: 0;
       display: flex;
       flex-direction: column;
+      align-items: center;
+      justify-content: center;
     }
     .due-slip-page.is-last {
       page-break-after: auto;
@@ -153,120 +139,93 @@ export function generateDueSlipsHtml(
       padding: ${fontSizes.containerPadding};
       display: flex;
       flex-direction: column;
+      align-items: center;
       justify-content: space-between;
+      text-align: center;
       overflow: hidden;
+      box-sizing: border-box;
     }
     .slip-header {
       width: 100%;
       text-align: center;
-      border-bottom: 1.5px solid #000000;
+      border-bottom: 1px solid #000000;
       padding-bottom: 1px;
-      margin-bottom: 1px;
+      overflow: hidden;
     }
     .store-name {
       font-size: ${fontSizes.store};
       font-weight: 900;
-      letter-spacing: -0.2px;
+      letter-spacing: -0.1px;
       text-transform: uppercase;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      text-align: center;
     }
-    .slip-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+    .order-meta {
       width: 100%;
-    }
-    .order-date-row {
-      font-size: ${fontSizes.orderDate};
-      font-weight: 700;
-      margin-bottom: 1px;
+      text-align: center;
+      font-size: ${fontSizes.orderMeta};
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      padding: 0 4px;
     }
     .order-number {
-      font-weight: 900;
-      letter-spacing: -0.2px;
+      font-weight: 800;
     }
     .order-date {
       font-weight: 500;
-      font-size: 8px;
-      opacity: 0.9;
+      opacity: 0.85;
     }
     .customer-info {
+      width: 100%;
       display: flex;
       flex-direction: column;
-      gap: 1px;
-      margin: auto 0;
-      line-height: ${fontSizes.lineHeight};
-      overflow: hidden;
-    }
-    .info-line {
-      display: flex;
       align-items: center;
-      gap: 3px;
-      white-space: nowrap;
+      justify-content: center;
+      text-align: center;
+      margin: auto 0;
       overflow: hidden;
-      text-overflow: ellipsis;
+      padding: 0 4px; /* safe margin from left and right edges */
+      gap: 1px;
+    }
+    .customer-name {
+      width: 100%;
       font-size: ${fontSizes.customer};
-    }
-    .field-label {
-      font-size: 7.5px;
-      text-transform: uppercase;
-      font-weight: 800;
-      opacity: 0.75;
-      flex-shrink: 0;
-    }
-    .field-value {
+      font-weight: 700;
+      white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      white-space: nowrap;
+      text-align: center;
     }
-    .font-bold {
-      font-weight: 700;
-    }
-    .phone-value {
+    .customer-phone {
+      width: 100%;
       font-size: ${fontSizes.phone};
       font-weight: 900;
-      letter-spacing: -0.2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-align: center;
+      letter-spacing: 0.1px;
     }
     .slip-footer {
       width: 100%;
-      border-top: 1.5px solid #000000;
+      border-top: 1px solid #000000;
       padding-top: 1px;
-      margin-top: 1px;
+      text-align: center;
     }
-    .due-box {
+    .due-text {
       width: 100%;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 1px 3px;
+      text-align: center;
+      font-size: ${fontSizes.dueAmount};
       font-weight: 900;
-      border: 1px solid #000000;
-      box-sizing: border-box;
-    }
-    .due-unpaid-box {
-      background-color: #000000 !important;
-      color: #ffffff !important;
-    }
-    .due-unpaid-box .due-label,
-    .due-unpaid-box .due-val {
-      color: #ffffff !important;
-    }
-    .paid-box {
-      background-color: #ffffff !important;
-      color: #000000 !important;
-    }
-    .due-label {
-      font-size: ${fontSizes.dueLabel};
-      text-transform: uppercase;
-      font-weight: 800;
-      letter-spacing: 0.3px;
-    }
-    .due-val {
-      font-size: ${fontSizes.dueBox};
-      font-weight: 900;
-      letter-spacing: -0.3px;
+      letter-spacing: -0.2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #000000;
     }
 
     @media screen {
@@ -358,4 +317,3 @@ export async function printDueSlipsViaIframe(
     }
   });
 }
-

@@ -24,46 +24,45 @@ export function DueSlipThermalCard({
   const heightVal = `${config.height}${unit}`;
 
   // Font size adjustments based on config
-  // For compact 1.49" x 0.98", we need precise microscopic sizing
+  // For compact 1.49" x 0.98", we need clean microscopic sizing
   const isCompactLabel = (config.width <= 2.2 && config.height <= 1.5) || config.fontSize === "compact";
   const isLargeLabel = config.width >= 3.5 && config.height >= 4;
 
   const fontClasses = isCompactLabel
     ? {
-        container: "p-1 leading-tight text-[9px]",
+        container: "p-1.5 leading-tight text-[9px]",
         store: "text-[10px] font-black tracking-tight",
-        orderDate: "text-[8.5px] font-bold",
-        customer: "text-[8.5px] font-semibold truncate",
-        phone: "text-[9px] font-black tracking-tight",
-        dueBox: "text-[11px] font-black",
-        badge: "text-[8px] font-bold px-1 py-0.2",
+        orderMeta: "text-[8.5px] font-semibold",
+        customer: "text-[9px] font-bold",
+        phone: "text-[10px] font-black tracking-normal",
+        dueAmount: "text-[11.5px] font-black",
       }
     : isLargeLabel
     ? {
         container: "p-4 leading-normal text-sm",
         store: "text-2xl font-black tracking-wider",
-        orderDate: "text-base font-bold",
-        customer: "text-base font-semibold",
-        phone: "text-lg font-black",
-        dueBox: "text-2xl font-black py-2",
-        badge: "text-sm font-bold px-3 py-1",
+        orderMeta: "text-base font-semibold",
+        customer: "text-lg font-bold",
+        phone: "text-xl font-black",
+        dueAmount: "text-2xl font-black",
       }
     : {
-        container: "p-2 leading-tight text-xs",
+        container: "p-2.5 leading-tight text-xs",
         store: "text-sm font-black tracking-wide",
-        orderDate: "text-xs font-bold",
-        customer: "text-xs font-semibold truncate",
-        phone: "text-xs font-black",
-        dueBox: "text-base font-black py-1",
-        badge: "text-[10px] font-bold px-1.5 py-0.5",
+        orderMeta: "text-xs font-semibold",
+        customer: "text-xs font-bold",
+        phone: "text-sm font-black",
+        dueAmount: "text-base font-black",
       };
+
+  const isPaid = slip.isPaid || slip.dueAmount <= 0;
 
   return (
     <div
-      className={`due-slip box-border bg-white text-black font-sans flex flex-col justify-between overflow-hidden select-none ${
+      className={`due-slip box-border bg-white text-black font-sans flex flex-col items-center justify-between text-center overflow-hidden select-none ${
         isPrintMode
           ? "border-0 shadow-none m-0"
-          : "border border-zinc-400 rounded-sm shadow-sm"
+          : "border border-zinc-300 rounded-sm shadow-sm"
       } ${fontClasses.container} ${className}`}
       style={{
         width: widthVal,
@@ -78,67 +77,45 @@ export function DueSlipThermalCard({
         printColorAdjust: "exact",
       }}
     >
-      {/* Top Header: Store Name */}
-      <div className="w-full text-center border-b border-black pb-0.5 mb-0.5 shrink-0 overflow-hidden">
-        <h1 className={`${fontClasses.store} truncate`}>
+      {/* 1. Store Header (Centered) */}
+      <div className="w-full text-center border-b border-black pb-0.5 shrink-0 overflow-hidden px-1">
+        <h1 className={`${fontClasses.store} truncate uppercase`}>
           {storeName}
         </h1>
       </div>
 
-      {/* Order Number & Date Row */}
-      <div className="w-full flex items-center justify-between text-black shrink-0 px-0.5">
-        <span className={`${fontClasses.orderDate} tracking-tighter`}>
-          {slip.orderNumber}
-        </span>
-        {config.showDate && (
-          <span className="text-[8px] font-medium opacity-90 truncate max-w-[55%] text-right">
-            {slip.orderDate}
-          </span>
-        )}
+      {/* 2. Order # & Date (Centered) */}
+      <div className="w-full text-center shrink-0 px-1">
+        <p className={`${fontClasses.orderMeta} truncate`}>
+          <span className="font-bold">{slip.orderNumber}</span>
+          {config.showDate && slip.orderDate && (
+            <span className="opacity-80"> • {slip.orderDate}</span>
+          )}
+        </p>
       </div>
 
-      {/* Customer Info */}
-      <div className="w-full space-y-0.2 shrink-0 px-0.5 my-auto">
-        {/* Customer Name */}
-        <div className="flex items-center gap-1 overflow-hidden">
-          <span className="text-[7.5px] uppercase font-bold shrink-0 opacity-70">
-            To:
-          </span>
-          <span className={`${fontClasses.customer} truncate font-bold`}>
-            {slip.customerName || "Guest"}
-          </span>
-        </div>
-
-        {/* Customer Phone */}
-        <div className="flex items-center gap-1 overflow-hidden">
-          <span className="text-[7.5px] uppercase font-bold shrink-0 opacity-70">
-            Ph:
-          </span>
-          <span className={`${fontClasses.phone} tracking-tight font-black`}>
-            {slip.customerPhone || "N/A"}
-          </span>
-        </div>
+      {/* 3. Customer Name & 4. Customer Phone (Centered away from borders) */}
+      <div className="w-full flex flex-col items-center justify-center shrink-0 px-1.5 my-auto overflow-hidden">
+        <p className={`${fontClasses.customer} w-full text-center truncate`}>
+          {slip.customerName || "Guest"}
+        </p>
+        <p className={`${fontClasses.phone} w-full text-center truncate`}>
+          {slip.customerPhone || "N/A"}
+        </p>
       </div>
 
-      {/* Bottom Payment / Due Amount Box */}
-      <div className="w-full border-t border-black pt-0.5 mt-0.5 shrink-0">
-        {slip.isPaid || slip.dueAmount <= 0 ? (
-          <div className="w-full border border-black bg-white text-black py-0.5 px-1 text-center font-black flex items-center justify-between">
-            <span className="text-[8px] uppercase tracking-wider font-bold">Status:</span>
-            <span className={`${fontClasses.dueBox} uppercase`}>PAID ({currencySymbol}0)</span>
-          </div>
+      {/* 5. Due / Payable Amount (Centered, clean text without heavy black fills or thick boxes) */}
+      <div className="w-full border-t border-black pt-0.5 shrink-0 text-center px-1">
+        {isPaid ? (
+          <p className={`${fontClasses.dueAmount} uppercase tracking-tight`}>
+            STATUS: PAID ({currencySymbol}0)
+          </p>
         ) : (
-          <div className="w-full border border-black bg-black text-white print:bg-black print:text-white py-0.5 px-1 text-center font-black flex items-center justify-between">
-            <span className="text-[8px] uppercase tracking-wider font-bold text-white print:text-white">
-              DUE AMT:
-            </span>
-            <span className={`${fontClasses.dueBox} text-white print:text-white tracking-tight`}>
-              {currencySymbol} {formattedDueAmount}
-            </span>
-          </div>
+          <p className={`${fontClasses.dueAmount} tracking-tight font-black`}>
+            DUE: {currencySymbol} {formattedDueAmount}
+          </p>
         )}
       </div>
     </div>
   );
 }
-
