@@ -49,6 +49,8 @@ export async function proxy(request: NextRequest) {
     "/api/auth",
     "/api/cron",
     "/api/webhooks",
+    "/api/orders/stickers",
+    "/print",
     "/site.webmanifest",
     "/manifest.json",
     "/robots.txt",
