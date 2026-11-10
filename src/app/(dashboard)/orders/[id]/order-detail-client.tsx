@@ -13,6 +13,7 @@ import {
   Package,
   ExternalLink,
   Printer,
+  Tag,
 } from "lucide-react";
 import {
   StatusBadge,
@@ -25,6 +26,7 @@ import { OrderReturnSection } from "@/components/orders/order-return-section";
 import { ParcelStatusTimeline } from "@/components/orders/parcel-status-timeline";
 import { formatPathaoTrackingUrl } from "@/lib/pathao/client";
 import { PrintDueSlipsModal } from "@/components/orders/print-due-slips-modal";
+import { PrintOrderStickersModal } from "@/components/orders/print-order-stickers-modal";
 
 interface OrderDetailClientProps {
   order: any;
@@ -39,6 +41,7 @@ export function OrderDetailClient({
   const [order, setOrder] = useState(initialOrder);
   const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
   const [isDueSlipModalOpen, setIsDueSlipModalOpen] = useState(false);
+  const [isOrderStickerModalOpen, setIsOrderStickerModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const activeDispatch =
@@ -119,6 +122,16 @@ export function OrderDetailClient({
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsOrderStickerModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+            title="Print detailed 80×100mm parcel sticker using Gprinter GP-3120TU"
+          >
+            <Tag className="w-3.5 h-3.5 text-amber-400" />
+            Order Sticker (80×100mm)
+          </button>
+
           <button
             type="button"
             onClick={() => setIsDueSlipModalOpen(true)}
@@ -308,6 +321,14 @@ export function OrderDetailClient({
         <PrintDueSlipsModal
           isOpen={isDueSlipModalOpen}
           onClose={() => setIsDueSlipModalOpen(false)}
+          orderIds={[order.id]}
+        />
+      )}
+
+      {isOrderStickerModalOpen && (
+        <PrintOrderStickersModal
+          isOpen={isOrderStickerModalOpen}
+          onClose={() => setIsOrderStickerModalOpen(false)}
           orderIds={[order.id]}
         />
       )}

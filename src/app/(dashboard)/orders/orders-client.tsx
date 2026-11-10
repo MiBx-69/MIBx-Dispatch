@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   Search, Filter, ChevronLeft, ChevronRight, ChevronDown,
-  Truck, Package, X, CheckCircle, PauseCircle, AlertCircle, Archive, ArchiveRestore, Copy, Check, MessageSquare, ShieldCheck, List, Loader2, RotateCcw, UploadCloud, ExternalLink, Printer
+  Truck, Package, X, CheckCircle, PauseCircle, AlertCircle, Archive, ArchiveRestore, Copy, Check, MessageSquare, ShieldCheck, List, Loader2, RotateCcw, UploadCloud, ExternalLink, Printer, Tag
 } from "lucide-react";
 import { StatusBadge, ShopifyFinancialBadge, ShopifyFulfillmentBadge } from "@/components/ui/status-badge";
 import { getOrderDisplayStatus } from "@/lib/order-status";
@@ -20,6 +20,7 @@ import { FraudDetailsModal } from "@/components/modals/fraud-details-modal";
 import { OrderTimelineModal } from "@/components/orders/order-timeline-modal";
 import { BulkImportDeliveriesModal } from "@/components/orders/bulk-import-deliveries-modal";
 import { PrintDueSlipsModal } from "@/components/orders/print-due-slips-modal";
+import { PrintOrderStickersModal } from "@/components/orders/print-order-stickers-modal";
 import { DeliveredReportingHeader, DeliveredStats } from "@/components/orders/delivered-reporting-header";
 import type { Order, OrderStatus } from "@/types/database";
 import { analyzeCustomerRisk } from "@/lib/risk-analytics";
@@ -91,6 +92,8 @@ export function OrdersClient({
   const [isLoadingAllIds, setIsLoadingAllIds] = useState(false);
   const [isDueSlipsModalOpen, setIsDueSlipsModalOpen] = useState(false);
   const [dueSlipsOrderIds, setDueSlipsOrderIds] = useState<string[]>([]);
+  const [isOrderStickersModalOpen, setIsOrderStickersModalOpen] = useState(false);
+  const [orderStickersIds, setOrderStickersIds] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
 
   const handleOpenDueSlips = (ids?: string[]) => {
@@ -101,6 +104,16 @@ export function OrdersClient({
     }
     setDueSlipsOrderIds(targetIds);
     setIsDueSlipsModalOpen(true);
+  };
+
+  const handleOpenOrderStickers = (ids?: string[]) => {
+    const targetIds = ids && ids.length > 0 ? ids : Array.from(selected);
+    if (targetIds.length === 0) {
+      toast.warning("Please select at least one order to print order stickers");
+      return;
+    }
+    setOrderStickersIds(targetIds);
+    setIsOrderStickersModalOpen(true);
   };
 
   // Reset list when server-provided orders change (e.g., search/filter changed)
@@ -766,6 +779,14 @@ export function OrdersClient({
                   >
                     <Printer size={14} className="text-indigo-400" /> Due Slip
                   </button>
+
+                  <button
+                    onClick={() => handleOpenOrderStickers([singleOrder.id])}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/25 hover:bg-amber-500/25 hover:text-white transition-colors"
+                    title="Print 80×100mm Order Sticker"
+                  >
+                    <Tag size={14} className="text-amber-400" /> Sticker
+                  </button>
                   
                   <div className="w-px h-6 bg-zinc-700 mx-1 hidden lg:block"></div>
                 </>
@@ -773,11 +794,18 @@ export function OrdersClient({
 
               {/* Bulk Actions (Always show if > 0 selected) */}
               <button
+                onClick={() => handleOpenOrderStickers()}
+                className="flex items-center gap-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border border-amber-500/40 shadow-sm"
+                title="Print detailed 80×100mm adhesive parcel stickers for Gprinter GP-3120TU"
+              >
+                <Tag size={14} className="text-amber-400" /> Print Order Stickers (80×100mm)
+              </button>
+              <button
                 onClick={() => handleOpenDueSlips()}
                 className="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 hover:text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border border-zinc-700 shadow-sm"
                 title="Print customer due slips for selected orders"
               >
-                <Printer size={14} className="text-indigo-400" /> Print Due Slips
+                <Printer size={14} className="text-indigo-400" /> Due Slips
               </button>
               <button onClick={() => setBulkDispatchModalOpen(true)} className="flex items-center gap-1.5 bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shadow-lg shadow-indigo-500/20">
                 <Truck size={14} /> Dispatch
@@ -915,6 +943,17 @@ export function OrdersClient({
                 {/* Actions for individual order */}
                 {!order.is_archived && (
                   <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenOrderStickers([order.id]);
+                      }}
+                      className="p-1.5 rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white border border-zinc-700 transition-colors"
+                      title="Print 80×100mm Order Sticker"
+                    >
+                      <Tag size={13} className="text-amber-400" />
+                    </button>
                     <button
                       type="button"
                       onClick={(e) => {
@@ -1290,6 +1329,13 @@ export function OrdersClient({
         isOpen={isDueSlipsModalOpen}
         onClose={() => setIsDueSlipsModalOpen(false)}
         orderIds={dueSlipsOrderIds}
+      />
+
+      {/* Print 80×100mm Order Stickers Modal */}
+      <PrintOrderStickersModal
+        isOpen={isOrderStickersModalOpen}
+        onClose={() => setIsOrderStickersModalOpen(false)}
+        orderIds={orderStickersIds}
       />
 
     </div>
