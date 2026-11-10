@@ -40,15 +40,7 @@ function Extension() {
 
         // 3. Build printable document URL for <s-admin-print-action src="...">
         const APP_ORIGIN = "https://orders.universesraw.com";
-        const params = new URLSearchParams({
-          ids: cleanId,
-          embedded: "1",
-        });
-        if (token) {
-          params.set("token", token);
-        }
-
-        const printUrl = `${APP_ORIGIN}/print/order-stickers?${params.toString()}`;
+        const printUrl = `${APP_ORIGIN}/api/orders/stickers/print?ids=${cleanId}`;
         setSrc(printUrl);
 
         // 4. Fetch validated sticker summary from backend
