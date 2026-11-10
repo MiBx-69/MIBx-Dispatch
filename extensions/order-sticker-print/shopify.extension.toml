@@ -1,0 +1,11 @@
+api_version = "2026-07"
+
+[[extensions]]
+name = "MiBx Dispatch – Order Sticker (75×100mm)"
+handle = "order-sticker-print"
+type = "ui_extension"
+uid = "62fade84-81f3-da9e-dc6f-e4764de9fe78bf8d8db9"
+
+[[extensions.targeting]]
+module = "./src/PrintActionExtension.jsx"
+target = "admin.order-details.print-action.render"

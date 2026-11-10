@@ -1,0 +1,9 @@
+{
+  "name": "MiBx Dispatch – Order Sticker (75×100mm)",
+  "title": "Order Sticker (75×100mm)",
+  "loading": "Generating order sticker preview...",
+  "ready": "Sticker ready for printing",
+  "printer": "Gprinter GP-3120TU Thermal Label (75mm × 100mm)",
+  "cashToCollect": "Cash To Collect (COD)",
+  "prepaid": "Prepaid Order (No COD)"
+}

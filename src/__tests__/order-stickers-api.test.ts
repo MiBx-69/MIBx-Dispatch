@@ -117,5 +117,76 @@ describe("POST /api/orders/stickers", () => {
     expect(s.financials.discountReason).toBe("Flash Sale Voucher");
     expect(s.financials.isPrepaid).toBe(false);
   });
-});
 
+  it("handles Shopify GraphQL GID identifiers e.g. gid://shopify/Order/3001 seamlessly", async () => {
+    const { createServiceClient } = await import("@/lib/supabase/server");
+
+    (createServiceClient as any).mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "app_settings") {
+          return {
+            select: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: {
+                shopify_shop_domain: "universes-test.myshopify.com",
+                shopify_access_token: "shpat_test123",
+                company_name: "UNIVERSES",
+              },
+            }),
+          };
+        }
+        if (table === "orders") {
+          return {
+            select: vi.fn().mockReturnThis(),
+            or: vi.fn().mockResolvedValue({
+              data: [
+                {
+                  id: "33333333-3333-3333-3333-333333333333",
+                  shopify_order_id: 3001,
+                  shopify_order_name: "#3001",
+                  customer_name: "Tanzim Hasan",
+                  customer_phone: "01755123456",
+                  total_price: 3200,
+                  subtotal_price: 3500,
+                  shipping_charge: 100,
+                  discount_amount: 400,
+                  cod_amount: 3200,
+                  currency: "BDT",
+                  financial_status: "pending",
+                  shipping_address: {
+                    name: "Tanzim Hasan",
+                    address1: "House 25, Road 7",
+                    city: "Dhaka",
+                  },
+                  line_items: [
+                    {
+                      title: "Vintage Washed Tee",
+                      quantity: 1,
+                      price: 3200,
+                    },
+                  ],
+                },
+              ],
+              error: null,
+            }),
+          };
+        }
+        return {};
+      }),
+    });
+
+    const req = new NextRequest("http://localhost:3000/api/orders/stickers", {
+      method: "POST",
+      body: JSON.stringify({
+        orderIds: ["gid://shopify/Order/3001"],
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.stickers).toHaveLength(1);
+    expect(json.stickers[0].orderNumber).toBe("#3001");
+  });
+});

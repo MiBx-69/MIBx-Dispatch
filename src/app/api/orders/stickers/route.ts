@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { format } from "date-fns";
+import { verifyShopifySessionToken } from "@/lib/shopify-session-token";
 import type {
   OrderStickerData,
   OrderStickerLineItem,
@@ -80,17 +81,31 @@ function extractAltPhone(
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { orderIds, customDiscountReasons = {} } = body as {
+    const { orderIds: rawOrderIds, customDiscountReasons = {}, token: bodyToken } = body as {
       orderIds: string[];
       customDiscountReasons?: Record<string, string>;
+      token?: string;
     };
 
-    if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+    if (!rawOrderIds || !Array.isArray(rawOrderIds) || rawOrderIds.length === 0) {
       return NextResponse.json(
         { error: "orderIds array is required and must not be empty" },
         { status: 400 }
       );
     }
+
+    // Optional Shopify Session Token Verification if called from extension
+    const authHeader = req.headers.get("authorization");
+    const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+    const sessionToken = bodyToken || bearerToken;
+    if (sessionToken) {
+      await verifyShopifySessionToken(sessionToken);
+    }
+
+    // Normalize IDs (strip GID prefixes e.g. "gid://shopify/Order/12345" -> "12345")
+    const orderIds = rawOrderIds.map((id) =>
+      typeof id === "string" ? id.replace(/^gid:\/\/shopify\/Order\//, "").trim() : String(id).trim()
+    );
 
     const supabase = createServiceClient();
 
