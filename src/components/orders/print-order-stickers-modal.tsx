@@ -21,7 +21,7 @@ import {
   Edit3,
 } from "lucide-react";
 import type { OrderStickerData, OrderStickerConfig } from "@/types/order-sticker";
-import { DEFAULT_80X100_CONFIG } from "@/types/order-sticker";
+import { DEFAULT_75X100_CONFIG } from "@/types/order-sticker";
 import { OrderStickerThermalCard } from "./order-sticker-thermal-card";
 import {
   loadOrderStickerConfig,
@@ -47,7 +47,7 @@ export function PrintOrderStickersModal({
   orderIds,
   initialStoreName,
 }: PrintOrderStickersModalProps) {
-  const [config, setConfig] = useState<OrderStickerConfig>(DEFAULT_80X100_CONFIG);
+  const [config, setConfig] = useState<OrderStickerConfig>(DEFAULT_75X100_CONFIG);
   const [showSettings, setShowSettings] = useState(false);
   const [viewMode, setViewMode] = useState<"single" | "all">("single");
 
@@ -190,7 +190,7 @@ export function PrintOrderStickersModal({
     try {
       const ok = await printTestCalibrationSticker(config);
       if (ok) {
-        toast.success("Submitted 80×100mm test calibration sticker to Windows printer driver");
+        toast.success("Submitted 75×100mm test calibration sticker to Windows printer driver");
       }
     } catch (e: any) {
       toast.error(e.message || "Test print failed");
@@ -258,14 +258,14 @@ export function PrintOrderStickersModal({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-bold text-zinc-100">
-                  Print Order Stickers (80×100mm)
+                  Print Order Stickers (75×100mm)
                 </h2>
                 <span className="text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full">
                   {orderIds.length} {orderIds.length === 1 ? "Order" : "Orders"}
                 </span>
               </div>
               <p className="text-xs text-zinc-400">
-                Gprinter GP-3120TU Direct Thermal Self-Adhesive Die-Cut Labels (80mm × 100mm)
+                Gprinter GP-3120TU Direct Thermal Self-Adhesive Die-Cut Labels (75mm × 100mm)
               </p>
             </div>
           </div>
@@ -357,7 +357,7 @@ export function PrintOrderStickersModal({
             <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
               <div className="flex items-center gap-2 font-semibold text-zinc-200">
                 <Sliders size={14} className="text-amber-400" />
-                <span>80×100mm Thermal Printer Settings (Gprinter GP-3120TU)</span>
+                <span>75×100mm Thermal Printer Settings (Gprinter GP-3120TU)</span>
               </div>
               <div className="flex items-center gap-3">
                 <button
@@ -372,7 +372,7 @@ export function PrintOrderStickersModal({
                   onClick={() => {
                     const reset = resetOrderStickerConfig();
                     setConfig(reset);
-                    toast.success("Reset to default 80×100mm settings");
+                    toast.success("Reset to default 75×100mm settings");
                   }}
                   className="text-amber-400 hover:text-amber-300 underline"
                 >
@@ -386,8 +386,8 @@ export function PrintOrderStickersModal({
               <div className="space-y-1.5">
                 <label className="text-zinc-400 font-medium">Physical Dimensions</label>
                 <div className="p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-300 font-mono text-[11px] flex justify-between">
-                  <span>80mm × 100mm</span>
-                  <span className="text-amber-400 font-bold">Portrait</span>
+                  <span>75mm × 100mm</span>
+                  <span className="text-amber-400 font-bold">Portrait (203 DPI)</span>
                 </div>
               </div>
 
@@ -401,6 +401,37 @@ export function PrintOrderStickersModal({
                   onChange={(e) => updateConfig({ storeNameOverride: e.target.value })}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1 text-zinc-200 placeholder-zinc-600"
                 />
+              </div>
+
+              {/* Alignment Offsets */}
+              <div className="space-y-1.5">
+                <label className="text-zinc-400 font-medium">Alignment Offsets (mm)</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[10px] text-zinc-500 block mb-0.5">Top (mm)</span>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="-10"
+                      max="10"
+                      value={config.topOffsetMm || 0}
+                      onChange={(e) => updateConfig({ topOffsetMm: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-zinc-200 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-zinc-500 block mb-0.5">Left (mm)</span>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="-10"
+                      max="10"
+                      value={config.leftOffsetMm || 0}
+                      onChange={(e) => updateConfig({ leftOffsetMm: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-zinc-200 text-xs"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Toggles */}
@@ -424,11 +455,13 @@ export function PrintOrderStickersModal({
                   <span>Show Alternative Phone</span>
                 </label>
               </div>
+            </div>
 
-              {/* Driver Note */}
-              <div className="p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] text-zinc-400 space-y-1">
-                <p className="font-semibold text-zinc-300">Windows Driver Tip:</p>
-                <p>Ensure Gprinter driver stock is set to 80×100mm portrait with 0 unprintable margin.</p>
+            {/* Driver Note */}
+            <div className="p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] text-zinc-400 flex items-center justify-between">
+              <div>
+                <span className="font-semibold text-zinc-300 mr-1.5">Windows Driver Setting:</span>
+                <span>Set stock to 75×100mm (or 2.95×3.94 in) with 0 unprintable margin in Gprinter GP-3120TU preferences.</span>
               </div>
             </div>
           </div>
@@ -459,7 +492,7 @@ export function PrintOrderStickersModal({
               <div className="relative p-6 bg-zinc-900/60 border border-zinc-800/80 rounded-2xl flex flex-col items-center justify-center shadow-inner">
                 {/* Physical Dimension Tag */}
                 <div className="absolute top-2 left-3 text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
-                  Physical 80mm × 100mm Preview
+                  Physical 75mm × 100mm Preview
                 </div>
 
                 <div className="pt-3">
@@ -625,4 +658,3 @@ export function PrintOrderStickersModal({
     </div>
   );
 }
-

@@ -783,9 +783,9 @@ export function OrdersClient({
                   <button
                     onClick={() => handleOpenOrderStickers([singleOrder.id])}
                     className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/25 hover:bg-amber-500/25 hover:text-white transition-colors"
-                    title="Print 80×100mm Order Sticker"
+                    title="Print 75×100mm Order Sticker"
                   >
-                    <Tag size={14} className="text-amber-400" /> Sticker
+                    <Tag size={14} className="text-amber-400" /> Sticker (75×100mm)
                   </button>
                   
                   <div className="w-px h-6 bg-zinc-700 mx-1 hidden lg:block"></div>
@@ -796,9 +796,9 @@ export function OrdersClient({
               <button
                 onClick={() => handleOpenOrderStickers()}
                 className="flex items-center gap-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border border-amber-500/40 shadow-sm"
-                title="Print detailed 80×100mm adhesive parcel stickers for Gprinter GP-3120TU"
+                title="Print detailed 75×100mm adhesive parcel stickers for Gprinter GP-3120TU"
               >
-                <Tag size={14} className="text-amber-400" /> Print Order Stickers (80×100mm)
+                <Tag size={14} className="text-amber-400" /> PRINT ORDER STICKERS (75×100mm)
               </button>
               <button
                 onClick={() => handleOpenDueSlips()}
@@ -950,7 +950,7 @@ export function OrdersClient({
                         handleOpenOrderStickers([order.id]);
                       }}
                       className="p-1.5 rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white border border-zinc-700 transition-colors"
-                      title="Print 80×100mm Order Sticker"
+                      title="Print 75×100mm Order Sticker"
                     >
                       <Tag size={13} className="text-amber-400" />
                     </button>
@@ -1331,7 +1331,7 @@ export function OrdersClient({
         orderIds={dueSlipsOrderIds}
       />
 
-      {/* Print 80×100mm Order Stickers Modal */}
+      {/* Print 75×100mm Order Stickers Modal */}
       <PrintOrderStickersModal
         isOpen={isOrderStickersModalOpen}
         onClose={() => setIsOrderStickersModalOpen(false)}

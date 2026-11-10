@@ -1,6 +1,6 @@
-import { OrderStickerConfig, DEFAULT_80X100_CONFIG } from "@/types/order-sticker";
+import { OrderStickerConfig, DEFAULT_75X100_CONFIG } from "@/types/order-sticker";
 
-const STORAGE_KEY = "mibx_order_sticker_80x100_config_v1";
+const STORAGE_KEY = "mibx_order_sticker_75x100_config_v1";
 
 function getStorage(): Storage | null {
   if (typeof window !== "undefined" && window.localStorage) {
@@ -15,23 +15,25 @@ function getStorage(): Storage | null {
 export function loadOrderStickerConfig(): OrderStickerConfig {
   const storage = getStorage();
   if (!storage) {
-    return DEFAULT_80X100_CONFIG;
+    return DEFAULT_75X100_CONFIG;
   }
   try {
     const raw = storage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_80X100_CONFIG;
+    if (!raw) return DEFAULT_75X100_CONFIG;
     const parsed = JSON.parse(raw);
     return {
-      ...DEFAULT_80X100_CONFIG,
+      ...DEFAULT_75X100_CONFIG,
       ...parsed,
-      width: 80, // Always lock default physical dimensions to 80mm
+      width: 75, // Always lock default physical dimensions to 75mm
       height: 100, // Always lock default physical dimensions to 100mm
       unit: "mm",
+      topOffsetMm: typeof parsed.topOffsetMm === "number" ? parsed.topOffsetMm : 0,
+      leftOffsetMm: typeof parsed.leftOffsetMm === "number" ? parsed.leftOffsetMm : 0,
       customDiscountReasons: parsed.customDiscountReasons || {},
     };
   } catch (e) {
     console.error("[OrderStickerConfig] Failed to read config from localStorage:", e);
-    return DEFAULT_80X100_CONFIG;
+    return DEFAULT_75X100_CONFIG;
   }
 }
 
@@ -67,6 +69,5 @@ export function resetOrderStickerConfig(): OrderStickerConfig {
       // ignore
     }
   }
-  return DEFAULT_80X100_CONFIG;
+  return DEFAULT_75X100_CONFIG;
 }
-

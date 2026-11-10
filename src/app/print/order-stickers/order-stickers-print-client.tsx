@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import type { OrderStickerData, OrderStickerConfig } from "@/types/order-sticker";
-import { DEFAULT_80X100_CONFIG } from "@/types/order-sticker";
+import { DEFAULT_75X100_CONFIG } from "@/types/order-sticker";
 import { OrderStickerThermalCard } from "@/components/orders/order-sticker-thermal-card";
 import { loadOrderStickerConfig } from "@/lib/order-sticker-config";
 import { Printer, RefreshCw, X } from "lucide-react";
@@ -54,7 +54,7 @@ export function OrderStickersPrintClient({ orderIds }: OrderStickersPrintClientP
     return (
       <div className="min-h-screen bg-zinc-100 flex flex-col items-center justify-center p-6 text-center">
         <RefreshCw className="w-8 h-8 text-amber-600 animate-spin mb-3" />
-        <h2 className="text-base font-bold text-zinc-900">Preparing 80×100mm Order Stickers...</h2>
+        <h2 className="text-base font-bold text-zinc-900">Preparing 75×100mm Order Stickers...</h2>
         <p className="text-xs text-zinc-600 mt-1">Validating products and verified COD amounts</p>
       </div>
     );
@@ -79,10 +79,10 @@ export function OrderStickersPrintClient({ orderIds }: OrderStickersPrintClientP
 
   return (
     <div className="bg-zinc-200 min-h-screen text-black print:bg-white flex flex-col items-center py-8 print:py-0">
-      {/* Dynamic @page CSS rule for exact 80x100mm thermal label dimensions */}
+      {/* Dynamic @page CSS rule for exact 75x100mm thermal label dimensions */}
       <style jsx global>{`
         @page {
-          size: 80mm 100mm;
+          size: 75mm 100mm;
           margin: 0 !important;
         }
         @media print {
@@ -90,7 +90,7 @@ export function OrderStickersPrintClient({ orderIds }: OrderStickersPrintClientP
             margin: 0 !important;
             padding: 0 !important;
             background: #ffffff !important;
-            width: 80mm !important;
+            width: 75mm !important;
             height: 100mm !important;
           }
           .no-print {
@@ -102,7 +102,7 @@ export function OrderStickersPrintClient({ orderIds }: OrderStickersPrintClientP
       {/* Screen Controls Toolbar (hidden during print) */}
       <div className="no-print mb-6 flex flex-wrap items-center justify-center gap-3 bg-white px-5 py-3 rounded-2xl shadow-md border border-zinc-300">
         <div className="text-xs font-semibold text-zinc-800 mr-2">
-          {validStickers.length} Order Sticker(s) Ready • Gprinter GP-3120TU (80×100mm)
+          {validStickers.length} Order Sticker(s) Ready • Gprinter GP-3120TU (75×100mm)
         </div>
         <button
           onClick={() => window.print()}
@@ -138,4 +138,3 @@ export function OrderStickersPrintClient({ orderIds }: OrderStickersPrintClientP
     </div>
   );
 }
-

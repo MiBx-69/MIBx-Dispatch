@@ -14,6 +14,11 @@ export function generateOrderStickersHtml(
   config: OrderStickerConfig
 ): string {
   const storeName = (config.storeNameOverride?.trim() || stickers[0]?.storeName || "UNIVERSES").toUpperCase();
+  const topOffset = config.topOffsetMm || 0;
+  const leftOffset = config.leftOffsetMm || 0;
+  const transformStyle = topOffset !== 0 || leftOffset !== 0
+    ? `transform: translate(${leftOffset}mm, ${topOffset}mm);`
+    : "";
 
   const stickersHtml = stickers
     .map((stk, index) => {
@@ -43,7 +48,7 @@ export function generateOrderStickersHtml(
 
       return `
       <div class="order-sticker-page ${index === stickers.length - 1 ? "is-last" : ""}">
-        <div class="sticker-inner">
+        <div class="sticker-inner" style="${transformStyle}">
           <!-- SECTION A: Store Header -->
           <div class="sticker-header">
             <div class="header-top">
@@ -133,7 +138,7 @@ export function generateOrderStickersHtml(
             ${
               isPaid
                 ? `<div class="prepaid-box">
-                    <span>PREPAID ORDER — PAID IN FULL (NO COD)</span>
+                    <span>PAID – NO COD</span>
                    </div>`
                 : `<div class="cod-box">
                     <span class="cod-label">CASH TO COLLECT:</span>
@@ -151,10 +156,10 @@ export function generateOrderStickersHtml(
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>MiBx Dispatch - 80x100mm Order Stickers (${stickers.length} Orders)</title>
+  <title>MiBx Dispatch - 75x100mm Order Stickers (${stickers.length} Orders)</title>
   <style>
     @page {
-      size: 80mm 100mm;
+      size: 75mm 100mm;
       margin: 0 !important;
     }
     * {
@@ -168,11 +173,11 @@ export function generateOrderStickersHtml(
       background: #ffffff;
       color: #000000;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      width: 80mm;
+      width: 75mm;
       height: 100mm;
     }
     .order-sticker-page {
-      width: 80mm;
+      width: 75mm;
       height: 100mm;
       max-height: 100mm;
       page-break-after: always;
@@ -193,7 +198,7 @@ export function generateOrderStickersHtml(
     .sticker-inner {
       width: 100%;
       height: 100%;
-      padding: 2.5mm 2.5mm;
+      padding: 2.5mm 1.5mm;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -205,7 +210,7 @@ export function generateOrderStickersHtml(
     .sticker-header {
       width: 100%;
       border-bottom: 1.5px solid #000000;
-      padding-bottom: 1mm;
+      padding-bottom: 0.8mm;
       flex-shrink: 0;
     }
     .header-top {
@@ -218,17 +223,21 @@ export function generateOrderStickersHtml(
       font-weight: 900;
       letter-spacing: 0.5px;
       text-transform: uppercase;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .order-number {
       font-size: 15px;
       font-weight: 900;
       letter-spacing: -0.2px;
+      flex-shrink: 0;
     }
     .header-meta {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 8px;
+      font-size: 7.5px;
       color: #333333;
       margin-top: 1px;
     }
@@ -242,9 +251,9 @@ export function generateOrderStickersHtml(
     .customer-section {
       width: 100%;
       border-bottom: 1px solid #000000;
-      padding: 1mm 0;
+      padding: 0.8mm 0;
       flex-shrink: 0;
-      font-size: 9px;
+      font-size: 8.5px;
       line-height: 1.2;
     }
     .customer-row {
@@ -265,23 +274,24 @@ export function generateOrderStickersHtml(
       text-overflow: ellipsis;
     }
     .customer-phone {
-      font-size: 10px;
+      font-size: 9.5px;
       font-weight: 900;
       letter-spacing: -0.2px;
       white-space: nowrap;
+      flex-shrink: 0;
     }
     .alt-phone-row {
       display: flex;
       justify-content: flex-end;
       gap: 3px;
-      font-size: 8.5px;
+      font-size: 8px;
       font-weight: 800;
       color: #222222;
     }
     .address-row {
       display: flex;
       gap: 3px;
-      font-size: 8.5px;
+      font-size: 8px;
       margin-top: 1px;
       line-height: 1.15;
     }
@@ -293,10 +303,10 @@ export function generateOrderStickersHtml(
       -webkit-box-orient: vertical;
     }
     .area-row {
-      font-size: 8px;
+      font-size: 7.5px;
       font-weight: 700;
       color: #444444;
-      padding-left: 12mm;
+      padding-left: 10mm;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -314,7 +324,7 @@ export function generateOrderStickersHtml(
       width: 100%;
       flex: 1;
       overflow: hidden;
-      padding: 1mm 0;
+      padding: 0.8mm 0;
       display: flex;
       flex-direction: column;
       justify-content: center;
@@ -327,28 +337,28 @@ export function generateOrderStickersHtml(
       text-transform: uppercase;
       letter-spacing: 0.3px;
       border-bottom: 0.75px solid #cccccc;
-      padding-bottom: 0.5mm;
-      margin-bottom: 0.5mm;
+      padding-bottom: 0.4mm;
+      margin-bottom: 0.4mm;
     }
-    .col-desc { width: 62%; }
+    .col-desc { width: 60%; }
     .col-qty { width: 12%; text-align: center; }
-    .col-price { width: 26%; text-align: right; }
+    .col-price { width: 28%; text-align: right; }
 
     .items-list {
       display: flex;
       flex-direction: column;
-      gap: 1mm;
+      gap: 0.8mm;
       overflow: hidden;
     }
     .item-row {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      font-size: 8.5px;
+      font-size: 8px;
       line-height: 1.15;
     }
     .item-desc {
-      width: 62%;
+      width: 60%;
       padding-right: 1mm;
     }
     .item-title {
@@ -358,7 +368,7 @@ export function generateOrderStickersHtml(
       white-space: nowrap;
     }
     .item-variant {
-      font-size: 7.5px;
+      font-size: 7px;
       color: #444444;
       display: flex;
       gap: 3px;
@@ -369,7 +379,7 @@ export function generateOrderStickersHtml(
     }
     .sku {
       color: #666666;
-      font-size: 7px;
+      font-size: 6.5px;
     }
     .item-qty {
       width: 12%;
@@ -377,7 +387,7 @@ export function generateOrderStickersHtml(
       font-weight: 800;
     }
     .item-price {
-      width: 26%;
+      width: 28%;
       text-align: right;
       font-weight: 900;
     }
@@ -386,8 +396,8 @@ export function generateOrderStickersHtml(
     .financials-section {
       width: 100%;
       border-top: 1px solid #000000;
-      padding-top: 0.8mm;
-      font-size: 8.5px;
+      padding-top: 0.6mm;
+      font-size: 8px;
       line-height: 1.2;
       flex-shrink: 0;
     }
@@ -405,11 +415,11 @@ export function generateOrderStickersHtml(
       font-weight: 900;
       color: #000000;
       border-top: 0.5px dashed #666666;
-      padding-top: 0.5mm;
-      margin-top: 0.5mm;
+      padding-top: 0.4mm;
+      margin-top: 0.4mm;
     }
     .advance-row {
-      font-size: 8px;
+      font-size: 7.5px;
       font-weight: 700;
     }
 
@@ -417,13 +427,13 @@ export function generateOrderStickersHtml(
     .payment-highlight {
       width: 100%;
       border-top: 1.5px solid #000000;
-      padding-top: 1mm;
-      margin-top: 0.5mm;
+      padding-top: 0.8mm;
+      margin-top: 0.4mm;
       flex-shrink: 0;
     }
     .prepaid-box {
       border: 1.5px solid #000000;
-      padding: 1.5mm 2mm;
+      padding: 1.2mm 1.5mm;
       text-align: center;
       font-size: 11px;
       font-weight: 900;
@@ -432,19 +442,19 @@ export function generateOrderStickersHtml(
     }
     .cod-box {
       border: 1.5px solid #000000;
-      padding: 1mm 2mm;
+      padding: 0.8mm 1.5mm;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
     .cod-label {
-      font-size: 10px;
+      font-size: 9.5px;
       font-weight: 900;
       text-transform: uppercase;
       letter-spacing: 0.3px;
     }
     .cod-amount {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 900;
       letter-spacing: -0.3px;
     }
@@ -472,7 +482,7 @@ export function generateOrderStickersHtml(
 }
 
 /**
- * Generates an 80x100mm alignment and gap calibration sticker for Gprinter GP-3120TU
+ * Generates an exact 75x100mm alignment and gap calibration sticker for Gprinter GP-3120TU
  */
 export function generateTestCalibrationStickerHtml(config: OrderStickerConfig): string {
   const storeName = (config.storeNameOverride?.trim() || "UNIVERSES").toUpperCase();
@@ -481,28 +491,28 @@ export function generateTestCalibrationStickerHtml(config: OrderStickerConfig): 
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>GP-3120TU 80x100mm Calibration Test</title>
+  <title>GP-3120TU 75x100mm Calibration Test</title>
   <style>
     @page {
-      size: 80mm 100mm;
+      size: 75mm 100mm;
       margin: 0 !important;
     }
     * { box-sizing: border-box; }
     html, body {
       margin: 0;
       padding: 0;
-      width: 80mm;
+      width: 75mm;
       height: 100mm;
       background: #ffffff;
       color: #000000;
       font-family: monospace;
     }
     .calib-page {
-      width: 80mm;
+      width: 75mm;
       height: 100mm;
       border: 1.5px solid #000000;
       margin: 0;
-      padding: 3mm;
+      padding: 2.5mm 1.5mm;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -521,24 +531,25 @@ export function generateTestCalibrationStickerHtml(config: OrderStickerConfig): 
 <body>
   <div class="calib-page">
     <div class="c-tl">+ 0,0</div>
-    <div class="c-tr">+ 80,0</div>
+    <div class="c-tr">+ 75,0</div>
     <div class="c-bl">+ 0,100</div>
-    <div class="c-br">+ 80,100</div>
+    <div class="c-br">+ 75,100</div>
 
     <div style="margin-top: 4mm;">
-      <h2 style="margin:0; font-size: 14px; font-weight: 900;">${escapeHtml(storeName)}</h2>
-      <p style="margin:2px 0 0 0; font-size: 9px;">GP-3120TU 80x100mm TEST PRINT</p>
+      <h2 style="margin:0; font-size: 13px; font-weight: 900;">${escapeHtml(storeName)}</h2>
+      <p style="margin:2px 0 0 0; font-size: 8.5px; font-weight: bold;">GP-3120TU 75x100mm TEST PRINT</p>
     </div>
 
-    <div style="border: 1px dashed #000; padding: 4mm; width: 90%;">
-      <p style="margin: 0; font-size: 10px; font-weight: bold;">RULER BOUNDARY</p>
-      <p style="margin: 3px 0; font-size: 8px;">WIDTH: 80mm | HEIGHT: 100mm</p>
-      <p style="margin: 0; font-size: 8px;">Resolution: 203 DPI (640x800 dots)</p>
+    <div style="border: 1px dashed #000; padding: 3mm; width: 92%;">
+      <p style="margin: 0; font-size: 9.5px; font-weight: bold;">RULER BOUNDARY</p>
+      <p style="margin: 2px 0; font-size: 8px;">WIDTH: 75mm | HEIGHT: 100mm</p>
+      <p style="margin: 0; font-size: 7.5px;">Resolution: 203 DPI (~600x800 dots)</p>
+      <p style="margin: 2px 0 0 0; font-size: 7px; color: #333;">Printable Width: ~72mm (Safe Margins)</p>
     </div>
 
-    <div style="margin-bottom: 4mm;">
-      <p style="margin: 0; font-size: 9px; font-weight: bold;">[GAP SENSOR CALIBRATION OK]</p>
-      <p style="margin: 2px 0 0 0; font-size: 7.5px;">If borders are cut off, adjust Windows Driver Margins</p>
+    <div style="margin-bottom: 3mm;">
+      <p style="margin: 0; font-size: 8.5px; font-weight: bold;">[GAP SENSOR CALIBRATION OK]</p>
+      <p style="margin: 2px 0 0 0; font-size: 7px;">If borders are cut off, adjust Driver Margins or Offsets</p>
     </div>
   </div>
 </body>
@@ -547,7 +558,7 @@ export function generateTestCalibrationStickerHtml(config: OrderStickerConfig): 
 
 /**
  * Triggers printing using a hidden iframe to ensure seamless browser-based printing
- * directly into the installed Windows printer driver (Gprinter GP-3120TU 80x100mm).
+ * directly into the installed Windows printer driver (Gprinter GP-3120TU 75x100mm).
  */
 export async function printOrderStickersViaIframe(
   stickers: OrderStickerData[],
@@ -601,7 +612,7 @@ export async function printOrderStickersViaIframe(
 }
 
 /**
- * Prints test calibration sticker
+ * Prints test calibration sticker (75x100mm)
  */
 export async function printTestCalibrationSticker(config: OrderStickerConfig): Promise<boolean> {
   if (typeof window === "undefined") return false;
@@ -638,4 +649,3 @@ export async function printTestCalibrationSticker(config: OrderStickerConfig): P
     }
   });
 }
-

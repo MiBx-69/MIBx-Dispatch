@@ -53,29 +53,35 @@ export interface OrderStickerData {
 
 export interface OrderStickerConfig {
   presetName: string;
-  width: number; // 80mm
-  height: number; // 100mm
+  width: number; // 75mm (2.9528 in)
+  height: number; // 100mm (3.937 in)
   unit: "mm" | "in";
   orientation: "portrait";
   darkness: number; // 8
-  marginOffsetMm: number; // 0mm default
+  marginOffsetMm: number; // default 0mm
+  topOffsetMm: number; // top offset alignment adjustment
+  leftOffsetMm: number; // left offset alignment adjustment
   storeNameOverride?: string;
   showSku: boolean;
   showAltPhone: boolean;
   customDiscountReasons: Record<string, string>; // orderId -> custom reason
 }
 
-export const DEFAULT_80X100_CONFIG: OrderStickerConfig = {
-  presetName: "Gprinter GP-3120TU 80×100mm Sticker",
-  width: 80,
+export const DEFAULT_75X100_CONFIG: OrderStickerConfig = {
+  presetName: "Gprinter GP-3120TU 75×100mm Sticker",
+  width: 75,
   height: 100,
   unit: "mm",
   orientation: "portrait",
   darkness: 8,
   marginOffsetMm: 0,
+  topOffsetMm: 0,
+  leftOffsetMm: 0,
   storeNameOverride: "UNIVERSES",
   showSku: true,
   showAltPhone: true,
   customDiscountReasons: {},
 };
 
+// Alias for compatibility
+export const DEFAULT_80X100_CONFIG = DEFAULT_75X100_CONFIG;

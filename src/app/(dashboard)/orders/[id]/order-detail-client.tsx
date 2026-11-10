@@ -126,10 +126,10 @@ export function OrderDetailClient({
             type="button"
             onClick={() => setIsOrderStickerModalOpen(true)}
             className="px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
-            title="Print detailed 80×100mm parcel sticker using Gprinter GP-3120TU"
+            title="Print detailed 75×100mm parcel sticker using Gprinter GP-3120TU"
           >
             <Tag className="w-3.5 h-3.5 text-amber-400" />
-            Order Sticker (80×100mm)
+            Order Sticker (75×100mm)
           </button>
 
           <button

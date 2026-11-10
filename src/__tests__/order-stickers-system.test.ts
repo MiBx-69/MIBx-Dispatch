@@ -10,12 +10,13 @@ import {
   resetOrderStickerConfig,
 } from "@/lib/order-sticker-config";
 import {
+  DEFAULT_75X100_CONFIG,
   DEFAULT_80X100_CONFIG,
   type OrderStickerData,
   type OrderStickerConfig,
 } from "@/types/order-sticker";
 
-describe("MiBx Dispatch — Advanced 80×100mm Order Sticker Printing System", () => {
+describe("MiBx Dispatch — Advanced 75×100mm Order Sticker Printing System", () => {
   const sampleStickers: OrderStickerData[] = [
     // 1. Single product order (Full COD)
     {
@@ -103,8 +104,8 @@ describe("MiBx Dispatch — Advanced 80×100mm Order Sticker Printing System", (
         shippingCharge: 120,
         additionalCharges: 0,
         totalOrderValue: 5720,
-        advancePaid: 1000, // Partial advance payment!
-        codAmount: 4720, // COD = Total (5720) - Advance (1000) = 4720
+        advancePaid: 1000, // 1000 Advance Paid
+        codAmount: 4720, // 5720 - 1000 = 4720 COD
         isPrepaid: false,
         currency: "৳",
       },
@@ -113,7 +114,7 @@ describe("MiBx Dispatch — Advanced 80×100mm Order Sticker Printing System", (
       error: null,
     },
 
-    // 3. Fully Prepaid Order
+    // 3. Fully Prepaid order (bKash/card)
     {
       orderId: "ord-3",
       shopifyOrderId: 1003,
@@ -122,11 +123,11 @@ describe("MiBx Dispatch — Advanced 80×100mm Order Sticker Printing System", (
       orderDate: "10 Nov 2026",
       orderTime: "05:00 PM",
       rawCreatedAt: "2026-11-10T17:00:00Z",
-      customerName: "Samira Ahmed",
+      customerName: "Samira Khan",
       customerPhone: "No Phone",
       altPhone: null,
-      fullAddress: "Plot 8, Section 7, Uttara Model Town",
-      areaCityDistrict: "Dhaka, Uttara",
+      fullAddress: "House 22, Road 11, Dhanmondi",
+      areaCityDistrict: "Dhaka, Dhanmondi",
       items: [
         {
           id: "it-4",
@@ -146,7 +147,7 @@ describe("MiBx Dispatch — Advanced 80×100mm Order Sticker Printing System", (
         additionalCharges: 0,
         totalOrderValue: 3500,
         advancePaid: 3500,
-        codAmount: 0, // 0 COD
+        codAmount: 0,
         isPrepaid: true, // PREPAID!
         currency: "৳",
       },
@@ -156,25 +157,27 @@ describe("MiBx Dispatch — Advanced 80×100mm Order Sticker Printing System", (
     },
   ];
 
-  describe("Printer Dimension Requirements (80mm x 100mm @ 203 DPI)", () => {
-    it("has exact 80mm width and 100mm height locked in default configuration", () => {
-      expect(DEFAULT_80X100_CONFIG.width).toBe(80);
-      expect(DEFAULT_80X100_CONFIG.height).toBe(100);
-      expect(DEFAULT_80X100_CONFIG.unit).toBe("mm");
-      expect(DEFAULT_80X100_CONFIG.orientation).toBe("portrait");
-      expect(DEFAULT_80X100_CONFIG.darkness).toBe(8);
-      expect(DEFAULT_80X100_CONFIG.storeNameOverride).toBe("UNIVERSES");
+  describe("Printer Dimension Requirements (75mm x 100mm @ 203 DPI)", () => {
+    it("has exact 75mm width and 100mm height locked in default configuration", () => {
+      expect(DEFAULT_75X100_CONFIG.width).toBe(75);
+      expect(DEFAULT_75X100_CONFIG.height).toBe(100);
+      expect(DEFAULT_75X100_CONFIG.unit).toBe("mm");
+      expect(DEFAULT_75X100_CONFIG.orientation).toBe("portrait");
+      expect(DEFAULT_75X100_CONFIG.darkness).toBe(8);
+      expect(DEFAULT_75X100_CONFIG.storeNameOverride).toBe("UNIVERSES");
+      expect(DEFAULT_75X100_CONFIG.topOffsetMm).toBe(0);
+      expect(DEFAULT_75X100_CONFIG.leftOffsetMm).toBe(0);
     });
 
-    it("generates exact CSS @page rule of 80mm 100mm with zero margin", () => {
-      const html = generateOrderStickersHtml(sampleStickers, DEFAULT_80X100_CONFIG);
+    it("generates exact CSS @page rule of 75mm 100mm with zero margin", () => {
+      const html = generateOrderStickersHtml(sampleStickers, DEFAULT_75X100_CONFIG);
       expect(html).toContain("@page {");
-      expect(html).toContain("size: 80mm 100mm;");
+      expect(html).toContain("size: 75mm 100mm;");
       expect(html).toContain("margin: 0 !important;");
     });
 
     it("enforces independent page breaks per sticker with last page break: auto", () => {
-      const html = generateOrderStickersHtml(sampleStickers, DEFAULT_80X100_CONFIG);
+      const html = generateOrderStickersHtml(sampleStickers, DEFAULT_75X100_CONFIG);
       expect(html).toContain("page-break-after: always;");
       expect(html).toContain("break-after: page;");
       expect(html).toContain(".order-sticker-page.is-last");
@@ -184,7 +187,7 @@ describe("MiBx Dispatch — Advanced 80×100mm Order Sticker Printing System", (
 
   describe("Section A & B: Store Header & Customer Information", () => {
     it("renders store name, order numbers, and formatted dates", () => {
-      const html = generateOrderStickersHtml(sampleStickers, DEFAULT_80X100_CONFIG);
+      const html = generateOrderStickersHtml(sampleStickers, DEFAULT_75X100_CONFIG);
       expect(html).toContain("UNIVERSES");
       expect(html).toContain("#2201");
       expect(html).toContain("#2202");
@@ -194,7 +197,7 @@ describe("MiBx Dispatch — Advanced 80×100mm Order Sticker Printing System", (
     });
 
     it("renders customer name, phone, alternative phone and full address", () => {
-      const html = generateOrderStickersHtml(sampleStickers, DEFAULT_80X100_CONFIG);
+      const html = generateOrderStickersHtml(sampleStickers, DEFAULT_75X100_CONFIG);
       expect(html).toContain("Dr. Afrin");
       expect(html).toContain("01712-345678");
       expect(html).toContain("01819-876543");
@@ -203,14 +206,14 @@ describe("MiBx Dispatch — Advanced 80×100mm Order Sticker Printing System", (
     });
 
     it("handles missing phone numbers gracefully without crashing", () => {
-      const html = generateOrderStickersHtml([sampleStickers[2]], DEFAULT_80X100_CONFIG);
+      const html = generateOrderStickersHtml([sampleStickers[2]], DEFAULT_75X100_CONFIG);
       expect(html).toContain("No Phone");
     });
   });
 
   describe("Section C: Complete Product Information (No Omissions)", () => {
     it("renders all products, variants, quantities, SKUs, and prices", () => {
-      const html = generateOrderStickersHtml([sampleStickers[1]], DEFAULT_80X100_CONFIG);
+      const html = generateOrderStickersHtml([sampleStickers[1]], DEFAULT_75X100_CONFIG);
       // Item 1
       expect(html).toContain("Heavyweight Boxy Hoodie");
       expect(html).toContain("Sage Green / L");
@@ -229,7 +232,7 @@ describe("MiBx Dispatch — Advanced 80×100mm Order Sticker Printing System", (
 
   describe("Section D, E, F: Financial Breakdown & Verified COD Formula", () => {
     it("verifies Full COD order calculation: COD = Total Order Value", () => {
-      const html = generateOrderStickersHtml([sampleStickers[0]], DEFAULT_80X100_CONFIG);
+      const html = generateOrderStickersHtml([sampleStickers[0]], DEFAULT_75X100_CONFIG);
       expect(html).toContain("Subtotal (1 item):");
       expect(html).toContain("৳1,500");
       expect(html).toContain("Delivery Charge:");
@@ -241,7 +244,7 @@ describe("MiBx Dispatch — Advanced 80×100mm Order Sticker Printing System", (
     });
 
     it("verifies Partial Advance Payment formula: COD = Total Payable - Amount Already Paid", () => {
-      const html = generateOrderStickersHtml([sampleStickers[1]], DEFAULT_80X100_CONFIG);
+      const html = generateOrderStickersHtml([sampleStickers[1]], DEFAULT_75X100_CONFIG);
       expect(html).toContain("Subtotal (2 items):");
       expect(html).toContain("৳6,200");
       expect(html).toContain("Discount [WINTER10]");
@@ -258,9 +261,9 @@ describe("MiBx Dispatch — Advanced 80×100mm Order Sticker Printing System", (
       expect(html).toContain("৳ 4,720");
     });
 
-    it("verifies Fully Prepaid order displays PREPAID ORDER — PAID IN FULL (NO COD)", () => {
-      const html = generateOrderStickersHtml([sampleStickers[2]], DEFAULT_80X100_CONFIG);
-      expect(html).toContain("PREPAID ORDER — PAID IN FULL (NO COD)");
+    it("verifies Fully Prepaid order displays PAID – NO COD", () => {
+      const html = generateOrderStickersHtml([sampleStickers[2]], DEFAULT_75X100_CONFIG);
+      expect(html).toContain("PAID – NO COD");
       expect(html).not.toContain("CASH TO COLLECT: ৳ 0");
     });
   });
@@ -289,17 +292,16 @@ describe("MiBx Dispatch — Advanced 80×100mm Order Sticker Printing System", (
   });
 
   describe("Alignment & Gap Sensor Calibration Test Print", () => {
-    it("generates 80x100mm calibration test sticker with boundary crosshairs", () => {
-      const calibHtml = generateTestCalibrationStickerHtml(DEFAULT_80X100_CONFIG);
-      expect(calibHtml).toContain("size: 80mm 100mm;");
+    it("generates 75x100mm calibration test sticker with boundary crosshairs", () => {
+      const calibHtml = generateTestCalibrationStickerHtml(DEFAULT_75X100_CONFIG);
+      expect(calibHtml).toContain("size: 75mm 100mm;");
       expect(calibHtml).toContain("+ 0,0");
-      expect(calibHtml).toContain("+ 80,0");
+      expect(calibHtml).toContain("+ 75,0");
       expect(calibHtml).toContain("+ 0,100");
-      expect(calibHtml).toContain("+ 80,100");
+      expect(calibHtml).toContain("+ 75,100");
       expect(calibHtml).toContain("RULER BOUNDARY");
-      expect(calibHtml).toContain("WIDTH: 80mm | HEIGHT: 100mm");
+      expect(calibHtml).toContain("WIDTH: 75mm | HEIGHT: 100mm");
       expect(calibHtml).toContain("203 DPI");
     });
   });
 });
-
