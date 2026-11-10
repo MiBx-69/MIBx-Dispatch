@@ -185,10 +185,6 @@ export function generateOrderStickersHtml(
   <meta charset="utf-8" />
   <title>MiBx Dispatch - 75x100mm Order Stickers (${stickers.length} Orders)</title>
   <style>
-    @page {
-      size: 75mm 100mm;
-      margin: 0 !important;
-    }
     * {
       box-sizing: border-box;
       -webkit-print-color-adjust: exact !important;
@@ -197,16 +193,17 @@ export function generateOrderStickersHtml(
     html, body {
       margin: 0;
       padding: 0;
-      background: #ffffff;
+      background: #f4f4f5;
       color: #000000;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      width: 75mm;
-      height: 100mm;
     }
     .order-sticker-page {
       width: 75mm;
       height: 100mm;
+      min-width: 75mm;
+      min-height: 100mm;
       max-height: 100mm;
+      flex-shrink: 0;
       page-break-after: always;
       break-after: page;
       page-break-inside: avoid;
@@ -225,6 +222,7 @@ export function generateOrderStickersHtml(
     .sticker-inner {
       width: 100%;
       height: 100%;
+      min-height: 100%;
       padding: ${padTop}mm ${padRight}mm ${padBottom}mm ${padLeft}mm;
       display: flex;
       flex-direction: column;
@@ -554,17 +552,66 @@ export function generateOrderStickersHtml(
     }
 
     @media screen {
+      html, body {
+        width: 100% !important;
+        min-height: 100% !important;
+        background: #e4e4e7 !important;
+      }
       body {
-        background: #f4f4f5;
-        padding: 20px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 20px;
+        padding: 24px 10px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        gap: 24px !important;
+        overflow-y: auto !important;
       }
       .order-sticker-page {
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        border: 1px solid #d4d4d8;
+        width: 75mm !important;
+        height: 100mm !important;
+        min-width: 75mm !important;
+        min-height: 100mm !important;
+        max-height: 100mm !important;
+        flex-shrink: 0 !important;
+        background: #ffffff !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+        border: 1px solid #a1a1aa !important;
+        border-radius: 3px !important;
+      }
+    }
+
+    @media print {
+      @page {
+        size: 75mm 100mm;
+        margin: 0 !important;
+      }
+      html, body {
+        width: 75mm !important;
+        height: 100mm !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+      }
+      .order-sticker-page {
+        width: 75mm !important;
+        height: 100mm !important;
+        min-height: 100mm !important;
+        max-height: 100mm !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        overflow: hidden !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-sizing: border-box !important;
+        border: none !important;
+        box-shadow: none !important;
+      }
+      .order-sticker-page.is-last {
+        page-break-after: auto !important;
+        break-after: auto !important;
       }
     }
   </style>

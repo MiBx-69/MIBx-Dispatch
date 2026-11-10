@@ -156,8 +156,12 @@ export function OrderStickersPrintClient({
         {validStickers.map((sticker, index) => (
           <div
             key={sticker.orderId}
-            className="box-border print:m-0"
+            className="box-border print:m-0 shrink-0"
             style={{
+              width: "75mm",
+              height: "100mm",
+              minWidth: "75mm",
+              minHeight: "100mm",
               pageBreakAfter: index < validStickers.length - 1 ? "always" : "auto",
               breakAfter: index < validStickers.length - 1 ? "page" : "auto",
             }}
