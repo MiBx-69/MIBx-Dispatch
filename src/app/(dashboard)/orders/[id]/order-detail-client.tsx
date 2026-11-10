@@ -12,6 +12,7 @@ import {
   MapPin,
   Package,
   ExternalLink,
+  Printer,
 } from "lucide-react";
 import {
   StatusBadge,
@@ -23,6 +24,7 @@ import { DispatchModal } from "@/components/orders/dispatch-modal";
 import { OrderReturnSection } from "@/components/orders/order-return-section";
 import { ParcelStatusTimeline } from "@/components/orders/parcel-status-timeline";
 import { formatPathaoTrackingUrl } from "@/lib/pathao/client";
+import { PrintDueSlipsModal } from "@/components/orders/print-due-slips-modal";
 
 interface OrderDetailClientProps {
   order: any;
@@ -36,6 +38,7 @@ export function OrderDetailClient({
   const router = useRouter();
   const [order, setOrder] = useState(initialOrder);
   const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
+  const [isDueSlipModalOpen, setIsDueSlipModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const activeDispatch =
@@ -116,6 +119,16 @@ export function OrderDetailClient({
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsDueSlipModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+            title="Print Customer Due Slip using Gprinter GP-3120TU"
+          >
+            <Printer className="w-3.5 h-3.5 text-indigo-400" />
+            Due Slip
+          </button>
+
           <button
             type="button"
             onClick={() => setIsDispatchModalOpen(true)}
@@ -288,6 +301,14 @@ export function OrderDetailClient({
             setIsDispatchModalOpen(false);
             router.refresh();
           }}
+        />
+      )}
+
+      {isDueSlipModalOpen && (
+        <PrintDueSlipsModal
+          isOpen={isDueSlipModalOpen}
+          onClose={() => setIsDueSlipModalOpen(false)}
+          orderIds={[order.id]}
         />
       )}
     </div>
