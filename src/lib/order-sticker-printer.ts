@@ -17,11 +17,11 @@ export function generateOrderStickersHtml(
   const topOffset = config.topOffsetMm || 0;
   const leftOffset = config.leftOffsetMm || 0;
 
-  // Safe alignment padding: ~2.2mm horizontal (leaves ~70.6mm printable width), ~2.0mm vertical
-  const padTop = Math.max(0.5, 2.0 + topOffset);
-  const padBottom = Math.max(0.5, 2.0 - topOffset);
-  const padLeft = Math.max(0.5, 2.2 + leftOffset);
-  const padRight = Math.max(0.5, 2.2 - leftOffset);
+  // Balanced centered margins: 3.0mm horizontal (69.0mm printable width), 2.5mm vertical (95.0mm height)
+  const padTop = Math.max(0.5, 2.5 + topOffset);
+  const padBottom = Math.max(0.5, 2.5 - topOffset);
+  const padLeft = Math.max(0.5, 3.0 + leftOffset);
+  const padRight = Math.max(0.5, 3.0 - leftOffset);
 
   const stickersHtml = stickers
     .map((stk, index) => {
@@ -51,18 +51,21 @@ export function generateOrderStickersHtml(
               <span class="p-title">${escapeHtml(it.title)}</span>
               <span class="p-price">${stk.financials.currency}${Number(it.lineTotal).toLocaleString()}</span>
             </div>
-            <!-- Line 2: Size / Variant -->
-            ${
-              it.variantTitle || it.size
-                ? `<div class="p-line-2">
-                    <span class="p-variant">${escapeHtml(it.variantTitle || it.size || "")}</span>
-                   </div>`
-                : ""
-            }
-            <!-- Line 3: SKU & Quantity -->
-            <div class="p-line-3">
-              <span class="p-sku">${config.showSku && it.sku ? `[SKU: ${escapeHtml(it.sku)}]` : ""}</span>
-              <span class="p-qty">QTY: ${it.quantity} (${it.quantity}x)</span>
+            <!-- Line 2: Size / Variant, SKU & Quantity -->
+            <div class="p-line-2">
+              <div class="p-meta-left">
+                ${
+                  it.variantTitle || it.size
+                    ? `<span class="p-variant">${escapeHtml(it.variantTitle || it.size || "")}</span>`
+                    : ""
+                }
+                ${
+                  config.showSku && it.sku
+                    ? `<span class="p-sku">[SKU: ${escapeHtml(it.sku)}]</span>`
+                    : ""
+                }
+              </div>
+              <div class="p-qty">QTY: ${it.quantity} (${it.quantity}x)</div>
             </div>
           </div>
         `)
@@ -76,17 +79,17 @@ export function generateOrderStickersHtml(
             <div class="header-top">
               <div class="header-brand">
                 <span class="store-name">${escapeHtml(storeName)}</span>
-                <span class="parcel-badge">PARCEL STICKER</span>
+                <span class="parcel-badge">DISPATCH</span>
               </div>
               <span class="order-number">${escapeHtml(stk.orderNumber)}</span>
             </div>
             <div class="header-meta">
               <span>Date: ${escapeHtml(stk.orderDate)} ${stk.orderTime ? `• ${escapeHtml(stk.orderTime)}` : ""}</span>
-              <span class="badge">GP-3120TU • 203 DPI</span>
+              <span class="badge">GP-3120TU • 75×100mm</span>
             </div>
           </div>
 
-          <!-- SECTION B: Customer Information (Prominent & Extra-Bold) -->
+          <!-- SECTION B: Customer Information (Clean & Professional) -->
           <div class="customer-section">
             <div class="customer-row">
               <div class="customer-name-wrap">
@@ -114,14 +117,18 @@ export function generateOrderStickersHtml(
             }
           </div>
 
-          <!-- SECTION C: Product Items Table (Structured Multi-Line Grid) -->
+          <!-- SECTION C: Product Items Table (Adaptive Layout) -->
           <div class="products-section">
+            <div class="table-header">
+              <span>Items &amp; Details</span>
+              <span>Qty • Price</span>
+            </div>
             <div class="items-list">
               ${itemsHtml}
             </div>
           </div>
 
-          <!-- SECTION D: Financial Breakdown & Discount (Dedicated Area) -->
+          <!-- SECTION D: Financial Breakdown & Discount (Clean & Aligned) -->
           <div class="financials-section">
             <div class="fin-row">
               <span>Subtotal (${stk.items.length} ${stk.items.length === 1 ? "item" : "items"}):</span>
@@ -153,7 +160,7 @@ export function generateOrderStickersHtml(
             </div>
           </div>
 
-          <!-- SECTION E: Prominent COD Highlight (24-28px Bold COD / PAID – NO COD) -->
+          <!-- SECTION E: Prominent Total Due / COD Highlight -->
           <div class="payment-highlight">
             ${
               isPaid
@@ -229,42 +236,43 @@ export function generateOrderStickersHtml(
     /* HEADER */
     .sticker-header {
       width: 100%;
-      border-bottom: 2px solid #000000;
+      border-bottom: 1px solid #000000;
       padding-bottom: 0.8mm;
       flex-shrink: 0;
     }
     .header-top {
       display: flex;
       justify-content: space-between;
-      align-items: baseline;
+      align-items: center;
     }
     .header-brand {
       display: flex;
-      align-items: baseline;
-      gap: 2mm;
+      align-items: center;
+      gap: 1.5mm;
       overflow: hidden;
     }
     .store-name {
-      font-size: 16px;
-      font-weight: 900;
+      font-size: 14px;
+      font-weight: 700;
       letter-spacing: 0.5px;
       text-transform: uppercase;
       line-height: 1;
     }
     .parcel-badge {
-      font-size: 8.5px;
-      font-weight: 900;
+      font-size: 8px;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.5px;
       border: 1px solid #000000;
-      padding: 0.2mm 1mm;
+      padding: 0.2mm 0.8mm;
       line-height: 1;
       flex-shrink: 0;
     }
     .order-number {
-      font-size: 18px;
-      font-weight: 900;
-      letter-spacing: -0.3px;
+      font-size: 15px;
+      font-weight: 700;
+      font-family: monospace;
+      letter-spacing: -0.2px;
       flex-shrink: 0;
       line-height: 1;
     }
@@ -272,24 +280,24 @@ export function generateOrderStickersHtml(
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 8px;
-      font-weight: 700;
-      color: #000000;
-      margin-top: 1mm;
+      font-size: 7.5px;
+      font-weight: 600;
+      color: #222222;
+      margin-top: 0.8mm;
     }
     .badge {
-      font-weight: 800;
+      font-weight: 600;
       text-transform: uppercase;
-      font-size: 8px;
+      font-size: 7.5px;
     }
 
     /* CUSTOMER */
     .customer-section {
       width: 100%;
-      border-bottom: 2px solid #000000;
-      padding: 1mm 0;
+      border-bottom: 1px solid #000000;
+      padding: 0.8mm 0;
       flex-shrink: 0;
-      font-size: 10px;
+      font-size: 9px;
       line-height: 1.2;
     }
     .customer-row {
@@ -299,18 +307,18 @@ export function generateOrderStickersHtml(
     }
     .customer-name-wrap {
       display: flex;
-      gap: 1.5mm;
+      gap: 1mm;
       overflow: hidden;
     }
     .customer-name {
-      font-size: 13.5px;
-      font-weight: 900;
+      font-size: 12px;
+      font-weight: 700;
       color: #000000;
       line-height: 1.15;
     }
     .customer-phone {
-      font-size: 14px;
-      font-weight: 900;
+      font-size: 12.5px;
+      font-weight: 700;
       letter-spacing: -0.2px;
       white-space: nowrap;
       flex-shrink: 0;
@@ -319,36 +327,36 @@ export function generateOrderStickersHtml(
     .alt-phone-row {
       display: flex;
       justify-content: flex-end;
-      gap: 1.5mm;
-      font-size: 9.5px;
-      font-weight: 900;
-      color: #000000;
-      margin-top: 0.3mm;
+      gap: 1mm;
+      font-size: 8.5px;
+      font-weight: 600;
+      color: #222222;
+      margin-top: 0.2mm;
     }
     .address-row {
       display: flex;
-      gap: 1.5mm;
-      font-size: 10px;
-      margin-top: 0.6mm;
+      gap: 1mm;
+      font-size: 9px;
+      margin-top: 0.4mm;
       line-height: 1.25;
     }
     .address-val {
-      font-weight: 700;
+      font-weight: 500;
       color: #000000;
       word-break: break-word;
     }
     .area-row {
-      font-size: 9.5px;
-      font-weight: 900;
-      color: #000000;
-      padding-left: 7mm;
-      margin-top: 0.3mm;
+      font-size: 8.5px;
+      font-weight: 600;
+      color: #333333;
+      padding-left: 5.5mm;
+      margin-top: 0.2mm;
     }
     .label {
-      font-size: 9.5px;
+      font-size: 8.5px;
       text-transform: uppercase;
-      font-weight: 900;
-      color: #000000;
+      font-weight: 700;
+      color: #444444;
       flex-shrink: 0;
     }
 
@@ -357,10 +365,22 @@ export function generateOrderStickersHtml(
       width: 100%;
       flex: 1;
       overflow: hidden;
-      padding: 0.8mm 0;
+      padding: 0.6mm 0;
       display: flex;
       flex-direction: column;
       justify-content: center;
+    }
+    .table-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 7.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      color: #555555;
+      border-bottom: 0.5px solid #888888;
+      padding-bottom: 0.3mm;
+      margin-bottom: 0.3mm;
     }
     .items-list {
       display: flex;
@@ -373,89 +393,93 @@ export function generateOrderStickersHtml(
       flex-direction: column;
     }
     .product-item.has-divider {
-      border-top: 1px solid rgba(0, 0, 0, 0.4);
-      margin-top: 0.5mm;
-      padding-top: 0.5mm;
+      border-top: 0.5px solid rgba(0, 0, 0, 0.2);
+      margin-top: 0.4mm;
+      padding-top: 0.4mm;
     }
-    .p-row-lg { padding: 1.5mm 0; }
-    .p-row-md { padding: 1mm 0; }
-    .p-row-sm { padding: 0.6mm 0; }
-    .p-row-xs { padding: 0.3mm 0; }
+    .p-row-lg { padding: 1mm 0; }
+    .p-row-md { padding: 0.8mm 0; }
+    .p-row-sm { padding: 0.4mm 0; }
+    .p-row-xs { padding: 0.2mm 0; }
 
     .p-line-1 {
       display: flex;
       justify-content: space-between;
       align-items: baseline;
-      gap: 2mm;
+      gap: 1.5mm;
     }
     .p-title {
-      font-weight: 900;
+      font-weight: 700;
       color: #000000;
       line-height: 1.15;
       word-break: break-word;
       flex: 1;
     }
-    .p-row-lg .p-title { font-size: 14.5px; }
-    .p-row-md .p-title { font-size: 13px; }
-    .p-row-sm .p-title { font-size: 11.5px; }
-    .p-row-xs .p-title { font-size: 10px; }
+    .p-row-lg .p-title { font-size: 12.5px; }
+    .p-row-md .p-title { font-size: 11.5px; }
+    .p-row-sm .p-title { font-size: 10px; }
+    .p-row-xs .p-title { font-size: 9px; }
 
     .p-price {
-      font-weight: 900;
+      font-weight: 700;
       color: #000000;
       text-align: right;
       white-space: nowrap;
       flex-shrink: 0;
       line-height: 1;
+      padding-left: 1mm;
     }
-    .p-row-lg .p-price { font-size: 16.5px; }
-    .p-row-md .p-price { font-size: 15px; }
-    .p-row-sm .p-price { font-size: 13px; }
-    .p-row-xs .p-price { font-size: 11.5px; }
+    .p-row-lg .p-price { font-size: 13px; }
+    .p-row-md .p-price { font-size: 12px; }
+    .p-row-sm .p-price { font-size: 10.5px; }
+    .p-row-xs .p-price { font-size: 9.5px; }
 
     .p-line-2 {
-      margin-top: 0.3mm;
-      font-weight: 800;
-      color: #000000;
-      line-height: 1.15;
-    }
-    .p-row-lg .p-variant { font-size: 13px; }
-    .p-row-md .p-variant { font-size: 11.5px; }
-    .p-row-sm .p-variant { font-size: 10.5px; }
-    .p-row-xs .p-variant { font-size: 9.5px; }
-
-    .p-line-3 {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-top: 0.3mm;
-      font-weight: 900;
+      margin-top: 0.2mm;
+      font-size: 8.5px;
+      color: #444444;
+    }
+    .p-row-lg .p-line-2 { font-size: 10px; }
+    .p-row-md .p-line-2 { font-size: 9px; }
+    .p-row-sm .p-line-2 { font-size: 8px; }
+    .p-row-xs .p-line-2 { font-size: 7.5px; }
+
+    .p-meta-left {
+      display: flex;
+      align-items: center;
+      gap: 1.5mm;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+      padding-right: 1mm;
+    }
+    .p-variant {
+      font-weight: 600;
       color: #000000;
     }
     .p-sku {
       font-family: monospace;
-      font-weight: 800;
+      font-weight: 600;
+      color: #555555;
     }
-    .p-row-lg .p-sku { font-size: 12px; }
-    .p-row-md .p-sku { font-size: 11px; }
-    .p-row-sm .p-sku { font-size: 10px; }
-    .p-row-xs .p-sku { font-size: 9px; }
-
     .p-qty {
-      font-weight: 900;
+      font-weight: 700;
+      color: #000000;
       text-align: right;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
-    .p-row-lg .p-qty { font-size: 13px; }
-    .p-row-md .p-qty { font-size: 12px; }
-    .p-row-sm .p-qty { font-size: 11px; }
-    .p-row-xs .p-qty { font-size: 10px; }
 
     /* FINANCIALS */
     .financials-section {
       width: 100%;
-      border-top: 2px solid #000000;
-      padding-top: 0.8mm;
-      font-size: 10px;
+      border-top: 1px solid #000000;
+      padding-top: 0.6mm;
+      font-size: 8.5px;
       line-height: 1.25;
       flex-shrink: 0;
     }
@@ -463,70 +487,70 @@ export function generateOrderStickersHtml(
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-weight: 800;
-      color: #000000;
+      color: #333333;
     }
     .fin-val {
-      font-weight: 900;
-      font-size: 11px;
+      font-weight: 700;
+      color: #000000;
     }
     .discount-row {
-      font-weight: 800;
       color: #000000;
     }
     .total-row {
-      font-size: 11.5px;
-      font-weight: 900;
+      font-size: 9.5px;
+      font-weight: 700;
       color: #000000;
-      border-top: 1px dashed #000000;
-      padding-top: 0.5mm;
-      margin-top: 0.5mm;
+      border-top: 0.5px dashed #444444;
+      padding-top: 0.4mm;
+      margin-top: 0.4mm;
     }
     .total-row .fin-val {
-      font-size: 12.5px;
+      font-size: 10px;
     }
     .advance-row {
-      font-size: 10px;
-      font-weight: 800;
+      font-size: 8.5px;
     }
 
     /* PAYMENT HIGHLIGHT */
     .payment-highlight {
       width: 100%;
-      border-top: 2px solid #000000;
-      padding-top: 0.8mm;
-      margin-top: 0.5mm;
+      border-top: 1px solid #000000;
+      padding-top: 0.6mm;
+      margin-top: 0.4mm;
       flex-shrink: 0;
     }
     .prepaid-box {
-      border: 2.5px solid #000000;
-      padding: 2mm 2.5mm;
+      border: 1.5px solid #000000;
+      padding: 1.5mm 2mm;
       text-align: center;
-      font-size: 18px;
-      font-weight: 900;
+      font-size: 13px;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 1px;
       line-height: 1;
     }
     .cod-box {
-      border: 2.5px solid #000000;
-      padding: 1.5mm 2.5mm;
+      border: 1.5px solid #000000;
+      padding: 1mm 2mm;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
     .cod-label {
-      font-size: 11px;
-      font-weight: 900;
+      font-size: 8.5px;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      line-height: 1.1;
+      color: #222222;
+      line-height: 1;
     }
     .cod-amount {
-      font-size: 25px;
+      font-size: 17px;
       font-weight: 900;
-      letter-spacing: -0.5px;
+      font-family: monospace;
+      letter-spacing: -0.3px;
       line-height: 1;
+      color: #000000;
     }
 
     @media screen {
@@ -560,11 +584,11 @@ export function generateTestCalibrationStickerHtml(config: OrderStickerConfig): 
   const topOffset = config.topOffsetMm || 0;
   const leftOffset = config.leftOffsetMm || 0;
 
-  // Safe alignment padding (~2.2mm horizontal, ~2.0mm vertical)
-  const padTop = Math.max(0.5, 2.0 + topOffset);
-  const padBottom = Math.max(0.5, 2.0 - topOffset);
-  const padLeft = Math.max(0.5, 2.2 + leftOffset);
-  const padRight = Math.max(0.5, 2.2 - leftOffset);
+  // Balanced centered margins: 3.0mm horizontal, 2.5mm vertical
+  const padTop = Math.max(0.5, 2.5 + topOffset);
+  const padBottom = Math.max(0.5, 2.5 - topOffset);
+  const padLeft = Math.max(0.5, 3.0 + leftOffset);
+  const padRight = Math.max(0.5, 3.0 - leftOffset);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -601,7 +625,7 @@ export function generateTestCalibrationStickerHtml(config: OrderStickerConfig): 
     .safe-frame {
       width: 100%;
       height: 100%;
-      border: 2px solid #000000;
+      border: 1.5px solid #000000;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -627,20 +651,20 @@ export function generateTestCalibrationStickerHtml(config: OrderStickerConfig): 
       <div class="c-br">+ 75,100</div>
 
       <div style="margin-top: 3mm;">
-        <h2 style="margin:0; font-size: 15px; font-weight: 900;">${escapeHtml(storeName)}</h2>
-        <p style="margin:2px 0 0 0; font-size: 9px; font-weight: bold;">GP-3120TU 75x100mm TEST PRINT</p>
+        <h2 style="margin:0; font-size: 14px; font-weight: 700;">${escapeHtml(storeName)}</h2>
+        <p style="margin:2px 0 0 0; font-size: 8.5px; font-weight: bold;">GP-3120TU 75x100mm TEST PRINT</p>
       </div>
 
-      <div style="border: 1.5px dashed #000; padding: 2.5mm; width: 94%;">
-        <p style="margin: 0; font-size: 10px; font-weight: bold;">RULER BOUNDARY</p>
-        <p style="margin: 2px 0; font-size: 8.5px;">WIDTH: 75mm | HEIGHT: 100mm</p>
-        <p style="margin: 0; font-size: 8px;">Resolution: 203 DPI (~600x800 dots)</p>
-        <p style="margin: 2px 0 0 0; font-size: 7.5px; color: #111;">Printable Width: ~70.6mm (Safe Frame)</p>
+      <div style="border: 1px dashed #000; padding: 2.5mm; width: 94%;">
+        <p style="margin: 0; font-size: 9.5px; font-weight: bold;">RULER BOUNDARY</p>
+        <p style="margin: 2px 0; font-size: 8px;">WIDTH: 75mm | HEIGHT: 100mm</p>
+        <p style="margin: 0; font-size: 7.5px;">Resolution: 203 DPI (~600x800 dots)</p>
+        <p style="margin: 2px 0 0 0; font-size: 7px; color: #222;">Printable Width: ~69mm (Centered Margins)</p>
       </div>
 
       <div style="margin-bottom: 2mm;">
-        <p style="margin: 0; font-size: 9px; font-weight: bold;">[GAP SENSOR CALIBRATION OK]</p>
-        <p style="margin: 2px 0 0 0; font-size: 7.5px;">All 4 outer borders must be fully visible inside paper</p>
+        <p style="margin: 0; font-size: 8.5px; font-weight: bold;">[GAP SENSOR CALIBRATION OK]</p>
+        <p style="margin: 2px 0 0 0; font-size: 7px;">All 4 outer borders must be fully visible inside paper</p>
       </div>
     </div>
   </div>
