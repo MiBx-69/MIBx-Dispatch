@@ -304,4 +304,235 @@ describe("MiBx Dispatch — Advanced 75×100mm Order Sticker Printing System", (
       expect(calibHtml).toContain("203 DPI");
     });
   });
+
+  describe("Section 10: Premium Upgrade Verification Suite (All 9 Required Scenarios)", () => {
+    // Helper to create order sticker mock
+    function createMockSticker(overrides: Partial<OrderStickerData>): OrderStickerData {
+      return {
+        orderId: overrides.orderId || "ord-test",
+        orderNumber: overrides.orderNumber || "#2250",
+        storeName: overrides.storeName || "UNIVERSES",
+        orderDate: "10 Nov 2026",
+        orderTime: "06:30 PM",
+        rawCreatedAt: "2026-11-10T18:30:00Z",
+        customerName: overrides.customerName || "Tanvir Ahmed",
+        customerPhone: overrides.customerPhone || "01700-112233",
+        altPhone: overrides.altPhone || null,
+        fullAddress: overrides.fullAddress || "House 10, Road 4, Sector 7, Uttara",
+        areaCityDistrict: overrides.areaCityDistrict || "Dhaka, Uttara",
+        items: overrides.items || [
+          {
+            id: "it-1",
+            title: "Vintage Denim Jacket",
+            variantTitle: "Black / XL",
+            size: "XL",
+            sku: "UNV-JKT-01",
+            quantity: 1,
+            unitPrice: 2800,
+            lineTotal: 2800,
+          },
+        ],
+        financials: overrides.financials || {
+          subtotal: 2800,
+          productDiscount: 0,
+          shippingCharge: 80,
+          additionalCharges: 0,
+          totalOrderValue: 2880,
+          advancePaid: 0,
+          codAmount: 2880,
+          isPrepaid: false,
+          currency: "৳",
+        },
+        isValid: true,
+        warnings: [],
+        error: null,
+      };
+    }
+
+    // Scenario 1: One product order
+    it("Scenario 1: One product order uses prominent spacious layout", () => {
+      const sticker = createMockSticker({
+        items: [
+          {
+            id: "it-1",
+            title: "Heavyweight Boxy Hoodie",
+            variantTitle: "Sage Green / L",
+            sku: "UNV-HOODIE-SGE-L",
+            quantity: 1,
+            unitPrice: 2200,
+            lineTotal: 2200,
+          },
+        ],
+      });
+      const html = generateOrderStickersHtml([sticker], DEFAULT_75X100_CONFIG);
+      expect(html).toContain("p-row-lg");
+      expect(html).toContain("Heavyweight Boxy Hoodie");
+      expect(html).toContain("QTY: 1 (1x)");
+      expect(html).toContain("৳2,200");
+    });
+
+    // Scenario 2: Two product order
+    it("Scenario 2: Two product order formats both line items cleanly", () => {
+      const sticker = createMockSticker({
+        items: [
+          {
+            id: "it-1",
+            title: "Oversized Acid Wash Tee",
+            variantTitle: "Charcoal / M",
+            sku: "UNV-TEE-CHR-M",
+            quantity: 2,
+            unitPrice: 1200,
+            lineTotal: 2400,
+          },
+          {
+            id: "it-2",
+            title: "Relaxed Fit Denim Jeans",
+            variantTitle: "Washed Blue / 32",
+            sku: "UNV-JNS-BLU-32",
+            quantity: 1,
+            unitPrice: 2500,
+            lineTotal: 2500,
+          },
+        ],
+      });
+      const html = generateOrderStickersHtml([sticker], DEFAULT_75X100_CONFIG);
+      expect(html).toContain("p-row-md");
+      expect(html).toContain("Oversized Acid Wash Tee");
+      expect(html).toContain("Relaxed Fit Denim Jeans");
+      expect(html).toContain("QTY: 2 (2x)");
+      expect(html).toContain("QTY: 1 (1x)");
+    });
+
+    // Scenario 3: Five product order
+    it("Scenario 3: Five product order applies high-density layout without dropping items", () => {
+      const items = [1, 2, 3, 4, 5].map((i) => ({
+        id: `it-${i}`,
+        title: `Item Number ${i} Premium Apparel`,
+        variantTitle: `Color ${i} / L`,
+        sku: `SKU-00${i}`,
+        quantity: 1,
+        unitPrice: 1000,
+        lineTotal: 1000,
+      }));
+      const sticker = createMockSticker({ items });
+      const html = generateOrderStickersHtml([sticker], DEFAULT_75X100_CONFIG);
+      expect(html).toContain("p-row-xs");
+      for (let i = 1; i <= 5; i++) {
+        expect(html).toContain(`Item Number ${i} Premium Apparel`);
+        expect(html).toContain(`SKU-00${i}`);
+      }
+    });
+
+    // Scenario 4: Long product names
+    it("Scenario 4: Long product names wrap intelligently without clipping", () => {
+      const sticker = createMockSticker({
+        items: [
+          {
+            id: "it-long",
+            title: "Universes Raw Atelier Collection Limited Edition Distressed Thermal Layered Long Sleeve Sweatshirt 2026",
+            variantTitle: "Mineral Wash Charcoal / XXL",
+            sku: "UNV-SWT-LNG-001",
+            quantity: 1,
+            unitPrice: 3800,
+            lineTotal: 3800,
+          },
+        ],
+      });
+      const html = generateOrderStickersHtml([sticker], DEFAULT_75X100_CONFIG);
+      expect(html).toContain("Universes Raw Atelier Collection Limited Edition Distressed Thermal Layered Long Sleeve Sweatshirt 2026");
+    });
+
+    // Scenario 5: Long SKUs
+    it("Scenario 5: Long SKUs render properly in bold monospace", () => {
+      const sticker = createMockSticker({
+        items: [
+          {
+            id: "it-sku",
+            title: "Cargo Pants",
+            sku: "UNV-SS26-MENS-BTM-CRG-KHK-34-EXP-LONG-SKU-9999",
+            quantity: 1,
+            unitPrice: 2200,
+            lineTotal: 2200,
+          },
+        ],
+      });
+      const html = generateOrderStickersHtml([sticker], DEFAULT_75X100_CONFIG);
+      expect(html).toContain("[SKU: UNV-SS26-MENS-BTM-CRG-KHK-34-EXP-LONG-SKU-9999]");
+    });
+
+    // Scenario 6: Long customer address
+    it("Scenario 6: Long customer address wraps completely across lines without ellipses", () => {
+      const longAddress = "Apartment 5B, Floor 5, Concord South Breeze Luxury Heights, Holding 42/A, Road 128, Gulshan 2, Near Westin Hotel, Dhaka 1212";
+      const sticker = createMockSticker({
+        fullAddress: longAddress,
+      });
+      const html = generateOrderStickersHtml([sticker], DEFAULT_75X100_CONFIG);
+      expect(html).toContain(longAddress);
+    });
+
+    // Scenario 7: Discounted order
+    it("Scenario 7: Discounted order shows discount code and reason prominently", () => {
+      const sticker = createMockSticker({
+        financials: {
+          subtotal: 5000,
+          productDiscount: 500,
+          discountCode: "SPECIAL10",
+          discountReason: "Eid Festival Promo",
+          shippingCharge: 100,
+          additionalCharges: 0,
+          totalOrderValue: 4600,
+          advancePaid: 0,
+          codAmount: 4600,
+          isPrepaid: false,
+          currency: "৳",
+        },
+      });
+      const html = generateOrderStickersHtml([sticker], DEFAULT_75X100_CONFIG);
+      expect(html).toContain("Discount [SPECIAL10] (Eid Festival Promo):");
+      expect(html).toContain("-৳500");
+      expect(html).toContain("৳4,600");
+    });
+
+    // Scenario 8: Partially paid COD order
+    it("Scenario 8: Partially paid COD calculates remaining COD = Total - Advance", () => {
+      const sticker = createMockSticker({
+        financials: {
+          subtotal: 6000,
+          productDiscount: 0,
+          shippingCharge: 150,
+          additionalCharges: 0,
+          totalOrderValue: 6150,
+          advancePaid: 2000, // 2000 advance
+          codAmount: 4150, // 6150 - 2000 = 4150
+          isPrepaid: false,
+          currency: "৳",
+        },
+      });
+      const html = generateOrderStickersHtml([sticker], DEFAULT_75X100_CONFIG);
+      expect(html).toContain("Advance Payment Received:");
+      expect(html).toContain("-৳2,000");
+      expect(html).toContain("CASH TO COLLECT:");
+      expect(html).toContain("৳ 4,150");
+    });
+
+    // Scenario 9: Fully prepaid order
+    it("Scenario 9: Fully prepaid order displays PAID – NO COD", () => {
+      const sticker = createMockSticker({
+        financials: {
+          subtotal: 3000,
+          productDiscount: 0,
+          shippingCharge: 80,
+          additionalCharges: 0,
+          totalOrderValue: 3080,
+          advancePaid: 3080,
+          codAmount: 0,
+          isPrepaid: true,
+          currency: "৳",
+        },
+      });
+      const html = generateOrderStickersHtml([sticker], DEFAULT_75X100_CONFIG);
+      expect(html).toContain("PAID – NO COD");
+      expect(html).not.toContain("CASH TO COLLECT");
+    });
+  });
 });

@@ -460,8 +460,8 @@ export function PrintOrderStickersModal({
             {/* Driver Note */}
             <div className="p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] text-zinc-400 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
               <div>
-                <span className="font-semibold text-zinc-300 mr-1.5">Printable Area Calibration:</span>
-                <span>Safe margins active (~66×93mm printable zone). If physical roller shifts print right, set Left Offset to -1mm or -2mm.</span>
+                <span className="font-semibold text-zinc-300 mr-1.5">Printable Area Configuration:</span>
+                <span>Premium full-label layout (~70.6×96mm active zone). Horizontal margins: 2.2mm, Vertical: 2.0mm. Adjust offsets if physical roller shifts paper.</span>
               </div>
             </div>
           </div>
@@ -498,6 +498,14 @@ export function PrintOrderStickersModal({
                 <div className="pt-3">
                   <OrderStickerThermalCard sticker={currentSticker} config={config} />
                 </div>
+
+                {/* Adaptive Density Alert for Multi-Item Orders */}
+                {currentSticker.items.length > 4 && (
+                  <div className="mt-2 text-[11px] font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5 max-w-sm">
+                    <AlertTriangle size={13} className="shrink-0 text-amber-400" />
+                    <span>Order has {currentSticker.items.length} items. Adaptive high-density layout enabled so every item prints legibly.</span>
+                  </div>
+                )}
 
                 {/* Custom Discount Reason Editor */}
                 {currentSticker.financials.productDiscount > 0 && (

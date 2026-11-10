@@ -17,11 +17,11 @@ export function generateOrderStickersHtml(
   const topOffset = config.topOffsetMm || 0;
   const leftOffset = config.leftOffsetMm || 0;
 
-  // Safe alignment padding (4.5mm left/right, 3.5mm top/bottom to prevent edge clipping on thermal rolls)
-  const padTop = Math.max(1, 3.5 + topOffset);
-  const padBottom = Math.max(1, 3.5 - topOffset);
-  const padLeft = Math.max(1, 4.5 + leftOffset);
-  const padRight = Math.max(1, 4.5 - leftOffset);
+  // Safe alignment padding: ~2.2mm horizontal (leaves ~70.6mm printable width), ~2.0mm vertical
+  const padTop = Math.max(0.5, 2.0 + topOffset);
+  const padBottom = Math.max(0.5, 2.0 - topOffset);
+  const padLeft = Math.max(0.5, 2.2 + leftOffset);
+  const padRight = Math.max(0.5, 2.2 - leftOffset);
 
   const stickersHtml = stickers
     .map((stk, index) => {
@@ -33,18 +33,37 @@ export function generateOrderStickersHtml(
       const formattedAdvance = Number(stk.financials.advancePaid || 0).toLocaleString();
       const formattedCod = Number(stk.financials.codAmount || 0).toLocaleString();
 
+      const itemCount = stk.items.length;
+      const pRowClass =
+        itemCount === 1
+          ? "p-row-lg"
+          : itemCount === 2
+          ? "p-row-md"
+          : itemCount <= 4
+          ? "p-row-sm"
+          : "p-row-xs";
+
       const itemsHtml = stk.items
-        .map((it) => `
-          <div class="item-row">
-            <div class="item-desc">
-              <div class="item-title">${escapeHtml(it.title)}</div>
-              <div class="item-variant">
-                ${it.variantTitle ? `<span>${escapeHtml(it.variantTitle)}</span>` : ""}
-                ${config.showSku && it.sku ? `<span class="sku">[SKU: ${escapeHtml(it.sku)}]</span>` : ""}
-              </div>
+        .map((it, idx) => `
+          <div class="product-item ${pRowClass} ${idx > 0 ? "has-divider" : ""}">
+            <!-- Line 1: Product Name & Price -->
+            <div class="p-line-1">
+              <span class="p-title">${escapeHtml(it.title)}</span>
+              <span class="p-price">${stk.financials.currency}${Number(it.lineTotal).toLocaleString()}</span>
             </div>
-            <div class="item-qty">${it.quantity}x</div>
-            <div class="item-price">${stk.financials.currency}${Number(it.lineTotal).toLocaleString()}</div>
+            <!-- Line 2: Size / Variant -->
+            ${
+              it.variantTitle || it.size
+                ? `<div class="p-line-2">
+                    <span class="p-variant">${escapeHtml(it.variantTitle || it.size || "")}</span>
+                   </div>`
+                : ""
+            }
+            <!-- Line 3: SKU & Quantity -->
+            <div class="p-line-3">
+              <span class="p-sku">${config.showSku && it.sku ? `[SKU: ${escapeHtml(it.sku)}]` : ""}</span>
+              <span class="p-qty">QTY: ${it.quantity} (${it.quantity}x)</span>
+            </div>
           </div>
         `)
         .join("\n");
@@ -55,20 +74,23 @@ export function generateOrderStickersHtml(
           <!-- SECTION A: Store Header -->
           <div class="sticker-header">
             <div class="header-top">
-              <span class="store-name">${escapeHtml(storeName)}</span>
+              <div class="header-brand">
+                <span class="store-name">${escapeHtml(storeName)}</span>
+                <span class="parcel-badge">PARCEL STICKER</span>
+              </div>
               <span class="order-number">${escapeHtml(stk.orderNumber)}</span>
             </div>
             <div class="header-meta">
               <span>Date: ${escapeHtml(stk.orderDate)} ${stk.orderTime ? `• ${escapeHtml(stk.orderTime)}` : ""}</span>
-              <span class="badge">Gprinter 203 DPI</span>
+              <span class="badge">GP-3120TU • 203 DPI</span>
             </div>
           </div>
 
-          <!-- SECTION B: Customer Information -->
+          <!-- SECTION B: Customer Information (Prominent & Extra-Bold) -->
           <div class="customer-section">
             <div class="customer-row">
               <div class="customer-name-wrap">
-                <span class="label">Customer:</span>
+                <span class="label">TO:</span>
                 <span class="customer-name">${escapeHtml(stk.customerName)}</span>
               </div>
               <div class="customer-phone">${escapeHtml(stk.customerPhone)}</div>
@@ -76,13 +98,13 @@ export function generateOrderStickersHtml(
             ${
               config.showAltPhone && stk.altPhone
                 ? `<div class="alt-phone-row">
-                    <span class="label">Alt:</span>
+                    <span class="label">ALT PHONE:</span>
                     <span class="alt-val">${escapeHtml(stk.altPhone)}</span>
                    </div>`
                 : ""
             }
             <div class="address-row">
-              <span class="label">Address:</span>
+              <span class="label">ADDR:</span>
               <span class="address-val">${escapeHtml(stk.fullAddress)}</span>
             </div>
             ${
@@ -92,51 +114,46 @@ export function generateOrderStickersHtml(
             }
           </div>
 
-          <!-- SECTION C: Product Items Table -->
+          <!-- SECTION C: Product Items Table (Structured Multi-Line Grid) -->
           <div class="products-section">
-            <div class="table-header">
-              <span class="col-desc">Product / Variant</span>
-              <span class="col-qty">Qty</span>
-              <span class="col-price">Price</span>
-            </div>
             <div class="items-list">
               ${itemsHtml}
             </div>
           </div>
 
-          <!-- SECTION D & E: Financial Breakdown & Discount -->
+          <!-- SECTION D: Financial Breakdown & Discount (Dedicated Area) -->
           <div class="financials-section">
             <div class="fin-row">
               <span>Subtotal (${stk.items.length} ${stk.items.length === 1 ? "item" : "items"}):</span>
-              <span>${stk.financials.currency}${formattedSubtotal}</span>
+              <span class="fin-val">${stk.financials.currency}${formattedSubtotal}</span>
             </div>
             ${
               stk.financials.productDiscount > 0
                 ? `<div class="fin-row discount-row">
                     <span>Discount ${stk.financials.discountCode ? `[${escapeHtml(stk.financials.discountCode)}]` : ""} ${stk.financials.discountReason ? `(${escapeHtml(stk.financials.discountReason)})` : ""}:</span>
-                    <span>-${stk.financials.currency}${formattedDiscount}</span>
+                    <span class="fin-val">-${stk.financials.currency}${formattedDiscount}</span>
                    </div>`
                 : ""
             }
             <div class="fin-row">
               <span>Delivery Charge:</span>
-              <span>${stk.financials.shippingCharge > 0 ? `${stk.financials.currency}${formattedShipping}` : "FREE"}</span>
-            </div>
-            <div class="fin-row total-row">
-              <span>Total Order Value:</span>
-              <span>${stk.financials.currency}${formattedTotal}</span>
+              <span class="fin-val">${stk.financials.shippingCharge > 0 ? `${stk.financials.currency}${formattedShipping}` : "FREE"}</span>
             </div>
             ${
               stk.financials.advancePaid > 0
                 ? `<div class="fin-row advance-row">
                     <span>Advance Payment Received:</span>
-                    <span>-${stk.financials.currency}${formattedAdvance}</span>
+                    <span class="fin-val">-${stk.financials.currency}${formattedAdvance}</span>
                    </div>`
                 : ""
             }
+            <div class="fin-row total-row">
+              <span>Total Order Value:</span>
+              <span class="fin-val">${stk.financials.currency}${formattedTotal}</span>
+            </div>
           </div>
 
-          <!-- SECTION F: Prominent Payment Highlight -->
+          <!-- SECTION E: Prominent COD Highlight (24-28px Bold COD / PAID – NO COD) -->
           <div class="payment-highlight">
             ${
               isPaid
@@ -212,7 +229,7 @@ export function generateOrderStickersHtml(
     /* HEADER */
     .sticker-header {
       width: 100%;
-      border-bottom: 1.5px solid #000000;
+      border-bottom: 2px solid #000000;
       padding-bottom: 0.8mm;
       flex-shrink: 0;
     }
@@ -221,104 +238,117 @@ export function generateOrderStickersHtml(
       justify-content: space-between;
       align-items: baseline;
     }
+    .header-brand {
+      display: flex;
+      align-items: baseline;
+      gap: 2mm;
+      overflow: hidden;
+    }
     .store-name {
-      font-size: 12.5px;
+      font-size: 16px;
       font-weight: 900;
       letter-spacing: 0.5px;
       text-transform: uppercase;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      line-height: 1;
+    }
+    .parcel-badge {
+      font-size: 8.5px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border: 1px solid #000000;
+      padding: 0.2mm 1mm;
+      line-height: 1;
+      flex-shrink: 0;
     }
     .order-number {
-      font-size: 15px;
+      font-size: 18px;
       font-weight: 900;
-      letter-spacing: -0.2px;
+      letter-spacing: -0.3px;
       flex-shrink: 0;
+      line-height: 1;
     }
     .header-meta {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 7px;
-      color: #333333;
-      margin-top: 1px;
+      font-size: 8px;
+      font-weight: 700;
+      color: #000000;
+      margin-top: 1mm;
     }
     .badge {
-      font-weight: 700;
+      font-weight: 800;
       text-transform: uppercase;
-      font-size: 7px;
+      font-size: 8px;
     }
 
     /* CUSTOMER */
     .customer-section {
       width: 100%;
-      border-bottom: 1px solid #000000;
-      padding: 0.8mm 0;
+      border-bottom: 2px solid #000000;
+      padding: 1mm 0;
       flex-shrink: 0;
-      font-size: 8.5px;
+      font-size: 10px;
       line-height: 1.2;
     }
     .customer-row {
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: baseline;
     }
     .customer-name-wrap {
       display: flex;
-      gap: 3px;
+      gap: 1.5mm;
       overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
     }
     .customer-name {
-      font-weight: 800;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      font-size: 13.5px;
+      font-weight: 900;
+      color: #000000;
+      line-height: 1.15;
     }
     .customer-phone {
-      font-size: 9.5px;
+      font-size: 14px;
       font-weight: 900;
       letter-spacing: -0.2px;
       white-space: nowrap;
       flex-shrink: 0;
+      line-height: 1;
     }
     .alt-phone-row {
       display: flex;
       justify-content: flex-end;
-      gap: 3px;
-      font-size: 8px;
-      font-weight: 800;
-      color: #222222;
+      gap: 1.5mm;
+      font-size: 9.5px;
+      font-weight: 900;
+      color: #000000;
+      margin-top: 0.3mm;
     }
     .address-row {
       display: flex;
-      gap: 3px;
-      font-size: 8px;
-      margin-top: 1px;
-      line-height: 1.15;
+      gap: 1.5mm;
+      font-size: 10px;
+      margin-top: 0.6mm;
+      line-height: 1.25;
     }
     .address-val {
-      font-weight: 500;
-      overflow: hidden;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
+      font-weight: 700;
+      color: #000000;
+      word-break: break-word;
     }
     .area-row {
-      font-size: 7.5px;
-      font-weight: 700;
-      color: #444444;
-      padding-left: 8mm;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      font-size: 9.5px;
+      font-weight: 900;
+      color: #000000;
+      padding-left: 7mm;
+      margin-top: 0.3mm;
     }
     .label {
-      font-size: 7.5px;
+      font-size: 9.5px;
       text-transform: uppercase;
-      font-weight: 800;
-      color: #555555;
+      font-weight: 900;
+      color: #000000;
       flex-shrink: 0;
     }
 
@@ -327,139 +357,176 @@ export function generateOrderStickersHtml(
       width: 100%;
       flex: 1;
       overflow: hidden;
-      padding: 0.6mm 0;
+      padding: 0.8mm 0;
       display: flex;
       flex-direction: column;
       justify-content: center;
     }
-    .table-header {
-      display: flex;
-      justify-content: space-between;
-      font-size: 7.5px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.3px;
-      border-bottom: 0.75px solid #cccccc;
-      padding-bottom: 0.4mm;
-      margin-bottom: 0.4mm;
-    }
-    .col-desc { width: 58%; }
-    .col-qty { width: 14%; text-align: center; }
-    .col-price { width: 28%; text-align: right; }
-
     .items-list {
       display: flex;
       flex-direction: column;
-      gap: 0.6mm;
       overflow: hidden;
     }
-    .item-row {
+    .product-item {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+    .product-item.has-divider {
+      border-top: 1px solid rgba(0, 0, 0, 0.4);
+      margin-top: 0.5mm;
+      padding-top: 0.5mm;
+    }
+    .p-row-lg { padding: 1.5mm 0; }
+    .p-row-md { padding: 1mm 0; }
+    .p-row-sm { padding: 0.6mm 0; }
+    .p-row-xs { padding: 0.3mm 0; }
+
+    .p-line-1 {
       display: flex;
       justify-content: space-between;
-      align-items: flex-start;
-      font-size: 8px;
+      align-items: baseline;
+      gap: 2mm;
+    }
+    .p-title {
+      font-weight: 900;
+      color: #000000;
+      line-height: 1.15;
+      word-break: break-word;
+      flex: 1;
+    }
+    .p-row-lg .p-title { font-size: 14.5px; }
+    .p-row-md .p-title { font-size: 13px; }
+    .p-row-sm .p-title { font-size: 11.5px; }
+    .p-row-xs .p-title { font-size: 10px; }
+
+    .p-price {
+      font-weight: 900;
+      color: #000000;
+      text-align: right;
+      white-space: nowrap;
+      flex-shrink: 0;
+      line-height: 1;
+    }
+    .p-row-lg .p-price { font-size: 16.5px; }
+    .p-row-md .p-price { font-size: 15px; }
+    .p-row-sm .p-price { font-size: 13px; }
+    .p-row-xs .p-price { font-size: 11.5px; }
+
+    .p-line-2 {
+      margin-top: 0.3mm;
+      font-weight: 800;
+      color: #000000;
       line-height: 1.15;
     }
-    .item-desc {
-      width: 58%;
-      padding-right: 1mm;
-    }
-    .item-title {
-      font-weight: 800;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .item-variant {
-      font-size: 7px;
-      color: #444444;
+    .p-row-lg .p-variant { font-size: 13px; }
+    .p-row-md .p-variant { font-size: 11.5px; }
+    .p-row-sm .p-variant { font-size: 10.5px; }
+    .p-row-xs .p-variant { font-size: 9.5px; }
+
+    .p-line-3 {
       display: flex;
-      gap: 3px;
-      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 0.3mm;
+      font-weight: 900;
+      color: #000000;
     }
-    .item-variant span {
-      font-weight: 600;
-    }
-    .sku {
-      color: #666666;
-      font-size: 6.5px;
-    }
-    .item-qty {
-      width: 14%;
-      text-align: center;
+    .p-sku {
+      font-family: monospace;
       font-weight: 800;
     }
-    .item-price {
-      width: 28%;
-      text-align: right;
+    .p-row-lg .p-sku { font-size: 12px; }
+    .p-row-md .p-sku { font-size: 11px; }
+    .p-row-sm .p-sku { font-size: 10px; }
+    .p-row-xs .p-sku { font-size: 9px; }
+
+    .p-qty {
       font-weight: 900;
+      text-align: right;
     }
+    .p-row-lg .p-qty { font-size: 13px; }
+    .p-row-md .p-qty { font-size: 12px; }
+    .p-row-sm .p-qty { font-size: 11px; }
+    .p-row-xs .p-qty { font-size: 10px; }
 
     /* FINANCIALS */
     .financials-section {
       width: 100%;
-      border-top: 1px solid #000000;
-      padding-top: 0.5mm;
-      font-size: 8px;
-      line-height: 1.2;
+      border-top: 2px solid #000000;
+      padding-top: 0.8mm;
+      font-size: 10px;
+      line-height: 1.25;
       flex-shrink: 0;
     }
     .fin-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      color: #333333;
+      font-weight: 800;
+      color: #000000;
+    }
+    .fin-val {
+      font-weight: 900;
+      font-size: 11px;
     }
     .discount-row {
-      font-weight: 700;
+      font-weight: 800;
       color: #000000;
     }
     .total-row {
+      font-size: 11.5px;
       font-weight: 900;
       color: #000000;
-      border-top: 0.5px dashed #666666;
-      padding-top: 0.4mm;
-      margin-top: 0.4mm;
+      border-top: 1px dashed #000000;
+      padding-top: 0.5mm;
+      margin-top: 0.5mm;
+    }
+    .total-row .fin-val {
+      font-size: 12.5px;
     }
     .advance-row {
-      font-size: 7.5px;
-      font-weight: 700;
+      font-size: 10px;
+      font-weight: 800;
     }
 
     /* PAYMENT HIGHLIGHT */
     .payment-highlight {
       width: 100%;
-      border-top: 1.5px solid #000000;
-      padding-top: 0.6mm;
-      margin-top: 0.3mm;
+      border-top: 2px solid #000000;
+      padding-top: 0.8mm;
+      margin-top: 0.5mm;
       flex-shrink: 0;
     }
     .prepaid-box {
-      border: 1.5px solid #000000;
-      padding: 1mm 1.5mm;
+      border: 2.5px solid #000000;
+      padding: 2mm 2.5mm;
       text-align: center;
-      font-size: 11px;
+      font-size: 18px;
       font-weight: 900;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 1px;
+      line-height: 1;
     }
     .cod-box {
-      border: 1.5px solid #000000;
-      padding: 0.6mm 1.5mm;
+      border: 2.5px solid #000000;
+      padding: 1.5mm 2.5mm;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
     .cod-label {
-      font-size: 9px;
+      font-size: 11px;
       font-weight: 900;
       text-transform: uppercase;
-      letter-spacing: 0.3px;
+      letter-spacing: 0.5px;
+      line-height: 1.1;
     }
     .cod-amount {
-      font-size: 13.5px;
+      font-size: 25px;
       font-weight: 900;
-      letter-spacing: -0.3px;
+      letter-spacing: -0.5px;
+      line-height: 1;
     }
 
     @media screen {
@@ -493,11 +560,11 @@ export function generateTestCalibrationStickerHtml(config: OrderStickerConfig): 
   const topOffset = config.topOffsetMm || 0;
   const leftOffset = config.leftOffsetMm || 0;
 
-  // Safe alignment padding (4.5mm left/right, 3.5mm top/bottom)
-  const padTop = Math.max(1, 3.5 + topOffset);
-  const padBottom = Math.max(1, 3.5 - topOffset);
-  const padLeft = Math.max(1, 4.5 + leftOffset);
-  const padRight = Math.max(1, 4.5 - leftOffset);
+  // Safe alignment padding (~2.2mm horizontal, ~2.0mm vertical)
+  const padTop = Math.max(0.5, 2.0 + topOffset);
+  const padBottom = Math.max(0.5, 2.0 - topOffset);
+  const padLeft = Math.max(0.5, 2.2 + leftOffset);
+  const padRight = Math.max(0.5, 2.2 - leftOffset);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -534,7 +601,7 @@ export function generateTestCalibrationStickerHtml(config: OrderStickerConfig): 
     .safe-frame {
       width: 100%;
       height: 100%;
-      border: 1.5px solid #000000;
+      border: 2px solid #000000;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -545,10 +612,10 @@ export function generateTestCalibrationStickerHtml(config: OrderStickerConfig): 
       padding: 3mm 2mm;
     }
     /* Corner Marks inside the safe frame */
-    .c-tl { position: absolute; top: 1mm; left: 1mm; font-size: 7.5px; font-weight: bold; }
-    .c-tr { position: absolute; top: 1mm; right: 1mm; font-size: 7.5px; font-weight: bold; }
-    .c-bl { position: absolute; bottom: 1mm; left: 1mm; font-size: 7.5px; font-weight: bold; }
-    .c-br { position: absolute; bottom: 1mm; right: 1mm; font-size: 7.5px; font-weight: bold; }
+    .c-tl { position: absolute; top: 1mm; left: 1mm; font-size: 8px; font-weight: bold; }
+    .c-tr { position: absolute; top: 1mm; right: 1mm; font-size: 8px; font-weight: bold; }
+    .c-bl { position: absolute; bottom: 1mm; left: 1mm; font-size: 8px; font-weight: bold; }
+    .c-br { position: absolute; bottom: 1mm; right: 1mm; font-size: 8px; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -560,20 +627,20 @@ export function generateTestCalibrationStickerHtml(config: OrderStickerConfig): 
       <div class="c-br">+ 75,100</div>
 
       <div style="margin-top: 3mm;">
-        <h2 style="margin:0; font-size: 13px; font-weight: 900;">${escapeHtml(storeName)}</h2>
-        <p style="margin:2px 0 0 0; font-size: 8.5px; font-weight: bold;">GP-3120TU 75x100mm TEST PRINT</p>
+        <h2 style="margin:0; font-size: 15px; font-weight: 900;">${escapeHtml(storeName)}</h2>
+        <p style="margin:2px 0 0 0; font-size: 9px; font-weight: bold;">GP-3120TU 75x100mm TEST PRINT</p>
       </div>
 
-      <div style="border: 1px dashed #000; padding: 2.5mm; width: 92%;">
-        <p style="margin: 0; font-size: 9.5px; font-weight: bold;">RULER BOUNDARY</p>
-        <p style="margin: 2px 0; font-size: 8px;">WIDTH: 75mm | HEIGHT: 100mm</p>
-        <p style="margin: 0; font-size: 7.5px;">Resolution: 203 DPI (~600x800 dots)</p>
-        <p style="margin: 2px 0 0 0; font-size: 7px; color: #333;">Safe Printable Frame: ~66mm × 93mm</p>
+      <div style="border: 1.5px dashed #000; padding: 2.5mm; width: 94%;">
+        <p style="margin: 0; font-size: 10px; font-weight: bold;">RULER BOUNDARY</p>
+        <p style="margin: 2px 0; font-size: 8.5px;">WIDTH: 75mm | HEIGHT: 100mm</p>
+        <p style="margin: 0; font-size: 8px;">Resolution: 203 DPI (~600x800 dots)</p>
+        <p style="margin: 2px 0 0 0; font-size: 7.5px; color: #111;">Printable Width: ~70.6mm (Safe Frame)</p>
       </div>
 
       <div style="margin-bottom: 2mm;">
-        <p style="margin: 0; font-size: 8.5px; font-weight: bold;">[GAP SENSOR CALIBRATION OK]</p>
-        <p style="margin: 2px 0 0 0; font-size: 7px;">All 4 outer borders must be fully visible inside paper</p>
+        <p style="margin: 0; font-size: 9px; font-weight: bold;">[GAP SENSOR CALIBRATION OK]</p>
+        <p style="margin: 2px 0 0 0; font-size: 7.5px;">All 4 outer borders must be fully visible inside paper</p>
       </div>
     </div>
   </div>
