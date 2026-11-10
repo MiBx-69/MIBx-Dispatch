@@ -39,6 +39,7 @@ function Extension() {
         }
 
         // 3. Build printable document URL for <s-admin-print-action src="...">
+        const APP_ORIGIN = "https://orders.universesraw.com";
         const params = new URLSearchParams({
           ids: cleanId,
           embedded: "1",
@@ -47,7 +48,7 @@ function Extension() {
           params.set("token", token);
         }
 
-        const printUrl = `/print/order-stickers?${params.toString()}`;
+        const printUrl = `${APP_ORIGIN}/print/order-stickers?${params.toString()}`;
         setSrc(printUrl);
 
         // 4. Fetch validated sticker summary from backend
@@ -57,7 +58,7 @@ function Extension() {
             fetchHeaders["Authorization"] = `Bearer ${token}`;
           }
 
-          const res = await fetch("/api/orders/stickers", {
+          const res = await fetch(`${APP_ORIGIN}/api/orders/stickers`, {
             method: "POST",
             headers: fetchHeaders,
             body: JSON.stringify({
@@ -104,7 +105,7 @@ function Extension() {
         {!loading && !error && orderSummary && (
           <s-stack direction="block" gap="base">
             <s-banner tone="success" heading="Sticker Ready">
-              Order {orderSummary.orderNumber} prepared for Gprinter GP-3120TU (75mm × 100mm).
+              Order {orderSummary.orderNumber} prepared for 75mm × 100mm thermal printing.
             </s-banner>
 
             <s-section heading="Order & Customer Details">
@@ -168,7 +169,7 @@ function Extension() {
               <s-stack direction="block" gap="small">
                 <s-text>
                   Review the sticker layout in the preview on the right. When ready, click
-                  the Print button below to print directly to your Gprinter GP-3120TU.
+                  the Continue to print button below to print your thermal sticker.
                 </s-text>
               </s-stack>
             </s-section>

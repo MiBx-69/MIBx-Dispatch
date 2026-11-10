@@ -189,4 +189,94 @@ describe("POST /api/orders/stickers", () => {
     expect(json.stickers).toHaveLength(1);
     expect(json.stickers[0].orderNumber).toBe("#3001");
   });
+
+  it("filters out removed items (current_quantity: 0) and prevents phantom discounts", async () => {
+    const { createServiceClient } = await import("@/lib/supabase/server");
+
+    // Mock live Shopify order with an edited/removed item
+    (createServiceClient as any).mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "app_settings") {
+          return {
+            select: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: {
+                shopify_shop_domain: "universes-test.myshopify.com",
+                shopify_access_token: "shpat_test123",
+                company_name: "UNIVERSES",
+              },
+            }),
+          };
+        }
+        if (table === "orders") {
+          return {
+            select: vi.fn().mockReturnThis(),
+            or: vi.fn().mockResolvedValue({
+              data: [
+                {
+                  id: "44444444-4444-4444-4444-444444444444",
+                  shopify_order_id: 4001,
+                  shopify_order_name: "#4001",
+                  customer_name: "Rafiqul Islam",
+                  customer_phone: "01811223344",
+                  shipping_address: {
+                    name: "Rafiqul Islam",
+                    address1: "Gulshan 1",
+                    city: "Dhaka",
+                  },
+                  line_items: [
+                    {
+                      id: 111,
+                      title: "Active T-Shirt",
+                      quantity: 1,
+                      current_quantity: 1,
+                      price: 1200,
+                    },
+                    {
+                      id: 222,
+                      title: "Removed Item",
+                      quantity: 1,
+                      current_quantity: 0, // Removed via order edit in Shopify!
+                      price: 1500,
+                    },
+                  ],
+                  total_price: 1260,
+                  subtotal_price: 1200,
+                  shipping_charge: 60,
+                  discount_amount: 0,
+                  cod_amount: 1260,
+                },
+              ],
+              error: null,
+            }),
+          };
+        }
+        return {};
+      }),
+    });
+
+    const req = new NextRequest("http://localhost:3000/api/orders/stickers", {
+      method: "POST",
+      body: JSON.stringify({
+        orderIds: ["44444444-4444-4444-4444-444444444444"],
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("access-control-allow-origin")).toBeDefined();
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.stickers).toHaveLength(1);
+
+    const sticker = json.stickers[0];
+    // Removed item must NOT be in items list!
+    expect(sticker.items).toHaveLength(1);
+    expect(sticker.items[0].title).toBe("Active T-Shirt");
+    // No phantom discount should be created for the removed item!
+    expect(sticker.financials.productDiscount).toBe(0);
+    expect(sticker.financials.subtotal).toBe(1200);
+    expect(sticker.financials.totalOrderValue).toBe(1260);
+    expect(sticker.financials.codAmount).toBe(1260);
+  });
 });

@@ -41,6 +41,7 @@ function Extension() {
         }
 
         // 3. Build printable document URL for <s-admin-print-action src="...">
+        const APP_ORIGIN = "https://orders.universesraw.com";
         const params = new URLSearchParams({
           ids: cleanIds.join(","),
           embedded: "1",
@@ -49,7 +50,7 @@ function Extension() {
           params.set("token", token);
         }
 
-        const printUrl = `/print/order-stickers?${params.toString()}`;
+        const printUrl = `${APP_ORIGIN}/print/order-stickers?${params.toString()}`;
         setSrc(printUrl);
 
         // 4. Fetch validated sticker batch from backend
@@ -59,7 +60,7 @@ function Extension() {
             fetchHeaders["Authorization"] = `Bearer ${token}`;
           }
 
-          const res = await fetch("/api/orders/stickers", {
+          const res = await fetch(`${APP_ORIGIN}/api/orders/stickers`, {
             method: "POST",
             headers: fetchHeaders,
             body: JSON.stringify({
@@ -95,7 +96,7 @@ function Extension() {
       <s-stack direction="block" gap="base">
         {loading && (
           <s-banner tone="info" heading="Preparing Batch Order Stickers">
-            Validating {selectedCount} selected order(s) for Gprinter GP-3120TU printing...
+            Validating {selectedCount} selected order(s) for 75mm × 100mm sticker printing...
           </s-banner>
         )}
 
@@ -132,8 +133,8 @@ function Extension() {
                   <s-text>75mm × 100mm (Direct Thermal Portrait)</s-text>
                 </s-box>
                 <s-box>
-                  <s-text type="strong">Printer: </s-text>
-                  <s-text>Gprinter GP-3120TU (203 DPI)</s-text>
+                  <s-text type="strong">Print Quality: </s-text>
+                  <s-text>Direct Thermal (203 DPI)</s-text>
                 </s-box>
               </s-stack>
             </s-section>
@@ -167,7 +168,7 @@ function Extension() {
               <s-stack direction="block" gap="small">
                 <s-text>
                   Each order has an independent 75×100mm label with automatic page breaks.
-                  Click the Print button below to output the entire batch to your Windows printer driver.
+                  Click the Continue to print button below to output the entire batch.
                 </s-text>
               </s-stack>
             </s-section>

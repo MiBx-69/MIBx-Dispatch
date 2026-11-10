@@ -19,7 +19,6 @@ import { ReportFraudModal } from "@/components/modals/report-fraud-modal";
 import { FraudDetailsModal } from "@/components/modals/fraud-details-modal";
 import { OrderTimelineModal } from "@/components/orders/order-timeline-modal";
 import { BulkImportDeliveriesModal } from "@/components/orders/bulk-import-deliveries-modal";
-import { PrintDueSlipsModal } from "@/components/orders/print-due-slips-modal";
 import { PrintOrderStickersModal } from "@/components/orders/print-order-stickers-modal";
 import { DeliveredReportingHeader, DeliveredStats } from "@/components/orders/delivered-reporting-header";
 import type { Order, OrderStatus } from "@/types/database";
@@ -90,21 +89,9 @@ export function OrdersClient({
   const [timelineOrderId, setTimelineOrderId] = useState<string | null>(null);
   const [isCheckingFraud, setIsCheckingFraud] = useState(false);
   const [isLoadingAllIds, setIsLoadingAllIds] = useState(false);
-  const [isDueSlipsModalOpen, setIsDueSlipsModalOpen] = useState(false);
-  const [dueSlipsOrderIds, setDueSlipsOrderIds] = useState<string[]>([]);
   const [isOrderStickersModalOpen, setIsOrderStickersModalOpen] = useState(false);
   const [orderStickersIds, setOrderStickersIds] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
-
-  const handleOpenDueSlips = (ids?: string[]) => {
-    const targetIds = ids && ids.length > 0 ? ids : Array.from(selected);
-    if (targetIds.length === 0) {
-      toast.warning("Please select at least one order to print due slips");
-      return;
-    }
-    setDueSlipsOrderIds(targetIds);
-    setIsDueSlipsModalOpen(true);
-  };
 
   const handleOpenOrderStickers = (ids?: string[]) => {
     const targetIds = ids && ids.length > 0 ? ids : Array.from(selected);
@@ -773,14 +760,6 @@ export function OrdersClient({
                   </button>
 
                   <button
-                    onClick={() => handleOpenDueSlips([singleOrder.id])}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700 hover:text-white transition-colors"
-                    title="Print Customer Due Slip"
-                  >
-                    <Printer size={14} className="text-indigo-400" /> Due Slip
-                  </button>
-
-                  <button
                     onClick={() => handleOpenOrderStickers([singleOrder.id])}
                     className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/25 hover:bg-amber-500/25 hover:text-white transition-colors"
                     title="Print 75×100mm Order Sticker"
@@ -796,16 +775,9 @@ export function OrdersClient({
               <button
                 onClick={() => handleOpenOrderStickers()}
                 className="flex items-center gap-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border border-amber-500/40 shadow-sm"
-                title="Print detailed 75×100mm adhesive parcel stickers for Gprinter GP-3120TU"
+                title="Print detailed 75×100mm adhesive parcel stickers"
               >
                 <Tag size={14} className="text-amber-400" /> PRINT ORDER STICKERS (75×100mm)
-              </button>
-              <button
-                onClick={() => handleOpenDueSlips()}
-                className="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 hover:text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border border-zinc-700 shadow-sm"
-                title="Print customer due slips for selected orders"
-              >
-                <Printer size={14} className="text-indigo-400" /> Due Slips
               </button>
               <button onClick={() => setBulkDispatchModalOpen(true)} className="flex items-center gap-1.5 bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shadow-lg shadow-indigo-500/20">
                 <Truck size={14} /> Dispatch
@@ -953,17 +925,6 @@ export function OrdersClient({
                       title="Print 75×100mm Order Sticker"
                     >
                       <Tag size={13} className="text-amber-400" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenDueSlips([order.id]);
-                      }}
-                      className="p-1.5 rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white border border-zinc-700 transition-colors"
-                      title="Print Customer Due Slip"
-                    >
-                      <Printer size={13} className="text-indigo-400" />
                     </button>
                     <button
                       onClick={() => setDispatchOrder(order)}
@@ -1323,13 +1284,6 @@ export function OrdersClient({
           }}
         />
       )}
-
-      {/* Print Customer Due Slips Modal */}
-      <PrintDueSlipsModal
-        isOpen={isDueSlipsModalOpen}
-        onClose={() => setIsDueSlipsModalOpen(false)}
-        orderIds={dueSlipsOrderIds}
-      />
 
       {/* Print 75×100mm Order Stickers Modal */}
       <PrintOrderStickersModal

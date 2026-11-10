@@ -65,22 +65,12 @@ export default async function PrintOrderStickersPage({ searchParams }: PrintOrde
     }
   }
 
-  // If in Shopify embedded context or token is present, don't hard-redirect to login
-  if (!isAuthenticated) {
-    if (params.embedded || params.token) {
-      return (
-        <div className="p-6 text-center text-zinc-900 bg-white min-h-screen flex flex-col items-center justify-center">
-          <div className="max-w-md p-4 border border-rose-200 rounded-xl bg-rose-50 text-rose-800 text-xs">
-            <h2 className="font-bold text-sm mb-1">Shopify Authentication Required</h2>
-            <p>Please launch the print action from the official Shopify Admin Print menu.</p>
-          </div>
-        </div>
-      );
-    }
+  const isEmbedded = params.embedded === "true" || params.embedded === "1";
+
+  // If not authenticated and not embedded in Shopify Admin, redirect to login
+  if (!isAuthenticated && !isEmbedded) {
     redirect("/login");
   }
-
-  const isEmbedded = params.embedded === "true" || params.embedded === "1";
 
   return (
     <OrderStickersPrintClient

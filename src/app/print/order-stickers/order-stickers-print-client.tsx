@@ -70,7 +70,7 @@ export function OrderStickersPrintClient({
       <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 text-center">
         <RefreshCw className="w-7 h-7 text-amber-600 animate-spin mb-3" />
         <h2 className="text-sm font-bold text-zinc-900">Preparing 75×100mm Order Stickers...</h2>
-        <p className="text-xs text-zinc-600 mt-1">Gprinter GP-3120TU (203 DPI) • Verifying Shopify items &amp; COD</p>
+        <p className="text-xs text-zinc-600 mt-1">Direct Thermal (203 DPI) • Verifying Shopify items &amp; COD</p>
       </div>
     );
   }
@@ -118,7 +118,7 @@ export function OrderStickersPrintClient({
       {!isEmbedded && (
         <div className="no-print mb-6 flex flex-wrap items-center justify-center gap-3 bg-white px-5 py-3 rounded-2xl shadow-md border border-zinc-300">
           <div className="text-xs font-semibold text-zinc-800 mr-2">
-            {validStickers.length} Order Sticker(s) Ready • Gprinter GP-3120TU (75×100mm)
+            {validStickers.length} Order Sticker(s) Ready • 75×100mm Thermal
           </div>
           <button
             onClick={() => window.print()}

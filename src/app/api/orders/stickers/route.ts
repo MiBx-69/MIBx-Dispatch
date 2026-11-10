@@ -10,6 +10,26 @@ import type {
 
 const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || "2024-07";
 
+function getCorsHeaders(origin?: string | null): Record<string, string> {
+  const allowed = !origin || origin.includes("shopify.com") || origin.includes("universesraw.com") || origin.includes("localhost")
+    ? (origin || "*")
+    : "*";
+  return {
+    "Access-Control-Allow-Origin": allowed,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+    "Access-Control-Max-Age": "86400",
+  };
+}
+
+export async function OPTIONS(req: NextRequest) {
+  const origin = req.headers.get("origin");
+  return new NextResponse(null, {
+    status: 204,
+    headers: getCorsHeaders(origin),
+  });
+}
+
 function formatBdPhone(phone?: string | null): string {
   if (!phone) return "";
   const cleaned = phone.replace(/[^0-9]/g, "");
@@ -90,7 +110,7 @@ export async function POST(req: NextRequest) {
     if (!rawOrderIds || !Array.isArray(rawOrderIds) || rawOrderIds.length === 0) {
       return NextResponse.json(
         { error: "orderIds array is required and must not be empty" },
-        { status: 400 }
+        { status: 400, headers: getCorsHeaders(req.headers.get("origin")) }
       );
     }
 
@@ -182,7 +202,7 @@ export async function POST(req: NextRequest) {
       for (let i = 0; i < idsArray.length; i += CHUNK_SIZE) {
         const chunk = idsArray.slice(i, i + CHUNK_SIZE);
         try {
-          const url = `https://${domain}/admin/api/${SHOPIFY_API_VERSION}/orders.json?ids=${chunk.join(",")}&fields=id,name,order_number,created_at,note,note_attributes,customer,shipping_address,billing_address,line_items,financial_status,total_price,subtotal_price,total_discounts,discount_applications,discount_codes,total_shipping_price_set,shipping_lines,total_tax,total_outstanding`;
+          const url = `https://${domain}/admin/api/${SHOPIFY_API_VERSION}/orders.json?ids=${chunk.join(",")}&fields=id,name,order_number,created_at,note,note_attributes,customer,shipping_address,billing_address,line_items,financial_status,total_price,subtotal_price,total_discounts,discount_applications,discount_codes,total_shipping_price_set,shipping_lines,total_tax,total_outstanding,current_total_price,current_subtotal_price,current_total_discounts,refunds`;
           const ordersRes = await fetch(url, {
             method: "GET",
             headers: {
@@ -294,16 +314,44 @@ export async function POST(req: NextRequest) {
       const zip = shippingAddr?.zip || "";
       const areaCityDistrict = [city, province, zip].filter(Boolean).join(", ") || "";
 
-      // Product Items (All products listed without hiding!)
+      // Calculate refunded quantities per item if refunds array exists in Shopify
+      const refundedQtyByLineId = new Map<number, number>();
+      if (Array.isArray(live?.refunds)) {
+        for (const ref of live.refunds) {
+          if (Array.isArray(ref.refund_line_items)) {
+            for (const rli of ref.refund_line_items) {
+              const lid = Number(rli.line_item_id);
+              if (lid) {
+                refundedQtyByLineId.set(lid, (refundedQtyByLineId.get(lid) || 0) + Number(rli.quantity || 0));
+              }
+            }
+          }
+        }
+      }
+
+      // Product Items (Properly excludes removed items from Shopify edits & full refunds)
       const rawLineItems = live?.line_items || matchedDb?.line_items || [];
       const items: OrderStickerLineItem[] = [];
 
       for (const item of rawLineItems) {
+        // Check current_quantity from Shopify order edit
+        const hasCurrentQty = item.current_quantity !== undefined && item.current_quantity !== null;
+        const currentQty = hasCurrentQty ? Number(item.current_quantity) : null;
+        const origQty = Number(item.quantity || 0);
+        const refundedQty = item.id ? (refundedQtyByLineId.get(Number(item.id)) || 0) : 0;
+
+        // Effective quantity after edits and refunds
+        const effectiveQty = currentQty !== null ? currentQty : Math.max(0, origQty - refundedQty);
+
+        // If the item has been removed in Shopify or fully refunded, exclude it completely!
+        if (effectiveQty <= 0) {
+          continue;
+        }
+
         const title = item.title || item.name || "Item";
         const variantTitle = item.variant_title || (item.variantTitle !== "Default Title" ? item.variantTitle : "") || "";
-        const quantity = Number(item.quantity || 1);
         const unitPrice = parseFloat(item.price || item.unit_price || "0");
-        const lineTotal = unitPrice * quantity;
+        const lineTotal = unitPrice * effectiveQty;
         const sku = item.sku?.trim() || null;
 
         // Extract size from variant title or variant options
@@ -323,19 +371,30 @@ export async function POST(req: NextRequest) {
           variantTitle: variantTitle || null,
           size,
           sku,
-          quantity,
+          quantity: effectiveQty,
           unitPrice,
           lineTotal,
         });
       }
 
-      // Financials & Calculations
-      const subtotal = parseFloat(live?.subtotal_price || String(matchedDb?.subtotal_price || "0")) ||
-        items.reduce((sum, it) => sum + it.lineTotal, 0);
+      // Financials & Calculations (reflecting current active state without phantom discounts)
+      const subtotal = parseFloat(
+        live?.current_subtotal_price ||
+        live?.subtotal_price ||
+        String(matchedDb?.subtotal_price || "0")
+      ) || items.reduce((sum, it) => sum + it.lineTotal, 0);
 
-      const totalOrderValue = parseFloat(live?.total_price || String(matchedDb?.total_price || "0")) || subtotal;
+      const totalOrderValue = parseFloat(
+        live?.current_total_price ||
+        live?.total_price ||
+        String(matchedDb?.total_price || "0")
+      ) || subtotal;
 
-      const productDiscount = parseFloat(live?.total_discounts || String(matchedDb?.discount_amount || "0")) || 0;
+      const productDiscount = parseFloat(
+        live?.current_total_discounts ||
+        live?.total_discounts ||
+        String(matchedDb?.discount_amount || "0")
+      ) || 0;
 
       // Discount Code & Reason
       const discountCodes = live?.discount_codes || [];
@@ -421,20 +480,25 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    return NextResponse.json({
-      success: true,
-      storeName,
-      stickers,
-      total: orderIds.length,
-      readyCount: stickers.length,
-      failedCount: failedIds.length,
-      failedIds,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        storeName,
+        stickers,
+        total: orderIds.length,
+        readyCount: stickers.length,
+        failedCount: failedIds.length,
+        failedIds,
+      },
+      {
+        headers: getCorsHeaders(req.headers.get("origin")),
+      }
+    );
   } catch (error: any) {
     console.error("[Order Stickers API] Fatal error:", error);
     return NextResponse.json(
       { error: error.message || "Failed to generate sticker data" },
-      { status: 500 }
+      { status: 500, headers: getCorsHeaders(req.headers.get("origin")) }
     );
   }
 }

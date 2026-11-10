@@ -111,7 +111,7 @@ export function OrderStickerThermalCard({
         </div>
         <div className="flex items-center justify-between text-[7.5px] text-zinc-800 font-semibold mt-1">
           <span>Date: {sticker.orderDate} {sticker.orderTime ? `• ${sticker.orderTime}` : ""}</span>
-          <span className="uppercase tracking-wider">GP-3120TU • 75×100mm</span>
+          <span className="uppercase tracking-wider font-semibold">75×100mm</span>
         </div>
       </div>
 

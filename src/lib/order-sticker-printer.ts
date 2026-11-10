@@ -85,7 +85,7 @@ export function generateOrderStickersHtml(
             </div>
             <div class="header-meta">
               <span>Date: ${escapeHtml(stk.orderDate)} ${stk.orderTime ? `• ${escapeHtml(stk.orderTime)}` : ""}</span>
-              <span class="badge">GP-3120TU • 75×100mm</span>
+              <span class="badge">75×100mm</span>
             </div>
           </div>
 
