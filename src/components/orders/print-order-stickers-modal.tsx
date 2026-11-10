@@ -458,10 +458,10 @@ export function PrintOrderStickersModal({
             </div>
 
             {/* Driver Note */}
-            <div className="p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] text-zinc-400 flex items-center justify-between">
+            <div className="p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] text-zinc-400 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
               <div>
-                <span className="font-semibold text-zinc-300 mr-1.5">Windows Driver Setting:</span>
-                <span>Set stock to 75×100mm (or 2.95×3.94 in) with 0 unprintable margin in Gprinter GP-3120TU preferences.</span>
+                <span className="font-semibold text-zinc-300 mr-1.5">Printable Area Calibration:</span>
+                <span>Safe margins active (~66×93mm printable zone). If physical roller shifts print right, set Left Offset to -1mm or -2mm.</span>
               </div>
             </div>
           </div>

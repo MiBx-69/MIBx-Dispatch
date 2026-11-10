@@ -26,9 +26,13 @@ export function OrderStickerThermalCard({
   const itemCount = sticker.items.length;
   const isMultiItem = itemCount > 2;
 
-  // Offset adjustments in mm (safe alignment)
+  // Safe alignment padding (4.5mm left/right, 3.5mm top/bottom to prevent edge clipping on thermal rolls)
   const topOffset = config.topOffsetMm || 0;
   const leftOffset = config.leftOffsetMm || 0;
+  const padTop = Math.max(1, 3.5 + topOffset);
+  const padBottom = Math.max(1, 3.5 - topOffset);
+  const padLeft = Math.max(1, 4.5 + leftOffset);
+  const padRight = Math.max(1, 4.5 - leftOffset);
 
   return (
     <div
@@ -42,33 +46,28 @@ export function OrderStickerThermalCard({
         height: heightVal,
         maxWidth: widthVal,
         maxHeight: heightVal,
-        // 75mm total width - 3mm total horizontal padding (1.5mm left + 1.5mm right) = 72mm printable width
-        padding: "2.5mm 1.5mm",
+        // Centered safe printable zone: ~66mm width x ~93mm height
+        padding: `${padTop}mm ${padRight}mm ${padBottom}mm ${padLeft}mm`,
         pageBreakAfter: "always",
         breakAfter: "page",
         pageBreakInside: "avoid",
         breakInside: "avoid",
         WebkitPrintColorAdjust: "exact",
         printColorAdjust: "exact",
-        ...(topOffset !== 0 || leftOffset !== 0
-          ? {
-              transform: `translate(${leftOffset}mm, ${topOffset}mm)`,
-            }
-          : {}),
       }}
     >
       {/* ─── SECTION A: Store Header ─── */}
       <div className="w-full border-b-[1.5px] border-black pb-1 shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-baseline gap-1.5 overflow-hidden">
-            <span className="text-[13px] font-black tracking-wider uppercase truncate">{storeName}</span>
-            <span className="text-[8.5px] font-bold text-zinc-600 uppercase shrink-0">Parcel Sticker</span>
+            <span className="text-[12.5px] font-black tracking-wider uppercase truncate">{storeName}</span>
+            <span className="text-[8px] font-bold text-zinc-600 uppercase shrink-0">Parcel Sticker</span>
           </div>
           <div className="text-right shrink-0">
-            <span className="text-base font-black tracking-tight">{sticker.orderNumber}</span>
+            <span className="text-[15px] font-black tracking-tight">{sticker.orderNumber}</span>
           </div>
         </div>
-        <div className="flex items-center justify-between text-[7.5px] text-zinc-800 font-semibold mt-0.5">
+        <div className="flex items-center justify-between text-[7px] text-zinc-800 font-semibold mt-0.5">
           <span>Date: {sticker.orderDate} {sticker.orderTime ? `• ${sticker.orderTime}` : ""}</span>
           <span className="uppercase tracking-wider">Gprinter 203 DPI</span>
         </div>
@@ -82,7 +81,7 @@ export function OrderStickerThermalCard({
             <span className="font-bold text-black truncate">{sticker.customerName}</span>
           </div>
           <div className="text-right shrink-0">
-            <span className="font-black text-[10px] tracking-tight text-black">{sticker.customerPhone}</span>
+            <span className="font-black text-[9.5px] tracking-tight text-black">{sticker.customerPhone}</span>
           </div>
         </div>
 
@@ -113,15 +112,15 @@ export function OrderStickerThermalCard({
       {/* ─── SECTION C: Product Information Table (Lists ALL Products) ─── */}
       <div className="w-full flex-1 overflow-hidden py-0.5 flex flex-col justify-center">
         <div className="w-full flex items-center justify-between text-[7.5px] font-bold uppercase tracking-wider text-zinc-700 border-b border-black/30 pb-0.5 mb-0.5 shrink-0">
-          <span className="w-[60%]">Product / Variant</span>
-          <span className="w-[12%] text-center">Qty</span>
+          <span className="w-[58%]">Product / Variant</span>
+          <span className="w-[14%] text-center">Qty</span>
           <span className="w-[28%] text-right">Price</span>
         </div>
 
         <div className="w-full space-y-0.5 overflow-hidden">
           {sticker.items.map((item, idx) => (
             <div key={idx} className="w-full flex items-start justify-between text-[8px] leading-tight">
-              <div className="w-[60%] pr-1">
+              <div className="w-[58%] pr-1">
                 <p className={`font-bold text-black ${isMultiItem ? "truncate" : "line-clamp-2"}`}>
                   {item.title}
                 </p>
@@ -134,7 +133,7 @@ export function OrderStickerThermalCard({
                   )}
                 </div>
               </div>
-              <div className="w-[12%] text-center font-bold text-black pt-0.5">
+              <div className="w-[14%] text-center font-bold text-black pt-0.5">
                 {item.quantity}x
               </div>
               <div className="w-[28%] text-right font-black text-black pt-0.5">
@@ -164,7 +163,7 @@ export function OrderStickerThermalCard({
                 </span>
               )}
               {financials.discountReason && (
-                <span className="text-[7px] text-zinc-600 truncate max-w-[100px]">
+                <span className="text-[7px] text-zinc-600 truncate max-w-[90px]">
                   ({financials.discountReason})
                 </span>
               )}:
@@ -200,19 +199,19 @@ export function OrderStickerThermalCard({
       </div>
 
       {/* ─── SECTION F: Prominent Payment Highlight (COD vs PAID – NO COD) ─── */}
-      <div className="w-full border-t-[2px] border-black pt-1 mt-0.5 shrink-0">
+      <div className="w-full border-t-[2px] border-black pt-0.5 mt-0.5 shrink-0">
         {isPrepaid ? (
-          <div className="w-full border-2 border-black bg-white text-black py-1 px-1.5 text-center rounded-xs">
+          <div className="w-full border-2 border-black bg-white text-black py-0.5 px-1 text-center rounded-xs">
             <span className="text-[11px] font-black uppercase tracking-wider">
               PAID – NO COD
             </span>
           </div>
         ) : (
-          <div className="w-full border-2 border-black bg-white text-black py-0.5 px-1.5 text-center rounded-xs flex items-center justify-between">
-            <span className="text-[9.5px] font-black uppercase tracking-wider text-black">
+          <div className="w-full border-2 border-black bg-white text-black py-0.5 px-1 text-center rounded-xs flex items-center justify-between">
+            <span className="text-[9px] font-black uppercase tracking-wider text-black">
               CASH TO COLLECT:
             </span>
-            <span className="text-[14px] font-black tracking-tight text-black">
+            <span className="text-[13.5px] font-black tracking-tight text-black">
               {financials.currency} {Number(financials.codAmount).toLocaleString()}
             </span>
           </div>

@@ -16,9 +16,12 @@ export function generateOrderStickersHtml(
   const storeName = (config.storeNameOverride?.trim() || stickers[0]?.storeName || "UNIVERSES").toUpperCase();
   const topOffset = config.topOffsetMm || 0;
   const leftOffset = config.leftOffsetMm || 0;
-  const transformStyle = topOffset !== 0 || leftOffset !== 0
-    ? `transform: translate(${leftOffset}mm, ${topOffset}mm);`
-    : "";
+
+  // Safe alignment padding (4.5mm left/right, 3.5mm top/bottom to prevent edge clipping on thermal rolls)
+  const padTop = Math.max(1, 3.5 + topOffset);
+  const padBottom = Math.max(1, 3.5 - topOffset);
+  const padLeft = Math.max(1, 4.5 + leftOffset);
+  const padRight = Math.max(1, 4.5 - leftOffset);
 
   const stickersHtml = stickers
     .map((stk, index) => {
@@ -48,7 +51,7 @@ export function generateOrderStickersHtml(
 
       return `
       <div class="order-sticker-page ${index === stickers.length - 1 ? "is-last" : ""}">
-        <div class="sticker-inner" style="${transformStyle}">
+        <div class="sticker-inner">
           <!-- SECTION A: Store Header -->
           <div class="sticker-header">
             <div class="header-top">
@@ -198,7 +201,7 @@ export function generateOrderStickersHtml(
     .sticker-inner {
       width: 100%;
       height: 100%;
-      padding: 2.5mm 1.5mm;
+      padding: ${padTop}mm ${padRight}mm ${padBottom}mm ${padLeft}mm;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -219,7 +222,7 @@ export function generateOrderStickersHtml(
       align-items: baseline;
     }
     .store-name {
-      font-size: 13px;
+      font-size: 12.5px;
       font-weight: 900;
       letter-spacing: 0.5px;
       text-transform: uppercase;
@@ -237,7 +240,7 @@ export function generateOrderStickersHtml(
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 7.5px;
+      font-size: 7px;
       color: #333333;
       margin-top: 1px;
     }
@@ -306,7 +309,7 @@ export function generateOrderStickersHtml(
       font-size: 7.5px;
       font-weight: 700;
       color: #444444;
-      padding-left: 10mm;
+      padding-left: 8mm;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -324,7 +327,7 @@ export function generateOrderStickersHtml(
       width: 100%;
       flex: 1;
       overflow: hidden;
-      padding: 0.8mm 0;
+      padding: 0.6mm 0;
       display: flex;
       flex-direction: column;
       justify-content: center;
@@ -340,14 +343,14 @@ export function generateOrderStickersHtml(
       padding-bottom: 0.4mm;
       margin-bottom: 0.4mm;
     }
-    .col-desc { width: 60%; }
-    .col-qty { width: 12%; text-align: center; }
+    .col-desc { width: 58%; }
+    .col-qty { width: 14%; text-align: center; }
     .col-price { width: 28%; text-align: right; }
 
     .items-list {
       display: flex;
       flex-direction: column;
-      gap: 0.8mm;
+      gap: 0.6mm;
       overflow: hidden;
     }
     .item-row {
@@ -358,7 +361,7 @@ export function generateOrderStickersHtml(
       line-height: 1.15;
     }
     .item-desc {
-      width: 60%;
+      width: 58%;
       padding-right: 1mm;
     }
     .item-title {
@@ -382,7 +385,7 @@ export function generateOrderStickersHtml(
       font-size: 6.5px;
     }
     .item-qty {
-      width: 12%;
+      width: 14%;
       text-align: center;
       font-weight: 800;
     }
@@ -396,7 +399,7 @@ export function generateOrderStickersHtml(
     .financials-section {
       width: 100%;
       border-top: 1px solid #000000;
-      padding-top: 0.6mm;
+      padding-top: 0.5mm;
       font-size: 8px;
       line-height: 1.2;
       flex-shrink: 0;
@@ -427,13 +430,13 @@ export function generateOrderStickersHtml(
     .payment-highlight {
       width: 100%;
       border-top: 1.5px solid #000000;
-      padding-top: 0.8mm;
-      margin-top: 0.4mm;
+      padding-top: 0.6mm;
+      margin-top: 0.3mm;
       flex-shrink: 0;
     }
     .prepaid-box {
       border: 1.5px solid #000000;
-      padding: 1.2mm 1.5mm;
+      padding: 1mm 1.5mm;
       text-align: center;
       font-size: 11px;
       font-weight: 900;
@@ -442,19 +445,19 @@ export function generateOrderStickersHtml(
     }
     .cod-box {
       border: 1.5px solid #000000;
-      padding: 0.8mm 1.5mm;
+      padding: 0.6mm 1.5mm;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
     .cod-label {
-      font-size: 9.5px;
+      font-size: 9px;
       font-weight: 900;
       text-transform: uppercase;
       letter-spacing: 0.3px;
     }
     .cod-amount {
-      font-size: 14px;
+      font-size: 13.5px;
       font-weight: 900;
       letter-spacing: -0.3px;
     }
@@ -483,9 +486,18 @@ export function generateOrderStickersHtml(
 
 /**
  * Generates an exact 75x100mm alignment and gap calibration sticker for Gprinter GP-3120TU
+ * Uses safe printable frame so all 4 borders and corner crosshairs are 100% visible on the physical label.
  */
 export function generateTestCalibrationStickerHtml(config: OrderStickerConfig): string {
   const storeName = (config.storeNameOverride?.trim() || "UNIVERSES").toUpperCase();
+  const topOffset = config.topOffsetMm || 0;
+  const leftOffset = config.leftOffsetMm || 0;
+
+  // Safe alignment padding (4.5mm left/right, 3.5mm top/bottom)
+  const padTop = Math.max(1, 3.5 + topOffset);
+  const padBottom = Math.max(1, 3.5 - topOffset);
+  const padLeft = Math.max(1, 4.5 + leftOffset);
+  const padRight = Math.max(1, 4.5 - leftOffset);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -510,9 +522,19 @@ export function generateTestCalibrationStickerHtml(config: OrderStickerConfig): 
     .calib-page {
       width: 75mm;
       height: 100mm;
-      border: 1.5px solid #000000;
       margin: 0;
-      padding: 2.5mm 1.5mm;
+      padding: ${padTop}mm ${padRight}mm ${padBottom}mm ${padLeft}mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      box-sizing: border-box;
+      position: relative;
+    }
+    .safe-frame {
+      width: 100%;
+      height: 100%;
+      border: 1.5px solid #000000;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -520,36 +542,39 @@ export function generateTestCalibrationStickerHtml(config: OrderStickerConfig): 
       text-align: center;
       box-sizing: border-box;
       position: relative;
+      padding: 3mm 2mm;
     }
-    /* Corner Marks */
-    .c-tl { position: absolute; top: 1mm; left: 1mm; font-size: 8px; font-weight: bold; }
-    .c-tr { position: absolute; top: 1mm; right: 1mm; font-size: 8px; font-weight: bold; }
-    .c-bl { position: absolute; bottom: 1mm; left: 1mm; font-size: 8px; font-weight: bold; }
-    .c-br { position: absolute; bottom: 1mm; right: 1mm; font-size: 8px; font-weight: bold; }
+    /* Corner Marks inside the safe frame */
+    .c-tl { position: absolute; top: 1mm; left: 1mm; font-size: 7.5px; font-weight: bold; }
+    .c-tr { position: absolute; top: 1mm; right: 1mm; font-size: 7.5px; font-weight: bold; }
+    .c-bl { position: absolute; bottom: 1mm; left: 1mm; font-size: 7.5px; font-weight: bold; }
+    .c-br { position: absolute; bottom: 1mm; right: 1mm; font-size: 7.5px; font-weight: bold; }
   </style>
 </head>
 <body>
   <div class="calib-page">
-    <div class="c-tl">+ 0,0</div>
-    <div class="c-tr">+ 75,0</div>
-    <div class="c-bl">+ 0,100</div>
-    <div class="c-br">+ 75,100</div>
+    <div class="safe-frame">
+      <div class="c-tl">+ 0,0</div>
+      <div class="c-tr">+ 75,0</div>
+      <div class="c-bl">+ 0,100</div>
+      <div class="c-br">+ 75,100</div>
 
-    <div style="margin-top: 4mm;">
-      <h2 style="margin:0; font-size: 13px; font-weight: 900;">${escapeHtml(storeName)}</h2>
-      <p style="margin:2px 0 0 0; font-size: 8.5px; font-weight: bold;">GP-3120TU 75x100mm TEST PRINT</p>
-    </div>
+      <div style="margin-top: 3mm;">
+        <h2 style="margin:0; font-size: 13px; font-weight: 900;">${escapeHtml(storeName)}</h2>
+        <p style="margin:2px 0 0 0; font-size: 8.5px; font-weight: bold;">GP-3120TU 75x100mm TEST PRINT</p>
+      </div>
 
-    <div style="border: 1px dashed #000; padding: 3mm; width: 92%;">
-      <p style="margin: 0; font-size: 9.5px; font-weight: bold;">RULER BOUNDARY</p>
-      <p style="margin: 2px 0; font-size: 8px;">WIDTH: 75mm | HEIGHT: 100mm</p>
-      <p style="margin: 0; font-size: 7.5px;">Resolution: 203 DPI (~600x800 dots)</p>
-      <p style="margin: 2px 0 0 0; font-size: 7px; color: #333;">Printable Width: ~72mm (Safe Margins)</p>
-    </div>
+      <div style="border: 1px dashed #000; padding: 2.5mm; width: 92%;">
+        <p style="margin: 0; font-size: 9.5px; font-weight: bold;">RULER BOUNDARY</p>
+        <p style="margin: 2px 0; font-size: 8px;">WIDTH: 75mm | HEIGHT: 100mm</p>
+        <p style="margin: 0; font-size: 7.5px;">Resolution: 203 DPI (~600x800 dots)</p>
+        <p style="margin: 2px 0 0 0; font-size: 7px; color: #333;">Safe Printable Frame: ~66mm × 93mm</p>
+      </div>
 
-    <div style="margin-bottom: 3mm;">
-      <p style="margin: 0; font-size: 8.5px; font-weight: bold;">[GAP SENSOR CALIBRATION OK]</p>
-      <p style="margin: 2px 0 0 0; font-size: 7px;">If borders are cut off, adjust Driver Margins or Offsets</p>
+      <div style="margin-bottom: 2mm;">
+        <p style="margin: 0; font-size: 8.5px; font-weight: bold;">[GAP SENSOR CALIBRATION OK]</p>
+        <p style="margin: 2px 0 0 0; font-size: 7px;">All 4 outer borders must be fully visible inside paper</p>
+      </div>
     </div>
   </div>
 </body>
