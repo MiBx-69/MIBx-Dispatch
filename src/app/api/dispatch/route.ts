@@ -432,20 +432,12 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
     }
   }
 
-  // 5. Attach tracking & fraud report to Shopify Order Note & Tags
+  // 5. Attach tags & fraud custom attributes to Shopify Order (without altering customer note)
   try {
-    const { buildDispatchCustomAttributes, buildDispatchCombinedNote } = await import("@/lib/fraud-checker");
+    const { buildDispatchCustomAttributes } = await import("@/lib/fraud-checker");
     const customAttributes = buildDispatchCustomAttributes({
       consignmentId: consignment_id,
       trackingUrl,
-      fraudData,
-      riskAnalysis,
-    });
-
-    const combinedNote = buildDispatchCombinedNote({
-      consignmentId: consignment_id,
-      trackingUrl,
-      existingNote: order.note,
       fraudData,
       riskAnalysis,
     });
@@ -454,7 +446,6 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
 
     await updateShopifyOrder({
       id: `gid://shopify/Order/${order.shopify_order_id}`,
-      note: combinedNote,
       tags: Array.from(new Set([
         ...(order.shopify_tags || []),
         "Dispatched via Pathao",
@@ -464,11 +455,6 @@ export async function executeDispatchOrder(params: DispatchParams, profileId?: s
       ])),
       ...(customAttributes ? { customAttributes } : {}),
     });
-
-    await supabase
-      .from("orders")
-      .update({ note: combinedNote })
-      .eq("id", order.id);
   } catch (tagErr) {
     console.error("[Dispatch] Shopify tag/attributes update error (non-fatal):", tagErr);
   }

@@ -1,5 +1,4 @@
 import type { OrderStickerData, OrderStickerConfig } from "@/types/order-sticker";
-import { generateCode128Svg } from "@/lib/barcode-svg";
 
 function escapeHtml(str: string): string {
   return String(str)
@@ -34,12 +33,6 @@ export function generateOrderStickersHtml(
       const formattedDiscount = Number(stk.financials.productDiscount || 0).toLocaleString();
       const formattedAdvance = Number(stk.financials.advancePaid || 0).toLocaleString();
       const formattedCod = Number(stk.financials.codAmount || 0).toLocaleString();
-
-      const barcodeSvg = generateCode128Svg(stk.orderNumber, {
-        height: 18,
-        barWidth: 1.05,
-        showText: false,
-      });
 
       const itemCount = stk.items.length;
       const pRowClass =
@@ -92,17 +85,12 @@ export function generateOrderStickersHtml(
               <span class="order-number">${escapeHtml(stk.orderNumber)}</span>
             </div>
             <div class="header-meta">
-              <div class="meta-left">
-                <span>Date: ${escapeHtml(stk.orderDate)} ${stk.orderTime ? `• ${escapeHtml(stk.orderTime)}` : ""}</span>
-                ${
-                  stk.pathaoTrackingCode || stk.pathaoConsignmentId
-                    ? `<span class="pathao-badge">PATHAO: ${escapeHtml(stk.pathaoTrackingCode || stk.pathaoConsignmentId || "")}</span>`
-                    : ""
-                }
-              </div>
-              <div class="barcode-wrap">
-                ${barcodeSvg}
-              </div>
+              <span class="meta-date">Date: ${escapeHtml(stk.orderDate)} ${stk.orderTime ? `• ${escapeHtml(stk.orderTime)}` : ""}</span>
+              ${
+                stk.pathaoTrackingCode || stk.pathaoConsignmentId
+                  ? `<span class="pathao-badge">PATHAO: ${escapeHtml(stk.pathaoTrackingCode || stk.pathaoConsignmentId || "")}</span>`
+                  : `<span class="badge">75×100mm</span>`
+              }
             </div>
           </div>
 
@@ -313,37 +301,24 @@ export function generateOrderStickersHtml(
       font-size: 7.5px;
       font-weight: 600;
       color: #222222;
-      margin-top: 0.6mm;
+      margin-top: 0.8mm;
     }
-    .meta-left {
-      display: flex;
-      align-items: center;
-      gap: 1mm;
-      overflow: hidden;
+    .meta-date {
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .pathao-badge {
-      font-size: 7px;
+      font-size: 7.5px;
       font-weight: 700;
       text-transform: uppercase;
       border: 1px solid #000000;
-      padding: 0.2mm 0.8mm;
+      padding: 0.2mm 1mm;
       line-height: 1;
       letter-spacing: 0.3px;
-    }
-    .barcode-wrap {
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
+      font-family: monospace;
       flex-shrink: 0;
-      max-width: 45%;
-      overflow: hidden;
-    }
-    .barcode-wrap svg {
-      height: 18px;
-      width: auto;
-      max-width: 100%;
-      display: block;
+      white-space: nowrap;
     }
     .badge {
       font-weight: 600;

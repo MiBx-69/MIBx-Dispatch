@@ -1,6 +1,5 @@
 import React from "react";
 import type { OrderStickerData, OrderStickerConfig } from "@/types/order-sticker";
-import { generateCode128Svg } from "@/lib/barcode-svg";
 
 interface OrderStickerThermalCardProps {
   sticker: OrderStickerData;
@@ -112,20 +111,14 @@ export function OrderStickerThermalCard({
           </div>
         </div>
         <div className="flex items-center justify-between text-[7.5px] text-zinc-800 font-semibold mt-1">
-          <div className="flex items-center gap-1.5 overflow-hidden truncate">
-            <span>Date: {sticker.orderDate} {sticker.orderTime ? `• ${sticker.orderTime}` : ""}</span>
-            {(sticker.pathaoTrackingCode || sticker.pathaoConsignmentId) && (
-              <span className="text-[7px] font-bold border border-black px-1 py-0.2 tracking-wider shrink-0 uppercase">
-                PATHAO: {sticker.pathaoTrackingCode || sticker.pathaoConsignmentId}
-              </span>
-            )}
-          </div>
-          <div
-            className="shrink-0 flex items-center justify-end max-w-[45%] overflow-hidden"
-            dangerouslySetInnerHTML={{
-              __html: generateCode128Svg(sticker.orderNumber, { height: 18, barWidth: 1.05 }),
-            }}
-          />
+          <span className="truncate">Date: {sticker.orderDate} {sticker.orderTime ? `• ${sticker.orderTime}` : ""}</span>
+          {(sticker.pathaoTrackingCode || sticker.pathaoConsignmentId) ? (
+            <span className="text-[7.5px] font-bold border border-black px-1.5 py-0.5 tracking-wider shrink-0 uppercase font-mono leading-none">
+              PATHAO: {sticker.pathaoTrackingCode || sticker.pathaoConsignmentId}
+            </span>
+          ) : (
+            <span className="uppercase tracking-wider font-semibold">75×100mm</span>
+          )}
         </div>
       </div>
 

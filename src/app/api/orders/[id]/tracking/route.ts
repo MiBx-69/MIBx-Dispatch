@@ -4,9 +4,7 @@ import { formatPathaoTrackingUrl } from "@/lib/pathao/client";
 import {
   updateShopifyFulfillmentTracking,
   getShopifyOrderFulfillments,
-  updateShopifyOrder,
 } from "@/lib/shopify/client";
-import { buildDispatchCombinedNote } from "@/lib/fraud-checker";
 import { logOrderEvent } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -88,22 +86,6 @@ export async function POST(
           .eq("order_id", order.id);
         updatedShopifyFulfillment = true;
       }
-
-      const combinedNote = buildDispatchCombinedNote({
-        consignmentId,
-        trackingUrl,
-        existingNote: order.note,
-      });
-
-      await updateShopifyOrder({
-        id: `gid://shopify/Order/${order.shopify_order_id}`,
-        note: combinedNote,
-      });
-      await supabase
-        .from("orders")
-        .update({ note: combinedNote })
-        .eq("id", order.id);
-      updatedShopifyNote = true;
     } catch (shopifyErr: any) {
       console.error("[Tracking Route] Failed to update Shopify:", shopifyErr);
     }

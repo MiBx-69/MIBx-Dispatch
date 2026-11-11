@@ -547,14 +547,14 @@ describe("MiBx Dispatch — Advanced 75×100mm Order Sticker Printing System", (
   });
 
   describe("MiBx Dispatch — 1-5 Thermal Printing Production Enhancements", () => {
-    it("Feature 1: Generates crisp 1D Code 128 SVG barcode for order number", () => {
+    it("Feature 1: Displays clean Pathao consignment ID without crowding barcode", () => {
       const sticker = createMockSticker({
         orderNumber: "#2205",
+        pathaoConsignmentId: "DU110926854GH8",
       });
       const html = generateOrderStickersHtml([sticker], DEFAULT_75X100_CONFIG);
-      expect(html).toContain("barcode-wrap");
-      expect(html).toContain("<svg");
-      expect(html).toContain("<rect");
+      expect(html).not.toContain("barcode-wrap");
+      expect(html).toContain("PATHAO: DU110926854GH8");
     });
 
     it("Feature 2: Displays prominent customer delivery note when present", () => {
