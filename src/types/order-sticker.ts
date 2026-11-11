@@ -38,9 +38,15 @@ export interface OrderStickerData {
   altPhone?: string | null;
   fullAddress: string;
   areaCityDistrict: string;
+  customerNote?: string | null;
+
+  // Courier & Tracking Integration
+  pathaoConsignmentId?: string | null;
+  pathaoTrackingCode?: string | null;
 
   // Line items
   items: OrderStickerLineItem[];
+  totalPcs?: number; // Sum of all item quantities for packing checklist
 
   // Financial Breakdown
   financials: OrderStickerFinancials;

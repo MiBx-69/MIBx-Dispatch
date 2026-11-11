@@ -1,4 +1,5 @@
 import type { OrderStickerData, OrderStickerConfig } from "@/types/order-sticker";
+import { generateCode128Svg } from "@/lib/barcode-svg";
 
 function escapeHtml(str: string): string {
   return String(str)
@@ -17,9 +18,9 @@ export function generateOrderStickersHtml(
   const topOffset = config.topOffsetMm || 0;
   const leftOffset = config.leftOffsetMm || 0;
 
-  // Balanced centered margins: 3.0mm horizontal (69.0mm printable width), 2.5mm vertical (95.0mm height)
-  const padTop = Math.max(0.5, 2.5 + topOffset);
-  const padBottom = Math.max(0.5, 2.5 - topOffset);
+  // Balanced centered margins with tear-off safety: 3.0mm horizontal, 2.0mm top, 3.5mm bottom
+  const padTop = Math.max(0.5, 2.0 + topOffset);
+  const padBottom = Math.max(1.0, 3.5 - topOffset);
   const padLeft = Math.max(0.5, 3.0 + leftOffset);
   const padRight = Math.max(0.5, 3.0 - leftOffset);
 
@@ -32,6 +33,12 @@ export function generateOrderStickersHtml(
       const formattedDiscount = Number(stk.financials.productDiscount || 0).toLocaleString();
       const formattedAdvance = Number(stk.financials.advancePaid || 0).toLocaleString();
       const formattedCod = Number(stk.financials.codAmount || 0).toLocaleString();
+
+      const barcodeSvg = generateCode128Svg(stk.orderNumber, {
+        height: 18,
+        barWidth: 1.05,
+        showText: false,
+      });
 
       const itemCount = stk.items.length;
       const pRowClass =
@@ -84,8 +91,17 @@ export function generateOrderStickersHtml(
               <span class="order-number">${escapeHtml(stk.orderNumber)}</span>
             </div>
             <div class="header-meta">
-              <span>Date: ${escapeHtml(stk.orderDate)} ${stk.orderTime ? `• ${escapeHtml(stk.orderTime)}` : ""}</span>
-              <span class="badge">75×100mm</span>
+              <div class="meta-left">
+                <span>Date: ${escapeHtml(stk.orderDate)} ${stk.orderTime ? `• ${escapeHtml(stk.orderTime)}` : ""}</span>
+                ${
+                  stk.pathaoTrackingCode || stk.pathaoConsignmentId
+                    ? `<span class="pathao-badge">PATHAO: ${escapeHtml(stk.pathaoTrackingCode || stk.pathaoConsignmentId || "")}</span>`
+                    : ""
+                }
+              </div>
+              <div class="barcode-wrap">
+                ${barcodeSvg}
+              </div>
             </div>
           </div>
 
@@ -115,13 +131,21 @@ export function generateOrderStickersHtml(
                 ? `<div class="area-row">${escapeHtml(stk.areaCityDistrict)}</div>`
                 : ""
             }
+            ${
+              stk.customerNote
+                ? `<div class="note-row">
+                    <span class="label">NOTE:</span>
+                    <span class="note-val">${escapeHtml(stk.customerNote)}</span>
+                   </div>`
+                : ""
+            }
           </div>
 
           <!-- SECTION C: Product Items Table (Adaptive Layout) -->
           <div class="products-section">
             <div class="table-header">
-              <span>Items &amp; Details</span>
-              <span>Qty • Price</span>
+              <span>ITEMS &amp; DETAILS</span>
+              <span class="pack-badge">TOTAL: ${stk.items.length} ${stk.items.length === 1 ? "ITEM" : "ITEMS"} (${stk.totalPcs || stk.items.length} PCS)</span>
             </div>
             <div class="items-list">
               ${itemsHtml}
@@ -281,7 +305,37 @@ export function generateOrderStickersHtml(
       font-size: 7.5px;
       font-weight: 600;
       color: #222222;
-      margin-top: 0.8mm;
+      margin-top: 0.6mm;
+    }
+    .meta-left {
+      display: flex;
+      align-items: center;
+      gap: 1mm;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+    .pathao-badge {
+      font-size: 7px;
+      font-weight: 700;
+      text-transform: uppercase;
+      border: 1px solid #000000;
+      padding: 0.2mm 0.8mm;
+      line-height: 1;
+      letter-spacing: 0.3px;
+    }
+    .barcode-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      flex-shrink: 0;
+      max-width: 45%;
+      overflow: hidden;
+    }
+    .barcode-wrap svg {
+      height: 18px;
+      width: auto;
+      max-width: 100%;
+      display: block;
     }
     .badge {
       font-weight: 600;
@@ -350,6 +404,23 @@ export function generateOrderStickersHtml(
       padding-left: 5.5mm;
       margin-top: 0.2mm;
     }
+    .note-row {
+      display: flex;
+      gap: 1mm;
+      font-size: 8.5px;
+      font-weight: 700;
+      color: #000000;
+      margin-top: 0.4mm;
+      background: #f4f4f5;
+      padding: 0.4mm 0.8mm;
+      border-left: 2px solid #000000;
+      line-height: 1.2;
+    }
+    .note-val {
+      font-weight: 700;
+      color: #000000;
+      word-break: break-word;
+    }
     .label {
       font-size: 8.5px;
       text-transform: uppercase;
@@ -379,6 +450,12 @@ export function generateOrderStickersHtml(
       border-bottom: 0.5px solid #888888;
       padding-bottom: 0.3mm;
       margin-bottom: 0.3mm;
+    }
+    .pack-badge {
+      font-weight: 800;
+      letter-spacing: 0.2px;
+      color: #000000;
+      font-size: 7.5px;
     }
     .items-list {
       display: flex;

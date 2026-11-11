@@ -1,5 +1,6 @@
 import React from "react";
 import type { OrderStickerData, OrderStickerConfig } from "@/types/order-sticker";
+import { generateCode128Svg } from "@/lib/barcode-svg";
 
 interface OrderStickerThermalCardProps {
   sticker: OrderStickerData;
@@ -25,11 +26,11 @@ export function OrderStickerThermalCard({
   // Item count for adaptive layout
   const itemCount = sticker.items.length;
 
-  // Balanced centered margins: 3.0mm horizontal (69.0mm printable width), 2.5mm vertical (95.0mm height)
+  // Balanced centered margins with tear-off safety: 3.0mm horizontal, 2.0mm top, 3.5mm bottom
   const topOffset = config.topOffsetMm || 0;
   const leftOffset = config.leftOffsetMm || 0;
-  const padTop = Math.max(0.5, 2.5 + topOffset);
-  const padBottom = Math.max(0.5, 2.5 - topOffset);
+  const padTop = Math.max(0.5, 2.0 + topOffset);
+  const padBottom = Math.max(1.0, 3.5 - topOffset);
   const padLeft = Math.max(0.5, 3.0 + leftOffset);
   const padRight = Math.max(0.5, 3.0 - leftOffset);
 
@@ -110,8 +111,20 @@ export function OrderStickerThermalCard({
           </div>
         </div>
         <div className="flex items-center justify-between text-[7.5px] text-zinc-800 font-semibold mt-1">
-          <span>Date: {sticker.orderDate} {sticker.orderTime ? `• ${sticker.orderTime}` : ""}</span>
-          <span className="uppercase tracking-wider font-semibold">75×100mm</span>
+          <div className="flex items-center gap-1.5 overflow-hidden truncate">
+            <span>Date: {sticker.orderDate} {sticker.orderTime ? `• ${sticker.orderTime}` : ""}</span>
+            {(sticker.pathaoTrackingCode || sticker.pathaoConsignmentId) && (
+              <span className="text-[7px] font-bold border border-black px-1 py-0.2 tracking-wider shrink-0 uppercase">
+                PATHAO: {sticker.pathaoTrackingCode || sticker.pathaoConsignmentId}
+              </span>
+            )}
+          </div>
+          <div
+            className="shrink-0 flex items-center justify-end max-w-[45%] overflow-hidden"
+            dangerouslySetInnerHTML={{
+              __html: generateCode128Svg(sticker.orderNumber, { height: 18, barWidth: 1.05 }),
+            }}
+          />
         </div>
       </div>
 
@@ -153,13 +166,23 @@ export function OrderStickerThermalCard({
             {sticker.areaCityDistrict}
           </div>
         )}
+
+        {/* Customer Delivery Note / Instructions */}
+        {sticker.customerNote && (
+          <div className="flex items-start gap-1 mt-0.5 bg-zinc-100 border-l-[2px] border-black px-1 py-0.5 text-[8.5px] font-bold text-black leading-tight">
+            <span className="uppercase text-[8px] font-bold text-zinc-700 shrink-0">NOTE:</span>
+            <span className="break-words flex-1 font-bold text-black">{sticker.customerNote}</span>
+          </div>
+        )}
       </div>
 
       {/* ─── SECTION C: Product Information (Adaptive Multi-Line Grid) ─── */}
       <div className="w-full flex-1 overflow-hidden py-1 flex flex-col justify-center">
         <div className="w-full flex items-center justify-between text-[7.5px] font-bold uppercase tracking-wider text-zinc-600 border-b border-black/40 pb-0.5 mb-0.5 shrink-0">
-          <span>Items &amp; Details</span>
-          <span>Qty • Price</span>
+          <span>ITEMS &amp; DETAILS</span>
+          <span className="font-extrabold text-black text-[7.5px] tracking-tight">
+            TOTAL: {sticker.items.length} {sticker.items.length === 1 ? "ITEM" : "ITEMS"} ({sticker.totalPcs || sticker.items.length} PCS)
+          </span>
         </div>
 
         <div className="w-full space-y-0.5 overflow-hidden">

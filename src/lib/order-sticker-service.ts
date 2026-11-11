@@ -126,7 +126,9 @@ export async function fetchOrderStickersData(
     payment_method,
     note,
     shipping_address,
-    line_items
+    line_items,
+    pathao_consignment_id,
+    pathao_tracking_code
   `);
 
   const orClauses: string[] = [];
@@ -419,6 +421,12 @@ export async function fetchOrderStickersData(
       currency: "৳",
     };
 
+    const totalPcs = items.reduce((sum, it) => sum + (it.quantity || 1), 0);
+    const rawNote = live?.note || matchedDb?.note || null;
+    const customerNote = rawNote ? rawNote.trim() : null;
+    const pathaoConsignmentId = matchedDb?.pathao_consignment_id || null;
+    const pathaoTrackingCode = matchedDb?.pathao_tracking_code || null;
+
     stickers.push({
       orderId: matchedDb?.id || reqId,
       shopifyOrderId: shopifyId,
@@ -432,7 +440,11 @@ export async function fetchOrderStickersData(
       altPhone,
       fullAddress,
       areaCityDistrict,
+      customerNote,
+      pathaoConsignmentId,
+      pathaoTrackingCode,
       items,
+      totalPcs,
       financials,
       isValid: true,
       warnings,

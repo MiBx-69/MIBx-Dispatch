@@ -44,6 +44,7 @@ describe("MiBx Dispatch — Advanced 75×100mm Order Sticker Printing System", (
           lineTotal: 1500,
         },
       ],
+      totalPcs: 1,
       financials: {
         subtotal: 1500,
         productDiscount: 0,
@@ -96,6 +97,7 @@ describe("MiBx Dispatch — Advanced 75×100mm Order Sticker Printing System", (
           lineTotal: 1800,
         },
       ],
+      totalPcs: 3,
       financials: {
         subtotal: 6200,
         productDiscount: 600,
@@ -140,6 +142,7 @@ describe("MiBx Dispatch — Advanced 75×100mm Order Sticker Printing System", (
           lineTotal: 3500,
         },
       ],
+      totalPcs: 1,
       financials: {
         subtotal: 3500,
         productDiscount: 0,
@@ -305,49 +308,56 @@ describe("MiBx Dispatch — Advanced 75×100mm Order Sticker Printing System", (
     });
   });
 
+  // Helper to create order sticker mock
+  function createMockSticker(overrides: Partial<OrderStickerData> = {}): OrderStickerData {
+    const items = overrides.items || [
+      {
+        id: "it-1",
+        title: "Vintage Denim Jacket",
+        variantTitle: "Black / XL",
+        size: "XL",
+        sku: "UNV-JKT-01",
+        quantity: 1,
+        unitPrice: 2800,
+        lineTotal: 2800,
+      },
+    ];
+    const totalPcs = overrides.totalPcs ?? items.reduce((sum, it) => sum + (it.quantity || 1), 0);
+    return {
+      orderId: overrides.orderId || "ord-test",
+      orderNumber: overrides.orderNumber || "#2250",
+      storeName: overrides.storeName || "UNIVERSES",
+      orderDate: "10 Nov 2026",
+      orderTime: "06:30 PM",
+      rawCreatedAt: "2026-11-10T18:30:00Z",
+      customerName: overrides.customerName || "Tanvir Ahmed",
+      customerPhone: overrides.customerPhone || "01700-112233",
+      altPhone: overrides.altPhone || null,
+      fullAddress: overrides.fullAddress || "House 10, Road 4, Sector 7, Uttara",
+      areaCityDistrict: overrides.areaCityDistrict || "Dhaka, Uttara",
+      customerNote: overrides.customerNote || null,
+      pathaoConsignmentId: overrides.pathaoConsignmentId || null,
+      pathaoTrackingCode: overrides.pathaoTrackingCode || null,
+      items,
+      totalPcs,
+      financials: overrides.financials || {
+        subtotal: 2800,
+        productDiscount: 0,
+        shippingCharge: 80,
+        additionalCharges: 0,
+        totalOrderValue: 2880,
+        advancePaid: 0,
+        codAmount: 2880,
+        isPrepaid: false,
+        currency: "৳",
+      },
+      isValid: true,
+      warnings: [],
+      error: null,
+    };
+  }
+
   describe("Section 10: Premium Upgrade Verification Suite (All 9 Required Scenarios)", () => {
-    // Helper to create order sticker mock
-    function createMockSticker(overrides: Partial<OrderStickerData>): OrderStickerData {
-      return {
-        orderId: overrides.orderId || "ord-test",
-        orderNumber: overrides.orderNumber || "#2250",
-        storeName: overrides.storeName || "UNIVERSES",
-        orderDate: "10 Nov 2026",
-        orderTime: "06:30 PM",
-        rawCreatedAt: "2026-11-10T18:30:00Z",
-        customerName: overrides.customerName || "Tanvir Ahmed",
-        customerPhone: overrides.customerPhone || "01700-112233",
-        altPhone: overrides.altPhone || null,
-        fullAddress: overrides.fullAddress || "House 10, Road 4, Sector 7, Uttara",
-        areaCityDistrict: overrides.areaCityDistrict || "Dhaka, Uttara",
-        items: overrides.items || [
-          {
-            id: "it-1",
-            title: "Vintage Denim Jacket",
-            variantTitle: "Black / XL",
-            size: "XL",
-            sku: "UNV-JKT-01",
-            quantity: 1,
-            unitPrice: 2800,
-            lineTotal: 2800,
-          },
-        ],
-        financials: overrides.financials || {
-          subtotal: 2800,
-          productDiscount: 0,
-          shippingCharge: 80,
-          additionalCharges: 0,
-          totalOrderValue: 2880,
-          advancePaid: 0,
-          codAmount: 2880,
-          isPrepaid: false,
-          currency: "৳",
-        },
-        isValid: true,
-        warnings: [],
-        error: null,
-      };
-    }
 
     // Scenario 1: One product order
     it("Scenario 1: One product order uses prominent spacious layout", () => {
@@ -533,6 +543,75 @@ describe("MiBx Dispatch — Advanced 75×100mm Order Sticker Printing System", (
       const html = generateOrderStickersHtml([sticker], DEFAULT_75X100_CONFIG);
       expect(html).toContain("PAID – NO COD");
       expect(html).not.toContain("CASH TO COLLECT");
+    });
+  });
+
+  describe("MiBx Dispatch — 1-5 Thermal Printing Production Enhancements", () => {
+    it("Feature 1: Generates crisp 1D Code 128 SVG barcode for order number", () => {
+      const sticker = createMockSticker({
+        orderNumber: "#2205",
+      });
+      const html = generateOrderStickersHtml([sticker], DEFAULT_75X100_CONFIG);
+      expect(html).toContain("barcode-wrap");
+      expect(html).toContain("<svg");
+      expect(html).toContain("<rect");
+    });
+
+    it("Feature 2: Displays prominent customer delivery note when present", () => {
+      const sticker = createMockSticker({
+        customerNote: "Please call before delivery. Leave at security desk.",
+      });
+      const html = generateOrderStickersHtml([sticker], DEFAULT_75X100_CONFIG);
+      expect(html).toContain("NOTE:");
+      expect(html).toContain("Please call before delivery. Leave at security desk.");
+    });
+
+    it("Feature 3: Displays Pathao tracking and consignment badges when available", () => {
+      const sticker = createMockSticker({
+        pathaoConsignmentId: "CSG-8829104",
+        pathaoTrackingCode: "PT-TRK-99012",
+      });
+      const html = generateOrderStickersHtml([sticker], DEFAULT_75X100_CONFIG);
+      expect(html).toContain("pathao-badge");
+      expect(html).toContain("PATHAO: PT-TRK-99012");
+    });
+
+    it("Feature 4: Displays warehouse packing checklist badge with total items and pieces count", () => {
+      const sticker = createMockSticker({
+        items: [
+          {
+            id: "it-1",
+            title: "Black Tee",
+            variantTitle: "M",
+            size: "M",
+            sku: "TSH-BLK-M",
+            quantity: 2,
+            unitPrice: 1000,
+            lineTotal: 2000,
+          },
+          {
+            id: "it-2",
+            title: "Cargo Pants",
+            variantTitle: "32",
+            size: "32",
+            sku: "CP-32",
+            quantity: 3,
+            unitPrice: 1500,
+            lineTotal: 4500,
+          },
+        ],
+        totalPcs: 5,
+      });
+      const html = generateOrderStickersHtml([sticker], DEFAULT_75X100_CONFIG);
+      expect(html).toContain("pack-badge");
+      expect(html).toContain("TOTAL: 2 ITEMS (5 PCS)");
+    });
+
+    it("Feature 5: Enforces >= 3.5mm bottom margin to protect COD box from physical GP-3120TU tear bar", () => {
+      const sticker = createMockSticker();
+      const html = generateOrderStickersHtml([sticker], DEFAULT_75X100_CONFIG);
+      // padBottom should be 3.5mm
+      expect(html).toContain("padding: 2mm 3mm 3.5mm 3mm;");
     });
   });
 });
