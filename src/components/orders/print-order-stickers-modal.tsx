@@ -265,7 +265,7 @@ export function PrintOrderStickersModal({
                 </span>
               </div>
               <p className="text-xs text-zinc-400">
-                Gprinter GP-3120TU Direct Thermal Self-Adhesive Die-Cut Labels (75mm × 100mm)
+                Direct Thermal Self-Adhesive Die-Cut Labels (75mm × 100mm)
               </p>
             </div>
           </div>

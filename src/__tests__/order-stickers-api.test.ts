@@ -279,4 +279,80 @@ describe("POST /api/orders/stickers", () => {
     expect(sticker.financials.totalOrderValue).toBe(1260);
     expect(sticker.financials.codAmount).toBe(1260);
   });
+
+  it("handles fallback query when .or() fails or returns error", async () => {
+    const { createServiceClient } = await import("@/lib/supabase/server");
+
+    (createServiceClient as any).mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "app_settings") {
+          return {
+            select: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: {
+                shopify_shop_domain: "universes-test.myshopify.com",
+                shopify_access_token: "shpat_test123",
+                company_name: "UNIVERSES",
+              },
+            }),
+          };
+        }
+        if (table === "orders") {
+          return {
+            select: vi.fn().mockReturnThis(),
+            or: vi.fn().mockResolvedValue({
+              data: null,
+              error: { message: "column pathao_tracking_code does not exist" },
+            }),
+            in: vi.fn().mockResolvedValue({
+              data: [
+                {
+                  id: "55555555-5555-5555-5555-555555555555",
+                  shopify_order_id: 5001,
+                  shopify_order_name: "#5001",
+                  customer_name: "Mahbub Hasan",
+                  customer_phone: "01711223344",
+                  shipping_address: {
+                    name: "Mahbub Hasan",
+                    address1: "Dhanmondi 32",
+                    city: "Dhaka",
+                  },
+                  line_items: [
+                    {
+                      title: "Standard Shirt",
+                      quantity: 1,
+                      price: 2000,
+                    },
+                  ],
+                  total_price: 2080,
+                  subtotal_price: 2000,
+                  shipping_charge: 80,
+                  discount_amount: 0,
+                  cod_amount: 2080,
+                  pathao_consignment_id: "CSG-5001",
+                },
+              ],
+              error: null,
+            }),
+          };
+        }
+        return {};
+      }),
+    });
+
+    const req = new NextRequest("http://localhost:3000/api/orders/stickers", {
+      method: "POST",
+      body: JSON.stringify({
+        orderIds: ["55555555-5555-5555-5555-555555555555"],
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.stickers).toHaveLength(1);
+    expect(json.stickers[0].orderNumber).toBe("#5001");
+    expect(json.stickers[0].customerName).toBe("Mahbub Hasan");
+  });
 });

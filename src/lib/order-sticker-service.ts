@@ -103,12 +103,14 @@ export async function fetchOrderStickersData(
   const storeName = settings?.company_name || "UNIVERSES";
 
   // 2. Query Supabase for all selected orders
-  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const uuidIds = orderIds.filter((id) => UUID_REGEX.test(id));
   const numericIds = orderIds.filter((id) => /^\d+$/.test(id)).map((id) => Number(id));
-  const nameIds = orderIds.filter((id) => !UUID_REGEX.test(id) && !/^\d+$/.test(id));
+  const nameVariants = Array.from(
+    new Set(orderIds.flatMap((id) => [id, id.startsWith("#") ? id.slice(1) : `#${id}`]))
+  );
 
-  let dbOrdersQuery = supabase.from("orders").select(`
+  const orderSelectColumns = `
     id,
     shopify_order_id,
     shopify_order_name,
@@ -128,18 +130,52 @@ export async function fetchOrderStickersData(
     shipping_address,
     line_items,
     pathao_consignment_id,
-    pathao_tracking_code
-  `);
-
-  const orClauses: string[] = [];
-  if (uuidIds.length > 0) orClauses.push(`id.in.(${uuidIds.join(",")})`);
-  if (numericIds.length > 0) orClauses.push(`shopify_order_id.in.(${numericIds.join(",")})`);
-  if (nameIds.length > 0) orClauses.push(`shopify_order_name.in.(${nameIds.map((n) => `"${n}"`).join(",")})`);
+    pathao_tracking_url
+  `;
 
   let dbOrders: any[] = [];
+
+  // Try combined query with .or()
+  const orClauses: string[] = [];
+  if (uuidIds.length > 0) orClauses.push(`id.in.(${uuidIds.join(",")})`);
+  if (numericIds.length > 0) {
+    orClauses.push(`shopify_order_id.in.(${numericIds.join(",")})`);
+    orClauses.push(`shopify_order_number.in.(${numericIds.join(",")})`);
+  }
+  if (nameVariants.length > 0) {
+    orClauses.push(`shopify_order_name.in.(${nameVariants.join(",")})`);
+  }
+
   if (orClauses.length > 0) {
-    const { data, error } = await dbOrdersQuery.or(orClauses.join(","));
-    if (!error && data) dbOrders = data;
+    try {
+      const { data, error } = await supabase.from("orders").select(orderSelectColumns).or(orClauses.join(","));
+      if (error) {
+        console.warn("[Order Stickers] Supabase .or() query failed, falling back to direct lookups:", error.message);
+      } else if (data && data.length > 0) {
+        dbOrders = data;
+      }
+    } catch (e: any) {
+      console.warn("[Order Stickers] Exception during .or() query:", e?.message);
+    }
+  }
+
+  // Fallback direct lookups if .or() produced 0 results
+  if (dbOrders.length === 0 && orderIds.length > 0) {
+    if (uuidIds.length > 0) {
+      const { data } = await supabase.from("orders").select(orderSelectColumns).in("id", uuidIds);
+      if (data && data.length > 0) dbOrders = [...dbOrders, ...data];
+    }
+    if (numericIds.length > 0) {
+      const { data: numData } = await supabase.from("orders").select(orderSelectColumns).in("shopify_order_id", numericIds);
+      if (numData && numData.length > 0) dbOrders = [...dbOrders, ...numData];
+
+      const { data: numOrderNoData } = await supabase.from("orders").select(orderSelectColumns).in("shopify_order_number", numericIds);
+      if (numOrderNoData && numOrderNoData.length > 0) dbOrders = [...dbOrders, ...numOrderNoData];
+    }
+    if (nameVariants.length > 0) {
+      const { data: nameData } = await supabase.from("orders").select(orderSelectColumns).in("shopify_order_name", nameVariants);
+      if (nameData && nameData.length > 0) dbOrders = [...dbOrders, ...nameData];
+    }
   }
 
   const dbOrderById = new Map<string, any>();
@@ -149,14 +185,27 @@ export async function fetchOrderStickersData(
   for (const o of dbOrders) {
     if (o.id) dbOrderById.set(o.id, o);
     if (o.shopify_order_id) dbOrderByShopifyId.set(Number(o.shopify_order_id), o);
-    if (o.shopify_order_name) dbOrderByName.set(o.shopify_order_name, o);
+    if (o.shopify_order_number) dbOrderByShopifyId.set(Number(o.shopify_order_number), o);
+    if (o.shopify_order_name) {
+      dbOrderByName.set(o.shopify_order_name, o);
+      const stripped = o.shopify_order_name.replace(/^#/, "");
+      dbOrderByName.set(stripped, o);
+      dbOrderByName.set(`#${stripped}`, o);
+    }
   }
 
   // 3. Query live orders from Shopify Admin
   const shopifyOrderIdsToFetch = new Set<number>();
   for (const reqId of orderIds) {
     if (/^\d+$/.test(reqId)) shopifyOrderIdsToFetch.add(Number(reqId));
-    const matchedDb = dbOrderById.get(reqId) || dbOrderByName.get(reqId);
+    const cleanReqId = reqId.trim();
+    const strippedReqId = cleanReqId.replace(/^#/, "");
+    const matchedDb =
+      dbOrderById.get(cleanReqId) ||
+      dbOrderByShopifyId.get(Number(cleanReqId)) ||
+      dbOrderByName.get(cleanReqId) ||
+      dbOrderByName.get(strippedReqId) ||
+      dbOrderByName.get(`#${strippedReqId}`);
     if (matchedDb?.shopify_order_id) shopifyOrderIdsToFetch.add(Number(matchedDb.shopify_order_id));
   }
 
@@ -196,10 +245,14 @@ export async function fetchOrderStickersData(
   const failedIds: string[] = [];
 
   for (const reqId of orderIds) {
+    const cleanReqId = reqId.trim();
+    const strippedReqId = cleanReqId.replace(/^#/, "");
     const matchedDb =
-      dbOrderById.get(reqId) ||
-      dbOrderByShopifyId.get(Number(reqId)) ||
-      dbOrderByName.get(reqId);
+      dbOrderById.get(cleanReqId) ||
+      dbOrderByShopifyId.get(Number(cleanReqId)) ||
+      dbOrderByName.get(cleanReqId) ||
+      dbOrderByName.get(strippedReqId) ||
+      dbOrderByName.get(`#${strippedReqId}`);
     const shopifyId = matchedDb?.shopify_order_id
       ? Number(matchedDb.shopify_order_id)
       : /^\d+$/.test(reqId)
@@ -425,7 +478,7 @@ export async function fetchOrderStickersData(
     const rawNote = live?.note || matchedDb?.note || null;
     const customerNote = rawNote ? rawNote.trim() : null;
     const pathaoConsignmentId = matchedDb?.pathao_consignment_id || null;
-    const pathaoTrackingCode = matchedDb?.pathao_tracking_code || null;
+    const pathaoTrackingCode = matchedDb?.pathao_consignment_id || null;
 
     stickers.push({
       orderId: matchedDb?.id || reqId,
