@@ -76,3 +76,4 @@ export function generateCode128Svg(
     ${showText ? `<text x="${(totalWidth / 2).toFixed(2)}" y="${totalHeight - 1}" font-family="monospace" font-size="${fontSize}" font-weight="700" text-anchor="middle" fill="${options.textColor || '#000000'}">${cleanText}</text>` : ""}
   </svg>`;
 }
+
