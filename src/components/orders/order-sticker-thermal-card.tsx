@@ -16,6 +16,7 @@ export function OrderStickerThermalCard({
   isPrintMode = false,
 }: OrderStickerThermalCardProps) {
   const storeName = (config.storeNameOverride?.trim() || sticker.storeName || "UNIVERSES").toUpperCase();
+  const additionalNote = (config.additionalNote !== undefined ? config.additionalNote : "রাইডারের সামনে চেক করে নিবেন")?.trim();
   const financials = sticker.financials;
   const isPrepaid = financials.isPrepaid || financials.codAmount <= 0;
 
@@ -297,6 +298,13 @@ export function OrderStickerThermalCard({
                 {financials.currency} {Number(financials.codAmount).toLocaleString()}
               </span>
             </div>
+          </div>
+        )}
+
+        {/* Additional Delivery Instruction */}
+        {additionalNote && (
+          <div className="text-center font-bold text-black text-[8px] tracking-wide mt-1 leading-none">
+            * {additionalNote} *
           </div>
         )}
       </div>

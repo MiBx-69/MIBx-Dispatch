@@ -613,5 +613,12 @@ describe("MiBx Dispatch — Advanced 75×100mm Order Sticker Printing System", (
       // padBottom should be 3.5mm
       expect(html).toContain("padding: 2mm 3mm 3.5mm 3mm;");
     });
+
+    it("Feature 6: Renders prominent additional delivery notice 'রাইডারের সামনে চেক করে নিবেন'", () => {
+      const sticker = createMockSticker();
+      const html = generateOrderStickersHtml([sticker], DEFAULT_75X100_CONFIG);
+      expect(html).toContain("delivery-notice");
+      expect(html).toContain("রাইডারের সামনে চেক করে নিবেন");
+    });
   });
 });

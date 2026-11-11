@@ -70,11 +70,12 @@ export interface OrderStickerConfig {
   storeNameOverride?: string;
   showSku: boolean;
   showAltPhone: boolean;
+  additionalNote?: string; // e.g. "রাইডারের সামনে চেক করে নিবেন"
   customDiscountReasons: Record<string, string>; // orderId -> custom reason
 }
 
 export const DEFAULT_75X100_CONFIG: OrderStickerConfig = {
-  presetName: "Gprinter GP-3120TU 75×100mm Sticker",
+  presetName: "75×100mm Thermal Sticker",
   width: 75,
   height: 100,
   unit: "mm",
@@ -86,6 +87,7 @@ export const DEFAULT_75X100_CONFIG: OrderStickerConfig = {
   storeNameOverride: "UNIVERSES",
   showSku: true,
   showAltPhone: true,
+  additionalNote: "রাইডারের সামনে চেক করে নিবেন",
   customDiscountReasons: {},
 };
 

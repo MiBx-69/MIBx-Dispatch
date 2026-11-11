@@ -15,6 +15,7 @@ export function generateOrderStickersHtml(
   config: OrderStickerConfig
 ): string {
   const storeName = (config.storeNameOverride?.trim() || stickers[0]?.storeName || "UNIVERSES").toUpperCase();
+  const additionalNote = (config.additionalNote !== undefined ? config.additionalNote : "রাইডারের সামনে চেক করে নিবেন")?.trim();
   const topOffset = config.topOffsetMm || 0;
   const leftOffset = config.leftOffsetMm || 0;
 
@@ -184,7 +185,7 @@ export function generateOrderStickersHtml(
             </div>
           </div>
 
-          <!-- SECTION E: Prominent Total Due / COD Highlight -->
+          <!-- SECTION E: Prominent Total Due / COD Highlight & Delivery Notice -->
           <div class="payment-highlight">
             ${
               isPaid
@@ -195,6 +196,13 @@ export function generateOrderStickersHtml(
                     <span class="cod-label">CASH TO COLLECT:</span>
                     <span class="cod-amount">${stk.financials.currency} ${formattedCod}</span>
                    </div>`
+            }
+            ${
+              additionalNote
+                ? `<div class="delivery-notice">
+                    <span>* ${escapeHtml(additionalNote)} *</span>
+                   </div>`
+                : ""
             }
           </div>
         </div>
@@ -626,6 +634,16 @@ export function generateOrderStickersHtml(
       letter-spacing: -0.3px;
       line-height: 1;
       color: #000000;
+    }
+    .delivery-notice {
+      text-align: center;
+      font-size: 8px;
+      font-weight: 700;
+      color: #000000;
+      margin-top: 0.5mm;
+      letter-spacing: 0.2px;
+      line-height: 1;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Kalpurush", "SolaimanLipi", sans-serif;
     }
 
     @media screen {

@@ -357,7 +357,7 @@ export function PrintOrderStickersModal({
             <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
               <div className="flex items-center gap-2 font-semibold text-zinc-200">
                 <Sliders size={14} className="text-amber-400" />
-                <span>75×100mm Thermal Printer Settings (Gprinter GP-3120TU)</span>
+                <span>75×100mm Thermal Printer Settings</span>
               </div>
               <div className="flex items-center gap-3">
                 <button
@@ -432,6 +432,18 @@ export function PrintOrderStickersModal({
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* Additional Delivery Instruction */}
+              <div className="space-y-1.5 sm:col-span-2">
+                <label className="text-zinc-400 font-medium">Additional Delivery Notice (রাইডারের সামনে চেক)</label>
+                <input
+                  type="text"
+                  placeholder="রাইডারের সামনে চেক করে নিবেন"
+                  value={config.additionalNote ?? "রাইডারের সামনে চেক করে নিবেন"}
+                  onChange={(e) => updateConfig({ additionalNote: e.target.value })}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1 text-zinc-200 text-xs placeholder-zinc-600"
+                />
               </div>
 
               {/* Toggles */}
